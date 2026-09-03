@@ -1,0 +1,18 @@
+{
+  "name": "vesty",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": "22.x",
+    "pnpm": "11.x"
+  },
+  "scripts": {
+    "start": "pnpm --filter @vesty/mobile start",
+    "mobile": "pnpm --filter @vesty/mobile start",
+    "ios": "pnpm --filter @vesty/mobile ios",
+    "android": "pnpm --filter @vesty/mobile android",
+    "lint": "pnpm --filter @vesty/mobile lint",
+    "typecheck": "pnpm --filter @vesty/mobile typecheck"
+  }
+}

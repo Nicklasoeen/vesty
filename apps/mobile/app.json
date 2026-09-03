@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "Vesty",
+    "slug": "vesty",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "vesty",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": false
+    },
+    "android": {},
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
