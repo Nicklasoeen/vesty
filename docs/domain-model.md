@@ -331,6 +331,7 @@ No separate mutable `Strategy` entity is recommended in V1. The club's strategy 
 - Once the first vote is cast, normal V1 cancellation is forbidden and the proposal resolves through approval, rejection, or expiry.
 - Approval creates a new version from exactly that frozen snapshot.
 - A draft's base version must still be current when it opens.
+- A club may have multiple `DRAFT` and terminal strategy proposals.
 - At most one strategy proposal may be open for a club in V1, preventing its base version from becoming stale through a competing approval.
 - `APPROVED`, `REJECTED`, `EXPIRED`, and `CANCELLED` are terminal and can never return to `OPEN`.
 
@@ -808,7 +809,7 @@ Approval is one atomic domain operation:
 5. Record `approved_at` and an `effective_at` strictly later than the base version's effective time.
 6. Close the proposal as approved.
 
-V1 may allow multiple drafts but at most one open strategy proposal per club. Before a draft opens, its base must still be the club's latest strategy version; otherwise the draft must be revised against that version. This prevents competing approved branches without adding another proposal state.
+A club may have multiple draft and historical strategy proposals, but at most one proposal may be `OPEN` at a time. Before a draft opens, its base must still be the club's latest strategy version; otherwise the draft must be revised against that version. This prevents competing approved branches without adding another proposal state.
 
 ### Immutability and historical access
 

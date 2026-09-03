@@ -1,0 +1,306 @@
+# Vesty PostgreSQL Schema v1
+
+## Purpose
+
+This document describes the first physical PostgreSQL schema for the Vesty V1 domain. The authoritative product rules remain in `docs/domain-model.md`.
+
+The schema is created by:
+
+- `supabase/migrations/20260903195622_create_vesty_domain_schema.sql`
+
+It uses the Supabase-managed `auth.users` table only as the authentication identity boundary. It does not duplicate credentials, sessions, or authentication state.
+
+## Ownership Representation
+
+Current club ownership is represented relationally by `clubs.current_owner_membership_id`.
+
+The referenced membership must:
+
+- belong to the same club
+- have `membership_status = active`
+- remain active while it is the referenced owner
+
+This is enforced by a deferred composite foreign key to the generated `club_memberships.active_membership_id`. A club is therefore committed with exactly one active owner. All other memberships have the domain role `MEMBER`; no separate mutable role column exists that could contradict the club's owner pointer.
+
+The deferred foreign key allows the club and its initial owner membership to be created in one transaction and allows a later ownership transfer to replace the pointer atomically.
+
+The constraint remains active after club archival: an archived club retains its current active owner reference. This is the conservative V1 consequence of preserving ownership until an accepted transfer; the current domain defines no separate ownership-closeout flow for archived clubs.
+
+## PostgreSQL Types
+
+Lifecycle and closed-choice values use tightly scoped PostgreSQL enums:
+
+- `club_status`: `active`, `archived`
+- `governance_threshold_kind`: `simple_majority`, `supermajority`, `unanimous`
+- `membership_status`: `active`, `left`, `removed`
+- `club_invitation_status`: `pending`, `accepted`, `declined`, `revoked`, `expired`
+- `ownership_transfer_status`: `pending`, `accepted`, `rejected`, `expired`
+- `investment_target_kind`: `fund`, `etf`
+- `investment_target_status`: `active`, `inactive`
+- `strategy_version_origin`: `genesis`, `proposal`
+- `strategy_proposal_status`: `draft`, `open`, `approved`, `rejected`, `expired`, `cancelled`
+- `vote_choice`: `yes`, `no`
+- `strategy_readiness_status`: `pending`, `ready`
+- `investment_schedule_status`: `scheduled`, `active`, `paused`, `replaced`, `ended`
+- `investment_cycle_status`: `upcoming`, `open`, `completed`, `cancelled`
+- `member_saving_plan_status`: `active`, `inactive`, `replaced`
+- `participation_outcome`: `expected`, `confirmed`, `skipped`, `failed`
+- `member_report_source`: `member_reported`
+- `verification_state`: `unverified`, `verified`
+- `verification_source`: `import`, `broker_api`, `embedded_broker`
+
+Currency uses constrained `text`, not a reference table. Stored currency values must be three uppercase letters. Validation against the full ISO 4217 code list is deferred.
+
+Money uses signed PostgreSQL `bigint` columns with positive-value checks. Allocations use `smallint` basis points.
+
+## Tables
+
+### Identity and clubs
+
+- `profiles`
+  - Primary key: `id`
+  - `id` also references `auth.users.id`
+  - Contains only application display/profile data and timestamps
+
+- `clubs`
+  - Primary key: `id`
+  - Stores lifecycle, base currency, locked governance mode, and current owner membership
+  - The owner foreign key is deferred so initial club and membership creation can be atomic
+
+- `club_memberships`
+  - Primary key: `id`
+  - References `clubs` and `profiles`
+  - Preserves active, left, and removed tenures
+  - `removed_by_membership_id` references a historical membership in the same club
+  - Generated `active_membership_id` supports the owner integrity constraint
+
+- `club_invitations`
+  - Primary key: `id`
+  - References the club, inviting membership, optional existing invitee profile, and accepted membership
+  - Supports either a profile invitee or an email contact, but not both
+  - Stores distinct accepted, declined, revoked, and expired timestamps
+
+- `ownership_transfers`
+  - Primary key: `id`
+  - References initiating, target, and resolving memberships in the same club
+  - Preserves pending, accepted, rejected, and expired transfer history
+
+### Strategies and governance
+
+- `investment_targets`
+  - Primary key: `id`
+  - Global Vesty-managed catalog of funds and ETFs
+  - Supports optional broker-neutral ISIN, ticker, and exchange metadata
+  - Contains no broker-specific identity columns or mappings
+
+- `strategy_versions`
+  - Primary key: `id`
+  - Unique `(club_id, version_number)`
+  - References its creator and, for non-genesis versions, one source proposal
+  - Separates `approved_at` from `effective_at`
+
+- `strategy_allocations`
+  - Primary key: `id`
+  - References one strategy version and one global investment target
+  - Snapshots target name, kind, and canonical descriptor fields
+  - Enforces unique target and display position within each version
+
+- `strategy_proposals`
+  - Primary key: `id`
+  - References proposer, club, and exact base strategy version
+  - Stores lifecycle timestamps, frozen governance mode, electorate size, required yes count, and intended effective time
+
+- `strategy_proposal_allocations`
+  - Primary key: `id`
+  - Stores the proposal's complete relational allocation snapshot independently of approved strategy allocations
+  - Enforces unique target and display position within each proposal
+
+- `proposal_electorate_members`
+  - Composite primary key: `(proposal_id, membership_id)`
+  - References a proposal and historical membership in the same club
+  - Represents the frozen electorate membership set
+
+- `votes`
+  - Composite primary key: `(proposal_id, membership_id)`
+  - References the exact electorate pair, preventing votes disconnected from eligibility
+  - Stores one final `yes` or `no` choice
+
+- `strategy_readiness`
+  - Primary key: `id`
+  - Unique `(membership_id, strategy_version_id)`
+  - References a membership and strategy version in the same club
+
+### Investment Day coordination
+
+- `investment_schedules`
+  - Primary key: `id`
+  - Unique `(club_id, revision_number)`
+  - Represents a monthly day, explicit missing-day policy text, IANA timezone string, lead days, and effective interval
+  - Does not implement scheduler execution
+
+- `investment_cycles`
+  - Primary key: `id`
+  - References exact schedule and strategy revisions in the same club
+  - Snapshots occurrence identity, timing, timezone, reporting window, and lifecycle
+
+- `member_saving_plans`
+  - Primary key: `id`
+  - References one membership and optionally the prior plan it replaces
+  - Stores positive `bigint` contribution intent, explicit currency, lifecycle, and effective interval
+  - Does not represent a deposit or transaction
+
+- `member_cycle_participations`
+  - Primary key: `id`
+  - Unique `(investment_cycle_id, membership_id)`
+  - References the exact cycle, membership, and source saving plan
+  - Snapshots expected positive `bigint` amount and currency
+  - Keeps member outcome/source/timestamps separate from verification state/source/time
+
+## Concurrent Proposal Rule
+
+A club may retain multiple `draft` and terminal strategy proposals. The partial unique index `strategy_proposals_one_open_per_club_idx` applies only to rows whose status is `open`, so PostgreSQL permits proposal history while rejecting a second simultaneous open ballot. Once the open proposal becomes `approved`, `rejected`, `expired`, or `cancelled`, another proposal may open.
+
+## Important Foreign Keys
+
+Composite foreign keys enforce same-club ownership for:
+
+- club owner membership
+- invitation inviter and accepted membership
+- ownership-transfer actors
+- strategy-version creator and source proposal
+- proposal proposer and base strategy version
+- electorate proposal and membership
+- readiness membership and strategy version
+- schedule creator
+- cycle schedule and strategy version
+- saving-plan membership
+- participation cycle, membership, and source saving plan
+
+Historical domain foreign keys use `RESTRICT` or `NO ACTION`. The migration intentionally creates no cascading delete path through memberships, strategies, proposals, electorate entries, votes, cycles, plans, or participation.
+
+## Important Unique Constraints
+
+PostgreSQL directly enforces:
+
+- one active membership tenure per club/profile
+- exactly one owner pointer per club
+- one pending invitation per club/profile
+- one pending invitation per club/case-insensitive email
+- one accepted membership per invitation acceptance record
+- one pending ownership transfer per club
+- unique non-null InvestmentTarget ISIN
+- one strategy version number per club
+- at most one strategy version per source proposal
+- one target and one display position per strategy version
+- at most one open strategy proposal per club
+- one target and one display position per strategy proposal
+- one electorate entry per proposal/membership
+- one vote per proposal/electorate membership
+- one readiness record per membership/strategy version
+- one schedule revision number per club
+- at most one current active-or-paused schedule revision per club
+- one cycle occurrence key per club
+- at most one active saving-plan record per membership
+- one participation per cycle/membership
+
+## Important CHECK Constraints
+
+Checks enforce:
+
+- non-empty names and descriptors
+- three-uppercase-letter currency shape
+- lifecycle states and their required/forbidden timestamps
+- active membership versus terminal membership facts
+- invitation identity and terminal outcome consistency
+- distinct ownership-transfer initiator and target
+- accepted/rejected ownership transfers resolved by the target membership
+- StrategyVersion 1 genesis provenance versus later proposal provenance
+- allocation and proposal-allocation basis points in `1..10000`
+- positive allocation display positions
+- frozen proposal fields once `opened_at` exists
+- deterministic required-yes arithmetic for every voting mode
+- schedule revision, calendar day, lead-day, and effective-period ranges
+- cycle deadline, reporting-window, cancellation, and lifecycle consistency
+- positive saving-plan and expected participation amounts
+- saving-plan effective interval consistency
+- member reports using only `member_reported`
+- `expected` participation having no report metadata
+- verification state/source/time remaining independent from member outcome
+
+## Important Indexes
+
+Partial and composite indexes support realistic V1 operations:
+
+- active membership and membership history lookup
+- pending invitation deduplication
+- pending ownership-transfer lookup
+- active InvestmentTarget lookup and ISIN identity
+- effective strategy history by club
+- proposal state/history and the single-open-proposal rule
+- reverse electorate and vote lookup by membership
+- readiness aggregation by strategy and state
+- the current schedule revision
+- cycles by club/date, schedule, and strategy
+- active/effective saving plans by membership
+- participation lookup by membership and source plan
+
+Primary-key and unique-constraint indexes cover direct proposal, electorate, vote, cycle-participation, allocation, and revision lookups without redundant secondary indexes.
+
+## Invariants Enforced Directly by PostgreSQL
+
+The physical schema directly prevents:
+
+- profiles without a Supabase Auth identity
+- a club owner pointer to a different club or inactive membership
+- committing a club without exactly one current owner relationship
+- an owner membership becoming terminal while still referenced as owner
+- duplicate active membership tenures
+- malformed lifecycle timestamp combinations
+- duplicate pending invitations and ownership transfers
+- invalid strategy provenance shape
+- duplicate strategy version numbers
+- duplicate targets or positions in allocation snapshots
+- invalid individual basis-point values
+- multiple open proposals for one club
+- an incorrect stored voting threshold for the frozen electorate size/mode
+- duplicate electorate entries
+- votes that do not reference the frozen electorate
+- duplicate or non-deterministic vote choices
+- readiness detached from its membership's club or strategy's club
+- duplicate schedule revisions and cycle occurrences
+- non-positive monetary values
+- a participation detached from its cycle, member, or source saving plan
+- collapsing member report outcome and broker verification into one state
+
+## Invariants Not Yet Enforced
+
+The following require trusted transaction functions, later authorization policy, or lifecycle-specific write paths. They are deliberately not represented by misleading row-level checks:
+
+- allocation rows for a complete strategy version summing to exactly `10000`
+- allocation rows for an opened proposal summing to exactly `10000`
+- preventing allocation or target-snapshot mutation after a proposal opens or version is created
+- InvestmentTargets being active when a genesis strategy is finalized or proposal opens
+- preventing semantic InvestmentTarget identity changes after historical use
+- governance mode and finalized historical records being immutable
+- requiring StrategyVersion 1 before later versions and enforcing a gap-free version sequence
+- invitation issuance only after StrategyVersion 1 and atomic invitation acceptance/membership creation
+- detecting the same pending invitee represented once by profile and once by email
+- ownership-transfer initiation by the current owner, target activity at acceptance, and atomic owner-pointer transfer
+- proposal opening against the latest version, freezing electorate/allocation rows, and serializing first vote versus cancellation
+- electorate row count matching `strategy_proposals.electorate_size`
+- vote insertion only while the proposal is open and vote-row immutability
+- approved proposals atomically creating exactly one identical StrategyVersion
+- strictly monotonic and non-overlapping strategy effective times
+- schedule effective intervals not overlapping, missing-day policy text naming a recognized policy, and timezone text naming a real IANA zone
+- deterministic cycle generation and cycle snapshot creation
+- saving-plan effective periods not overlapping beyond the current-state uniqueness constraint
+- saving-plan and participation currencies matching the club base currency
+- currency text naming an actual ISO 4217 currency
+- participation report correction only while its cycle is open and report immutability after completion
+- member contribution privacy, the three-member aggregate threshold, and all authorization rules
+
+## RLS Status
+
+Row Level Security is intentionally not enabled and no policies exist in this migration. Relational integrity is present, but authorization is not.
+
+This schema must not be deployed to a remotely exposed Supabase project until the dedicated RLS migration is implemented and tested.

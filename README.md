@@ -40,7 +40,7 @@ pnpm ios
 pnpm supabase:stop
 ```
 
-Database and domain migrations will be added in a later architecture task. Never use a service-role or private key in the mobile application.
+Versioned domain migrations live in `supabase/migrations/` and can be replayed with `pnpm exec supabase db reset --local --no-seed`. RLS is not implemented yet, so this schema remains local-development only. Never use a service-role or private key in the mobile application.
 
 ## Mobile development
 
@@ -75,7 +75,8 @@ pnpm typecheck
 apps/
   mobile/       Expo and React Native application
 packages/       Future shared packages
-supabase/       Future Supabase configuration and migrations
+supabase/       Supabase configuration and versioned migrations
+docs/           Domain and physical schema contracts
 .cursor/rules/  Future scoped Cursor rules
 AGENTS.md       Engineering contract for AI-assisted development
 ```
