@@ -8,6 +8,7 @@ This repository is currently in the foundation and setup phase. Product features
 
 - Node.js 22
 - pnpm 11
+- Docker
 - Xcode and an iOS Simulator for iOS development
 
 ## Installation
@@ -16,6 +17,30 @@ This repository is currently in the foundation and setup phase. Product features
 corepack enable
 pnpm install
 ```
+
+## Local backend
+
+The Supabase stack is local-development only. No remote Supabase project is connected.
+
+First-time setup:
+
+```sh
+pnpm supabase:start
+pnpm supabase:status
+cp apps/mobile/.env.example apps/mobile/.env
+```
+
+Replace the publishable-key placeholder in `apps/mobile/.env` with the local publishable key shown by `pnpm supabase:status`. The configured `127.0.0.1` URL is reachable from the iOS Simulator; physical-device networking is not configured yet.
+
+Daily development:
+
+```sh
+pnpm supabase:start
+pnpm ios
+pnpm supabase:stop
+```
+
+Database and domain migrations will be added in a later architecture task. Never use a service-role or private key in the mobile application.
 
 ## Mobile development
 

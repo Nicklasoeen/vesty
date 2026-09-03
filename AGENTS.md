@@ -34,6 +34,7 @@ This file is the primary engineering instruction source for AI-assisted developm
 ## Security
 
 - Never expose server or private API keys in mobile code.
+- Mobile clients may use only publishable or otherwise explicitly public client credentials; service-role and secret keys stay server-side.
 - Never trust a `user_id` supplied manually by the client for authorization.
 - Authentication identity must eventually come from validated sessions or tokens.
 - Authorization must ultimately be enforced server-side or database-side.
@@ -48,6 +49,8 @@ This file is the primary engineering instruction source for AI-assisted developm
 - Enforce club membership authorization server-side or database-side.
 - Make migrations reversible when reasonably possible.
 - Never manually mutate the production schema without migration history.
+- Develop database changes locally first and capture them in version-controlled migrations.
+- Once remote environments exist, do not make Dashboard-only schema changes.
 
 ## Workflow
 

@@ -13,6 +13,12 @@
     "ios": "pnpm --filter @vesty/mobile ios",
     "android": "pnpm --filter @vesty/mobile android",
     "lint": "pnpm --filter @vesty/mobile lint",
-    "typecheck": "pnpm --filter @vesty/mobile typecheck"
+    "typecheck": "pnpm --filter @vesty/mobile typecheck",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "supabase:status": "supabase status"
+  },
+  "devDependencies": {
+    "supabase": "2.116.0"
   }
 }
