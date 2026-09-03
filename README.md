@@ -40,7 +40,7 @@ pnpm ios
 pnpm supabase:stop
 ```
 
-Versioned domain migrations live in `supabase/migrations/` and can be replayed with `pnpm exec supabase db reset --local --no-seed`. RLS is not implemented yet, so this schema remains local-development only. Never use a service-role or private key in the mobile application.
+Versioned migrations live in `supabase/migrations/` and can be replayed with `pnpm exec supabase db reset --local --no-seed`. RLS protects the domain tables and local authorization tests cover the direct-client boundary. No remote Supabase project is connected. Never use a service-role or private key in the mobile application.
 
 ## Mobile development
 
@@ -67,6 +67,7 @@ pnpm android
 ```sh
 pnpm lint
 pnpm typecheck
+pnpm test:db
 ```
 
 ## Repository structure

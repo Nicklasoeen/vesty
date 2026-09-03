@@ -297,10 +297,10 @@ The following require trusted transaction functions, later authorization policy,
 - saving-plan and participation currencies matching the club base currency
 - currency text naming an actual ISO 4217 currency
 - participation report correction only while its cycle is open and report immutability after completion
-- member contribution privacy, the three-member aggregate threshold, and all authorization rules
+- the three-member monetary aggregate threshold, safe club-level status projections, and authorization inside deferred trusted operations
 
 ## RLS Status
 
-Row Level Security is intentionally not enabled and no policies exist in this migration. Relational integrity is present, but authorization is not.
+Row Level Security is enabled and forced for every domain table by `supabase/migrations/20260903202501_add_rls_authorization_v1.sql`. Direct-client grants and policies enforce active-club access, row ownership, immutable-history boundaries, vote privacy, and private monetary rows.
 
-This schema must not be deployed to a remotely exposed Supabase project until the dedicated RLS migration is implemented and tested.
+The detailed authorization matrix, helper-function design, test coverage, and deferred trusted operations are documented in `docs/security-authorization.md`. No remote Supabase project is connected.

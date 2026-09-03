@@ -16,7 +16,8 @@
     "typecheck": "pnpm --filter @vesty/mobile typecheck",
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
-    "supabase:status": "supabase status"
+    "supabase:status": "supabase status",
+    "test:db": "supabase test db --local supabase/tests"
   },
   "devDependencies": {
     "supabase": "2.116.0"
