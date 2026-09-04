@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 
@@ -8,7 +8,7 @@ import { useTheme } from '@/theme';
 import { AllocationBar, AppText, Button, Screen, TextField } from '@/ui';
 import { CLUB_NAME_MAX_LENGTH, GENESIS_STRATEGY_SLICES, V1_BASE_CURRENCY } from './genesisStrategy';
 import { GOVERNANCE_OPTIONS, type GovernanceThresholdKind } from './governance';
-import { createClubAndRefresh, useClubs } from './useClubs';
+import { attachClub, createClub, useClubs } from './useClubs';
 
 type CreateStep = 'name' | 'governance' | 'strategy';
 
@@ -21,6 +21,7 @@ export function CreateClubScreen() {
   const [governance, setGovernance] = useState<GovernanceThresholdKind>('simple_majority');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const createdClubIdRef = useRef<string | null>(null);
 
   const trimmedName = name.trim();
   const nameValid = trimmedName.length > 0 && trimmedName.length <= CLUB_NAME_MAX_LENGTH;
@@ -53,10 +54,14 @@ export function CreateClubScreen() {
     setError(null);
 
     try {
-      await createClubAndRefresh(refresh, selectClub, {
-        name: trimmedName,
-        governanceThresholdKind: governance,
-      });
+      if (!createdClubIdRef.current) {
+        const created = await createClub({
+          name: trimmedName,
+          governanceThresholdKind: governance,
+        });
+        createdClubIdRef.current = created.clubId;
+      }
+      await attachClub(refresh, selectClub, createdClubIdRef.current);
       router.replace('/club');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to create club right now');

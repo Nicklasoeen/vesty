@@ -3,26 +3,24 @@ import type { ClubSummary, CreatedInvitationResult } from './types';
 
 export { ClubsProvider, useClubs } from './ClubsProvider';
 
-export async function createClubAndRefresh(
-  refresh: (preferredClubId?: string) => Promise<ClubSummary[]>,
-  selectClub: (clubId: string) => Promise<void>,
-  input: { name: string; governanceThresholdKind: ClubSummary['governanceThresholdKind'] },
-): Promise<string> {
-  const created = await clubsApi.createClub(input);
-  await refresh(created.clubId);
-  await selectClub(created.clubId);
-  return created.clubId;
+export async function createClub(input: {
+  name: string;
+  governanceThresholdKind: ClubSummary['governanceThresholdKind'];
+}) {
+  return clubsApi.createClub(input);
 }
 
-export async function joinClubAndRefresh(
+export async function joinClub(token: string) {
+  return clubsApi.joinClub(token);
+}
+
+export async function attachClub(
   refresh: (preferredClubId?: string) => Promise<ClubSummary[]>,
   selectClub: (clubId: string) => Promise<void>,
-  token: string,
-): Promise<string> {
-  const joined = await clubsApi.joinClub(token);
-  await refresh(joined.clubId);
-  await selectClub(joined.clubId);
-  return joined.clubId;
+  clubId: string,
+): Promise<void> {
+  await refresh(clubId);
+  await selectClub(clubId);
 }
 
 export async function createInvitationForClub(clubId: string): Promise<CreatedInvitationResult> {

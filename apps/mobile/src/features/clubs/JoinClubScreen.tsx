@@ -1,13 +1,13 @@
 import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 
 import { useTheme } from '@/theme';
 import { AppText, Button, Screen, TextField } from '@/ui';
 import { normalizeInviteTokenInput } from './inviteToken';
-import { joinClubAndRefresh, useClubs } from './useClubs';
+import { attachClub, joinClub, useClubs } from './useClubs';
 
 export function JoinClubScreen() {
   const { colorScheme, colors, spacing } = useTheme();
@@ -24,6 +24,7 @@ export function JoinClubScreen() {
   const [code, setCode] = useState(initialCode);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const joinedClubIdRef = useRef<string | null>(null);
 
   const normalized = normalizeInviteTokenInput(code);
   const canSubmit = normalized.length === 24 && !isSubmitting;
@@ -48,7 +49,11 @@ export function JoinClubScreen() {
     setError(null);
 
     try {
-      await joinClubAndRefresh(refresh, selectClub, normalized);
+      if (!joinedClubIdRef.current) {
+        const joined = await joinClub(normalized);
+        joinedClubIdRef.current = joined.clubId;
+      }
+      await attachClub(refresh, selectClub, joinedClubIdRef.current);
       router.replace('/club');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Invite is invalid or expired');
