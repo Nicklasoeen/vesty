@@ -17,6 +17,8 @@ import { useAuth } from '@/features/auth/useAuth';
 import { useTheme, type AppearancePreference } from '@/theme';
 import { AppText, Avatar } from '@/ui';
 
+import { BrokerPickerSheet } from './BrokerPickerSheet';
+import { preferredBrokerSettingsValue } from './brokers';
 import { useProfile } from './useProfile';
 
 const OPTIONS: { value: AppearancePreference; label: string }[] = [
@@ -38,7 +40,7 @@ interface ProfileSettingsModalProps {
 }
 
 /**
- * Profile / Settings surface. Identity, edit entry, appearance, and sign out.
+ * Profile / Settings surface. Identity, broker preference, appearance, and sign out.
  * Opened from the Home profile avatar. Not a full profile editor.
  */
 export function ProfileSettingsModal({ visible, onClose }: ProfileSettingsModalProps) {
@@ -47,6 +49,7 @@ export function ProfileSettingsModal({ visible, onClose }: ProfileSettingsModalP
   const { profile, initials, avatarSource } = useProfile();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const [brokerPickerOpen, setBrokerPickerOpen] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [sheetY] = useState(() => new Animated.Value(OFFSCREEN_Y));
   const [backdropProgress] = useState(() => new Animated.Value(0));
@@ -77,6 +80,7 @@ export function ProfileSettingsModal({ visible, onClose }: ProfileSettingsModalP
       return;
     }
     closingRef.current = true;
+    setBrokerPickerOpen(false);
     setIsClosing(true);
 
     Animated.parallel([
@@ -153,7 +157,7 @@ export function ProfileSettingsModal({ visible, onClose }: ProfileSettingsModalP
       transparent
       statusBarTranslucent
       presentationStyle="overFullScreen"
-      onRequestClose={dismiss}
+      onRequestClose={brokerPickerOpen ? () => setBrokerPickerOpen(false) : dismiss}
     >
       <View style={styles.root}>
         <Animated.View
@@ -235,6 +239,34 @@ export function ProfileSettingsModal({ visible, onClose }: ProfileSettingsModalP
           </Pressable>
 
           <AppText variant="sectionTitle" color="secondary" style={{ marginBottom: spacing.sm }}>
+            Investing
+          </AppText>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Preferred broker, ${preferredBrokerSettingsValue(profile?.preferredBroker ?? null)}`}
+            onPress={() => setBrokerPickerOpen(true)}
+            style={({ pressed }) => [
+              styles.optionRow,
+              {
+                backgroundColor: colors.surface,
+                borderWidth: 1,
+                borderColor: colors.border,
+                borderRadius: radius.md,
+                paddingHorizontal: spacing.md,
+                minHeight: 44,
+                marginBottom: spacing.xl,
+                opacity: pressed ? 0.7 : 1,
+              },
+            ]}
+          >
+            <AppText variant="body">Preferred broker</AppText>
+            <AppText variant="body" color="secondary">
+              {preferredBrokerSettingsValue(profile?.preferredBroker ?? null)}
+            </AppText>
+          </Pressable>
+
+          <AppText variant="sectionTitle" color="secondary" style={{ marginBottom: spacing.sm }}>
             Appearance
           </AppText>
 
@@ -298,6 +330,12 @@ export function ProfileSettingsModal({ visible, onClose }: ProfileSettingsModalP
             <AppText variant="body">Sign out</AppText>
           </Pressable>
         </Animated.View>
+
+        <BrokerPickerSheet
+          embedded
+          visible={brokerPickerOpen}
+          onClose={() => setBrokerPickerOpen(false)}
+        />
       </View>
     </Modal>
   );

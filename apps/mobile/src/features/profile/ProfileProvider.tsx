@@ -14,6 +14,7 @@ import { initialsFromIdentity } from '@/features/clubs/initials';
 
 import * as profileApi from './api';
 import { profileIsOnboarded } from './api';
+import type { PreferredBroker } from './brokers';
 import type { CurrentProfile } from './types';
 
 interface ProfileContextValue {
@@ -24,6 +25,7 @@ interface ProfileContextValue {
   avatarSource?: ImageSourcePropType;
   initials: string;
   refresh: () => Promise<CurrentProfile | null>;
+  setPreferredBroker: (next: PreferredBroker | null) => Promise<void>;
 }
 
 interface LoadedProfile {
@@ -61,6 +63,26 @@ export function ProfileProvider({ children }: PropsWithChildren) {
     });
     return next;
   }, []);
+
+  const setPreferredBroker = useCallback(
+    async (next: PreferredBroker | null): Promise<void> => {
+      if (!userId) {
+        throw new Error('Sign in to continue');
+      }
+
+      await profileApi.updateOwnPreferredBroker(next);
+      setLoaded((current) => {
+        if (!current || current.userId !== userId || !current.profile) {
+          return current;
+        }
+        return {
+          ...current,
+          profile: { ...current.profile, preferredBroker: next },
+        };
+      });
+    },
+    [userId],
+  );
 
   const refresh = useCallback(async (): Promise<CurrentProfile | null> => {
     if (!userId) {
@@ -128,8 +150,9 @@ export function ProfileProvider({ children }: PropsWithChildren) {
       avatarSource: userId ? active?.avatarSource : undefined,
       initials: initialsFromIdentity(profile?.displayName, user?.email ?? null),
       refresh,
+      setPreferredBroker,
     }),
-    [active, hasResolved, profile, refresh, user?.email, userId],
+    [active, hasResolved, profile, refresh, setPreferredBroker, user?.email, userId],
   );
 
   return <ProfileContext.Provider value={value}>{children}</ProfileContext.Provider>;

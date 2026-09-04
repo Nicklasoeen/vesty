@@ -14,7 +14,6 @@ interface InvestmentRowProps {
   target: InvestTargetDemo;
   color: string;
   brokerActionLabel: string;
-  brokerName: string;
   step: InvestRowStep;
   /** Upcoming preview and completed recap hide broker/confirm actions. */
   showActions: boolean;
@@ -31,7 +30,6 @@ export function InvestmentRow({
   target,
   color,
   brokerActionLabel,
-  brokerName,
   step,
   showActions,
   showSeparator,
@@ -84,7 +82,7 @@ export function InvestmentRow({
                 variant="secondary"
                 size="sm"
                 onPress={onOpenBroker}
-                accessibilityLabel={`Open ${target.label} in ${brokerName}`}
+                accessibilityLabel={`${brokerActionLabel} for ${target.label}`}
                 accessibilityHint="Opens the broker. This does not record the investment as done."
               />
             </View>

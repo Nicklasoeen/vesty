@@ -1,15 +1,35 @@
 import { supabase } from '@/lib/supabase/client';
 
 import { AVATARS_BUCKET, AVATAR_SIGNED_URL_SECONDS, ownAvatarPath } from './avatarPath';
+import { parsePreferredBroker, type PreferredBroker } from './brokers';
 import { isDisplayNameComplete, normalizeDisplayName, validateDisplayName } from './displayName';
 import type { CurrentProfile } from './types';
 
-function mapRow(row: { id: string; display_name: string | null; avatar_path: string | null }): CurrentProfile {
+interface ProfileIdentityRow {
+  id: string;
+  display_name: string | null;
+  avatar_path: string | null;
+}
+
+async function readOwnPreferredBroker(): Promise<PreferredBroker | null> {
+  const result = await supabase.rpc('get_own_preferred_broker');
+  if (result.error) {
+    throw result.error;
+  }
+  return parsePreferredBroker(result.data);
+}
+
+function mapRow(row: ProfileIdentityRow, preferredBroker: PreferredBroker | null): CurrentProfile {
   return {
     id: row.id,
     displayName: row.display_name,
     avatarPath: row.avatar_path,
+    preferredBroker,
   };
+}
+
+async function mapOwnRow(row: ProfileIdentityRow): Promise<CurrentProfile> {
+  return mapRow(row, await readOwnPreferredBroker());
 }
 
 export async function fetchOwnProfile(userId: string): Promise<CurrentProfile | null> {
@@ -23,7 +43,7 @@ export async function fetchOwnProfile(userId: string): Promise<CurrentProfile | 
     throw result.error;
   }
 
-  return result.data ? mapRow(result.data) : null;
+  return result.data ? mapOwnRow(result.data) : null;
 }
 
 export async function updateOwnDisplayName(displayName: string): Promise<CurrentProfile> {
@@ -49,7 +69,25 @@ export async function updateOwnDisplayName(displayName: string): Promise<Current
     throw result.error ?? new Error('Unable to save your name right now');
   }
 
-  return mapRow(result.data);
+  return mapOwnRow(result.data);
+}
+
+export async function updateOwnPreferredBroker(next: PreferredBroker | null): Promise<PreferredBroker | null> {
+  const { data: userResult, error: userError } = await supabase.auth.getUser();
+  if (userError || !userResult.user) {
+    throw userError ?? new Error('Sign in to continue');
+  }
+
+  const result = await supabase
+    .from('profiles')
+    .update({ preferred_broker: next })
+    .eq('id', userResult.user.id);
+
+  if (result.error) {
+    throw result.error;
+  }
+
+  return next;
 }
 
 export async function signAvatarUrls(paths: string[]): Promise<Map<string, string>> {

@@ -30,7 +30,7 @@ The `service_role` and database administration roles remain outside the mobile a
 
 Identity and club:
 
-- `profiles`: users may read themselves plus current-club roster identities, including historical members; they may insert their own row and edit only their own `display_name` and `avatar_path`. V1 onboarding is complete when `display_name` is set. Avatar bytes live in the private `avatars` Storage bucket; the table stores only the object path.
+- `profiles`: users may read themselves plus current-club roster identities, including historical members; they may insert their own row and edit only their own `display_name`, `avatar_path`, and `preferred_broker`. Column-level SELECT excludes `preferred_broker`, so club members and outsiders cannot read or filter another user's broker. The owner reads their own value through `get_own_preferred_broker`. V1 onboarding is complete when `display_name` is set and does not require a broker. Avatar bytes live in the private `avatars` Storage bucket; the table stores only the object path.
 - `clubs`: current active members may read; direct inserts, updates, and deletes are blocked.
 - `club_memberships`: current active members may read their club's current and historical roster; all direct client writes are blocked.
 - `club_invitations`: the current owner may read club invitations; a profile-addressed recipient may read their own invitation. Email-only recipient access is blocked until email is securely bound to authenticated identity. Shareable token invitations are accepted through `accept_club_invitation`; possession of the token plus `auth.uid()` is the V1 join factor. Token-only invitees cannot read invitation rows before joining.
@@ -123,6 +123,8 @@ Minimal `SECURITY DEFINER` helpers live in the unexposed `private` schema:
 
 Each helper derives identity internally from `auth.uid()`, returns only a boolean, and sets `search_path = ''`. Public and anonymous execution is revoked. Only authenticated execution is granted, and the `private` schema is not exposed by the local API configuration.
 
+`get_own_preferred_broker` is a separate private `SECURITY DEFINER` reader. It returns only the caller's own `preferred_broker` and does not accept a profile id. Club roster SELECT remains limited to identity columns.
+
 These helpers run with their definer's RLS authority to avoid recursive policy evaluation on memberships, proposals, electorate rows, and participations.
 
 ## Profile photos (Storage)
@@ -133,7 +135,7 @@ A public bucket was rejected for V1 so unauthenticated clients cannot fetch avat
 
 ## Test Coverage
 
-`supabase/tests/authorization_v1.test.sql`, `supabase/tests/club_create_join_v1.test.sql`, and `supabase/tests/profile_onboarding_v1.test.sql` use pgTAP and the actual `authenticated` Postgres role with JWT claim context. The authorization suite verifies club and profile isolation, immutable history, proposal identity, draft-allocation ownership, vote eligibility and privacy, saving-plan and participation privacy, readiness ownership, target immutability, owner-pointer protection, invitation visibility, former-electorate access, and anonymous denial. The create/join suite verifies atomic club creation, genesis allocations, invitation token issuance, acceptance, duplicate/expired/revoked/wrong-recipient rejection, and unchanged ownership. The profile onboarding suite verifies self-only profile updates, display-name length, club-member identity reads, outsider and former-member denial, and avatar Storage write/read isolation. Direct SQL `DELETE` on `storage.objects` is blocked by Storage's `protect_delete` trigger; delete authorization is still enforced by `avatars_delete_own` for the Storage API, and tests cover insert/update isolation plus the delete policy predicate.
+`supabase/tests/authorization_v1.test.sql`, `supabase/tests/club_create_join_v1.test.sql`, `supabase/tests/profile_onboarding_v1.test.sql`, and `supabase/tests/preferred_broker_v1.test.sql` use pgTAP and the actual `authenticated` Postgres role with JWT claim context. The authorization suite verifies club and profile isolation, immutable history, proposal identity, draft-allocation ownership, vote eligibility and privacy, saving-plan and participation privacy, readiness ownership, target immutability, owner-pointer protection, invitation visibility, former-electorate access, and anonymous denial. The create/join suite verifies atomic club creation, genesis allocations, invitation token issuance, acceptance, duplicate/expired/revoked/wrong-recipient rejection, and unchanged ownership. The profile onboarding suite verifies self-only profile updates, display-name length, club-member identity reads, outsider and former-member denial, and avatar Storage write/read isolation. The preferred-broker suite verifies a nullable default, accepted and rejected broker values, self-only updates, column-level privacy against roster and outsider reads, and that profile completeness still does not require a broker. Direct SQL `DELETE` on `storage.objects` is blocked by Storage's `protect_delete` trigger; delete authorization is still enforced by `avatars_delete_own` for the Storage API, and tests cover insert/update isolation plus the delete policy predicate.
 
 Run it with:
 

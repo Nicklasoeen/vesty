@@ -32,9 +32,6 @@ export interface InvestPlanDemo {
   /** Integer NOK kroner this member invests today. */
   memberAmountNok: number;
   currency: 'NOK';
-  /** Display name for the current demo broker. Not a provider registry. */
-  brokerName: string;
-  brokerActionLabel: string;
   targets: readonly InvestTargetDemo[];
 }
 
@@ -44,8 +41,6 @@ export const investPlanDemo: InvestPlanDemo = {
   investmentDayShortLabel: '5 Oct',
   memberAmountNok: 2_000,
   currency: 'NOK',
-  brokerName: 'Nordnet',
-  brokerActionLabel: 'Open in Nordnet',
   targets: [
     { id: 'global-index', label: 'Global Index', allocationBps: 4_000, amountNok: 800 },
     { id: 'technology', label: 'Technology', allocationBps: 3_000, amountNok: 600 },

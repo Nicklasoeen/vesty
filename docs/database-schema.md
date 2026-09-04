@@ -9,6 +9,8 @@ The schema is created by:
 - `supabase/migrations/20260903195622_create_vesty_domain_schema.sql`
 - `supabase/migrations/20260903202501_add_rls_authorization_v1.sql`
 - `supabase/migrations/20260904110626_add_club_create_join_v1.sql`
+- `supabase/migrations/20260904115953_add_profile_onboarding_v1.sql`
+- `supabase/migrations/20260904172137_add_preferred_broker_v1.sql`
 
 It uses the Supabase-managed `auth.users` table only as the authentication identity boundary. It does not duplicate credentials, sessions, or authentication state.
 
@@ -48,6 +50,7 @@ Lifecycle and closed-choice values use tightly scoped PostgreSQL enums:
 - `member_saving_plan_status`: `active`, `inactive`, `replaced`
 - `participation_outcome`: `expected`, `confirmed`, `skipped`, `failed`
 - `member_report_source`: `member_reported`
+- `preferred_broker`: `nordnet`, `dnb`, `kron`, `sparebank1`, `other`
 - `verification_state`: `unverified`, `verified`
 - `verification_source`: `import`, `broker_api`, `embedded_broker`
 
@@ -65,6 +68,7 @@ Money uses signed PostgreSQL `bigint` columns with positive-value checks. Alloca
   - Contains only application display/profile data and timestamps
   - `display_name` is optional until onboarding; when set it is trimmed non-empty text up to 80 characters
   - `avatar_path` is an optional Storage object key (`<auth.uid()>/avatar.jpg`), never a signed URL
+  - `preferred_broker` is an optional user-level broker preference. It is private account data, not club or strategy state. Profile completeness remains `display_name` only.
 
 - `clubs`
   - Primary key: `id`

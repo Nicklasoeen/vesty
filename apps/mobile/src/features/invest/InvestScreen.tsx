@@ -9,6 +9,9 @@ import {
   type InvestFlowPhase,
   type InvestPlanDemo,
 } from '@/demo/investDemoData';
+import { BrokerPickerSheet } from '@/features/profile/BrokerPickerSheet';
+import { openBrokerActionLabel, type PreferredBroker } from '@/features/profile/brokers';
+import { useProfile } from '@/features/profile/useProfile';
 import { formatNok } from '@/lib/currency';
 import { BOTTOM_NAVIGATION_HEIGHT, BottomNavigation } from '@/navigation/BottomNavigation';
 import { useAppNavigation } from '@/navigation/useAppNavigation';
@@ -24,11 +27,14 @@ export function InvestScreen() {
   const { colorScheme, colors, spacing } = useTheme();
   const insets = useSafeAreaInsets();
   const { activeTab, onSelectTab } = useAppNavigation('invest');
+  const { profile } = useProfile();
+  const preferredBroker = profile?.preferredBroker ?? null;
   const plan = investPlanDemo;
   const [rowSteps, setRowSteps] = useState<Readonly<Record<string, InvestRowStep>>>(() =>
     initialRowSteps(plan),
   );
   const [confirmed, setConfirmed] = useState(false);
+  const [brokerPickerOpen, setBrokerPickerOpen] = useState(false);
 
   const phase: InvestFlowPhase = useMemo(() => {
     if (INVEST_DEMO_DEFAULT_PHASE === 'today' && confirmed) {
@@ -77,12 +83,14 @@ export function InvestScreen() {
         {phase === 'today' ? (
           <TodayBody
             plan={plan}
+            preferredBroker={preferredBroker}
             stepFor={stepFor}
             doneCount={doneCount}
             allDone={allDone}
             onOpenBroker={openBroker}
             onMarkDone={markDone}
             onConfirm={() => setConfirmed(true)}
+            onChooseBroker={() => setBrokerPickerOpen(true)}
           />
         ) : null}
 
@@ -92,6 +100,7 @@ export function InvestScreen() {
       </Screen>
 
       <BottomNavigation activeTab={activeTab} onSelectTab={onSelectTab} />
+      <BrokerPickerSheet visible={brokerPickerOpen} onClose={() => setBrokerPickerOpen(false)} />
     </View>
   );
 }
@@ -129,6 +138,7 @@ function UpcomingBody({ plan }: { plan: InvestPlanDemo }) {
 
       <Breakdown
         plan={plan}
+        preferredBroker={null}
         showActions={false}
         stepFor={() => 'not_started'}
         onOpenBroker={() => undefined}
@@ -144,22 +154,27 @@ function UpcomingBody({ plan }: { plan: InvestPlanDemo }) {
 
 function TodayBody({
   plan,
+  preferredBroker,
   stepFor,
   doneCount,
   allDone,
   onOpenBroker,
   onMarkDone,
   onConfirm,
+  onChooseBroker,
 }: {
   plan: InvestPlanDemo;
+  preferredBroker: PreferredBroker | null;
   stepFor: (id: string) => InvestRowStep;
   doneCount: number;
   allDone: boolean;
   onOpenBroker: (id: string) => void;
   onMarkDone: (id: string) => void;
   onConfirm: () => void;
+  onChooseBroker: () => void;
 }) {
   const { spacing } = useTheme();
+  const hasBroker = preferredBroker !== null;
 
   return (
     <View>
@@ -183,11 +198,29 @@ function TodayBody({
 
       <Breakdown
         plan={plan}
-        showActions
+        preferredBroker={preferredBroker}
+        showActions={hasBroker}
         stepFor={stepFor}
         onOpenBroker={onOpenBroker}
         onMarkDone={onMarkDone}
       />
+
+      {hasBroker ? null : (
+        <View style={{ marginTop: spacing.xl }}>
+          <AppText variant="bodyStrong">Choose a broker to continue</AppText>
+          <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
+            Select your preferred broker before opening an investment.
+          </AppText>
+          <View style={{ marginTop: spacing.md }}>
+            <Button
+              label="Choose broker"
+              variant="secondary"
+              onPress={onChooseBroker}
+              accessibilityHint="Opens broker selection. Investment Day stays readable."
+            />
+          </View>
+        </View>
+      )}
 
       <View style={{ marginTop: spacing.xxl, paddingBottom: spacing.lg }}>
         <AppText variant="meta" color="secondary">
@@ -250,6 +283,7 @@ function CompletedBody({
 
       <Breakdown
         plan={plan}
+        preferredBroker={null}
         showActions={false}
         stepFor={() => 'done'}
         onOpenBroker={() => undefined}
@@ -269,18 +303,21 @@ function CompletedBody({
 
 function Breakdown({
   plan,
+  preferredBroker,
   showActions,
   stepFor,
   onOpenBroker,
   onMarkDone,
 }: {
   plan: InvestPlanDemo;
+  preferredBroker: PreferredBroker | null;
   showActions: boolean;
   stepFor: (id: string) => InvestRowStep;
   onOpenBroker: (id: string) => void;
   onMarkDone: (id: string) => void;
 }) {
   const { colors } = useTheme();
+  const brokerActionLabel = preferredBroker ? openBrokerActionLabel(preferredBroker) : 'Choose broker';
 
   return (
     <View>
@@ -289,8 +326,7 @@ function Breakdown({
           key={target.id}
           target={target}
           color={colors.chart[index % colors.chart.length]}
-          brokerActionLabel={plan.brokerActionLabel}
-          brokerName={plan.brokerName}
+          brokerActionLabel={brokerActionLabel}
           step={stepFor(target.id)}
           showActions={showActions}
           showSeparator={index > 0}
