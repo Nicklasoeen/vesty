@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useAuth } from '@/features/auth/useAuth';
 import { useTheme, type AppearancePreference } from '@/theme';
 import { AppText } from '@/ui';
 
@@ -33,11 +34,12 @@ interface ProfileSettingsModalProps {
 }
 
 /**
- * Temporary but product-plausible Profile / Settings surface.
- * Appearance only for this spike — opened from the Home profile avatar.
+ * Profile / Settings surface. Appearance plus a restrained Sign out action.
+ * Opened from the Home profile avatar.
  */
 export function ProfileSettingsModal({ visible, onClose }: ProfileSettingsModalProps) {
   const { colorScheme, colors, spacing, radius, appearancePreference, setAppearancePreference } = useTheme();
+  const { signOut } = useAuth();
   const insets = useSafeAreaInsets();
   const [isClosing, setIsClosing] = useState(false);
   const [sheetY] = useState(() => new Animated.Value(OFFSCREEN_Y));
@@ -94,6 +96,11 @@ export function ProfileSettingsModal({ visible, onClose }: ProfileSettingsModalP
       setIsClosing(false);
     });
   }, [backdropProgress, onClose, sheetY]);
+
+  const onSignOut = useCallback(() => {
+    dismiss();
+    void signOut();
+  }, [dismiss, signOut]);
 
   useEffect(() => {
     if (!visible) {
@@ -222,6 +229,30 @@ export function ProfileSettingsModal({ visible, onClose }: ProfileSettingsModalP
               );
             })}
           </View>
+
+          <AppText variant="sectionTitle" color="secondary" style={{ marginTop: spacing.xl, marginBottom: spacing.sm }}>
+            Account
+          </AppText>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Sign out"
+            onPress={onSignOut}
+            style={({ pressed }) => [
+              styles.optionRow,
+              {
+                backgroundColor: colors.surface,
+                borderWidth: 1,
+                borderColor: colors.border,
+                borderRadius: radius.md,
+                paddingHorizontal: spacing.md,
+                minHeight: 44,
+                opacity: pressed ? 0.7 : 1,
+              },
+            ]}
+          >
+            <AppText variant="body">Sign out</AppText>
+          </Pressable>
         </Animated.View>
       </View>
     </Modal>

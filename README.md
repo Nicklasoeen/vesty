@@ -30,7 +30,9 @@ pnpm supabase:status
 cp apps/mobile/.env.example apps/mobile/.env
 ```
 
-Replace the publishable-key placeholder in `apps/mobile/.env` with the local publishable key shown by `pnpm supabase:status`. The configured `127.0.0.1` URL is reachable from the iOS Simulator; physical-device networking is not configured yet.
+Replace the publishable-key placeholder in `apps/mobile/.env` with the local publishable key shown by `pnpm supabase:status`. Never put a service-role or secret key in `EXPO_PUBLIC_*` variables.
+
+The default `EXPO_PUBLIC_SUPABASE_URL=http://127.0.0.1:55321` works from the iOS Simulator and Expo web on the same Mac. A physical iPhone cannot reach that address (`127.0.0.1` is the phone). For device testing, set `EXPO_PUBLIC_SUPABASE_URL` to `http://<Mac-LAN-IP>:55321`, keep the phone and Mac on the same Wi-Fi, and allow inbound TCP 55321 if a firewall is blocking it. Do not commit a personal LAN IP.
 
 Daily development:
 

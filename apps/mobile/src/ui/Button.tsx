@@ -16,6 +16,8 @@ interface ButtonProps {
   block?: boolean;
   accessibilityLabel?: string;
   accessibilityHint?: string;
+  /** Exposes accessibility busy/disabled together for in-flight actions. */
+  busy?: boolean;
 }
 
 export function Button({
@@ -27,6 +29,7 @@ export function Button({
   block = false,
   accessibilityLabel,
   accessibilityHint,
+  busy = false,
 }: ButtonProps) {
   const { colors, radius, spacing } = useTheme();
   const compact = size === 'sm';
@@ -38,7 +41,7 @@ export function Button({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityHint={accessibilityHint}
-      accessibilityState={{ disabled }}
+      accessibilityState={{ disabled, busy }}
       style={({ pressed }) => [
         styles.base,
         {

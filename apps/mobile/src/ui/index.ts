@@ -5,6 +5,7 @@ export type { AppTextColor } from './AppText';
 export { Avatar, AvatarStack } from './Avatar';
 export type { AvatarPerson, AvatarSize } from './Avatar';
 export { Button } from './Button';
+export { TextField } from './TextField';
 export { RangeSelector } from './RangeSelector';
 export { Screen } from './Screen';
 export { Section } from './Section';

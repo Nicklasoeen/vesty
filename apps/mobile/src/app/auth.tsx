@@ -1,13 +1,18 @@
 import { Redirect } from 'expo-router';
 
+import { AuthScreen } from '@/features/auth/AuthScreen';
 import { useAuth } from '@/features/auth/useAuth';
 
-export default function IndexScreen() {
+export default function AuthRoute() {
   const { session, isInitializing, profileError } = useAuth();
 
   if (isInitializing || profileError) {
     return null;
   }
 
-  return <Redirect href={session ? '/home' : '/auth'} />;
+  if (session) {
+    return <Redirect href="/home" />;
+  }
+
+  return <AuthScreen />;
 }
