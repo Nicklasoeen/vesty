@@ -2,7 +2,7 @@
 
 Vesty is an iOS-first social investment club application focused on helping private groups coordinate a shared long-term investment strategy while each member retains their own investments.
 
-This repository is currently in the foundation and setup phase. Product features and backend integrations have not been implemented.
+This repository currently includes a local Supabase backend, email/password authentication, profile onboarding V1, and Create / Join Club V1. Portfolio totals remain demo presentation until the financial pipeline exists.
 
 ## Requirements
 
@@ -42,7 +42,9 @@ pnpm ios
 pnpm supabase:stop
 ```
 
-Versioned migrations live in `supabase/migrations/` and can be replayed with `pnpm exec supabase db reset --local --no-seed`. RLS protects the domain tables and local authorization tests cover the direct-client boundary. No remote Supabase project is connected. Never use a service-role or private key in the mobile application.
+Versioned migrations live in `supabase/migrations/` and can be replayed with `pnpm exec supabase db reset --local --no-seed`. RLS protects the domain tables. Club creation, invitation issuance, and invitation acceptance go through trusted RPCs; direct client writes to those tables remain blocked. Local authorization and create/join tests cover that boundary. No remote Supabase project is connected. Never use a service-role or private key in the mobile application.
+
+Local Auth has email confirmations disabled (`enable_confirmations = false`), so development accounts are stored as confirmed. Email-bound invitation acceptance compares the authenticated `auth.users.email` and requires `email_confirmed_at`. A typed email in the mobile UI is never treated as identity. Shareable invite codes are the V1 join factor.
 
 ## Mobile development
 

@@ -12,3 +12,5 @@ minimumReleaseAgeExclude:
   - expo@57.0.20
   - '@expo/ui@57.0.16'
   - expo-router@57.0.19
+  - expo-image-manipulator@57.0.16
+  - expo-image-picker@57.0.16

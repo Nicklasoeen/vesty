@@ -1,9 +1,8 @@
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import type { ClubMemberDemo } from '@/demo/clubDemoData';
 import { formatNok } from '@/lib/currency';
 import { useTheme } from '@/theme';
-import { AppText, Avatar, Button, Surface } from '@/ui';
+import { AppText, Avatar, Button, Surface, type AvatarPerson } from '@/ui';
 
 /**
  * Visual states for Home's Investment Day module.
@@ -16,6 +15,10 @@ import { AppText, Avatar, Button, Surface } from '@/ui';
  */
 export type InvestmentDayVisualState = 'upcoming' | 'actionRequired' | 'today';
 
+export type InvestmentDayMember = AvatarPerson & {
+  isReadyForNextInvestmentDay?: boolean;
+};
+
 interface InvestmentDaySummaryProps {
   clubName: string;
   /** Full date label (e.g. "5 October") — used by action/today copy. */
@@ -23,7 +26,7 @@ interface InvestmentDaySummaryProps {
   /** Compact date (e.g. "5 Oct") — used by the quieter upcoming state. */
   investmentDayShortLabel: string;
   expectedContributionNok: number;
-  members: ClubMemberDemo[];
+  members: readonly InvestmentDayMember[];
   /** Defaults to the calm everyday upcoming treatment. */
   visualState?: InvestmentDayVisualState;
   /** Optional navigation into Invest. Does not change the card’s design. */
@@ -82,7 +85,7 @@ function UpcomingState({
   clubName: string;
   dateLabel: string;
   expectedContributionNok: number;
-  members: ClubMemberDemo[];
+  members: readonly InvestmentDayMember[];
   onOpenInvest?: () => void;
 }) {
   const { colors, spacing } = useTheme();
@@ -130,7 +133,7 @@ function ActionRequiredState({
 }: {
   clubName: string;
   dateLabel: string;
-  members: ClubMemberDemo[];
+  members: readonly InvestmentDayMember[];
 }) {
   const { colors, spacing } = useTheme();
 
@@ -173,7 +176,7 @@ function TodayState({
 }: {
   clubName: string;
   expectedContributionNok: number;
-  members: ClubMemberDemo[];
+  members: readonly InvestmentDayMember[];
   onOpenInvest?: () => void;
 }) {
   const { colors, spacing } = useTheme();
@@ -212,11 +215,12 @@ function ReadinessRow({
   noun,
   style,
 }: {
-  members: ClubMemberDemo[];
+  members: readonly InvestmentDayMember[];
   noun: 'ready' | 'confirmed';
   style?: StyleProp<ViewStyle>;
 }) {
   const { spacing } = useTheme();
+  const hasReadiness = members.some((member) => member.isReadyForNextInvestmentDay !== undefined);
   const readyCount = members.filter((member) => member.isReadyForNextInvestmentDay).length;
 
   return (
@@ -227,12 +231,14 @@ function ReadinessRow({
           initials={member.initials}
           imageSource={member.imageSource}
           size="sm"
-          ring={member.isReadyForNextInvestmentDay ? 'ready' : 'pending'}
+          ring={hasReadiness ? (member.isReadyForNextInvestmentDay ? 'ready' : 'pending') : 'none'}
           style={index === 0 ? undefined : styles.avatarSpacing}
         />
       ))}
       <AppText variant="meta" color="secondary" style={{ marginLeft: spacing.sm }}>
-        {readyCount} of {members.length} {noun}
+        {hasReadiness
+          ? `${readyCount} of ${members.length} ${noun}`
+          : `${members.length} ${members.length === 1 ? 'member' : 'members'}`}
       </AppText>
     </View>
   );

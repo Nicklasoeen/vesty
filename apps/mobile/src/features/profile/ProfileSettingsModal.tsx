@@ -11,9 +11,13 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useRouter } from 'expo-router';
+
 import { useAuth } from '@/features/auth/useAuth';
 import { useTheme, type AppearancePreference } from '@/theme';
-import { AppText } from '@/ui';
+import { AppText, Avatar } from '@/ui';
+
+import { useProfile } from './useProfile';
 
 const OPTIONS: { value: AppearancePreference; label: string }[] = [
   { value: 'system', label: 'System' },
@@ -34,12 +38,14 @@ interface ProfileSettingsModalProps {
 }
 
 /**
- * Profile / Settings surface. Appearance plus a restrained Sign out action.
- * Opened from the Home profile avatar.
+ * Profile / Settings surface. Identity, edit entry, appearance, and sign out.
+ * Opened from the Home profile avatar. Not a full profile editor.
  */
 export function ProfileSettingsModal({ visible, onClose }: ProfileSettingsModalProps) {
   const { colorScheme, colors, spacing, radius, appearancePreference, setAppearancePreference } = useTheme();
   const { signOut } = useAuth();
+  const { profile, initials, avatarSource } = useProfile();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const [isClosing, setIsClosing] = useState(false);
   const [sheetY] = useState(() => new Animated.Value(OFFSCREEN_Y));
@@ -101,6 +107,11 @@ export function ProfileSettingsModal({ visible, onClose }: ProfileSettingsModalP
     dismiss();
     void signOut();
   }, [dismiss, signOut]);
+
+  const onEditProfile = useCallback(() => {
+    dismiss();
+    router.push('/profile-edit');
+  }, [dismiss, router]);
 
   useEffect(() => {
     if (!visible) {
@@ -189,6 +200,39 @@ export function ProfileSettingsModal({ visible, onClose }: ProfileSettingsModalP
               </AppText>
             </Pressable>
           </View>
+
+          <View style={[styles.identityRow, { marginBottom: spacing.lg }]}>
+            <Avatar
+              initials={initials}
+              imageSource={avatarSource}
+              size="lg"
+              accessibilityLabel="Your profile photo"
+            />
+            <AppText variant="bodyStrong" style={{ marginLeft: spacing.md, flex: 1 }}>
+              {profile?.displayName ?? initials}
+            </AppText>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Edit profile"
+            onPress={onEditProfile}
+            style={({ pressed }) => [
+              styles.optionRow,
+              {
+                backgroundColor: colors.surface,
+                borderWidth: 1,
+                borderColor: colors.border,
+                borderRadius: radius.md,
+                paddingHorizontal: spacing.md,
+                minHeight: 44,
+                marginBottom: spacing.xl,
+                opacity: pressed ? 0.7 : 1,
+              },
+            ]}
+          >
+            <AppText variant="body">Edit profile</AppText>
+          </Pressable>
 
           <AppText variant="sectionTitle" color="secondary" style={{ marginBottom: spacing.sm }}>
             Appearance
@@ -290,5 +334,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  identityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
 });

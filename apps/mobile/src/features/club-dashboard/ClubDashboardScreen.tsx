@@ -1,81 +1,191 @@
-import { Feather } from '@expo/vector-icons';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Feather } from '@expo/vector-icons';
 
 import { clubDashboardDemoData } from '@/demo/clubDemoData';
+import { ClubEmptyState } from '@/features/clubs/ClubEmptyState';
+import { ClubOptionsSheet } from '@/features/clubs/ClubOptionsSheet';
+import { ClubSwitcherSheet } from '@/features/clubs/ClubSwitcherSheet';
+import { createInvitationForClub, useClubs } from '@/features/clubs/useClubs';
+import { governanceLabel } from '@/features/clubs/governance';
+import { InviteMemberSheet } from '@/features/clubs/InviteMemberSheet';
+import { useClubStrategy } from '@/features/clubs/useClubStrategy';
+import type { ClubSummary } from '@/features/clubs/types';
 import { formatNok, formatSignedNok, formatSignedPercentage } from '@/lib/currency';
 import { BOTTOM_NAVIGATION_HEIGHT, BottomNavigation } from '@/navigation/BottomNavigation';
 import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { useTheme } from '@/theme';
-import { AllocationBar, AppText, Avatar, AvatarStack, Screen, Section, Surface } from '@/ui';
+import { AllocationBar, AppText, Avatar, AvatarStack, Button, Screen, Section, Surface } from '@/ui';
 import { PortfolioChart } from './PortfolioChart';
-import { ProposalCard } from './ProposalCard';
 
 export function ClubDashboardScreen() {
   const { colorScheme, colors, spacing } = useTheme();
   const insets = useSafeAreaInsets();
   const { activeTab, onSelectTab } = useAppNavigation('club');
+  const { clubs, selectedClub, isLoading, error, refresh, selectClub } = useClubs();
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteToken, setInviteToken] = useState<string | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteBusy, setInviteBusy] = useState(false);
+
+  const onInvite = async (club: ClubSummary) => {
+    if (inviteBusy) {
+      return;
+    }
+    setInviteOpen(true);
+    setInviteBusy(true);
+    setInviteError(null);
+    setInviteToken(null);
+    try {
+      const created = await createInvitationForClub(club.clubId);
+      setInviteToken(created.inviteToken);
+    } catch (caught) {
+      setInviteError(caught instanceof Error ? caught.message : "You don't have permission to invite members");
+    } finally {
+      setInviteBusy(false);
+    }
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
 
-      <Screen
-        contentContainerStyle={{
-          paddingHorizontal: spacing.lg,
-          paddingBottom: BOTTOM_NAVIGATION_HEIGHT + insets.bottom + spacing.xl,
-        }}
-      >
-        <DashboardHeader />
+      {isLoading && !selectedClub ? (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator accessibilityLabel="Loading clubs" color={colors.accent} />
+        </View>
+      ) : error && !selectedClub ? (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg }}>
+          <AppText variant="body" color="secondary" style={{ textAlign: 'center' }}>
+            {error}
+          </AppText>
+          <View style={{ marginTop: spacing.lg }}>
+            <Button
+              label="Try again"
+              variant="secondary"
+              onPress={() => {
+                void refresh();
+              }}
+            />
+          </View>
+        </View>
+      ) : !selectedClub ? (
+        <ClubEmptyState />
+      ) : (
+        <Screen
+          contentContainerStyle={{
+            paddingHorizontal: spacing.lg,
+            paddingBottom: BOTTOM_NAVIGATION_HEIGHT + insets.bottom + spacing.xl,
+          }}
+        >
+          <DashboardHeader
+            club={selectedClub}
+            canSwitch={clubs.length > 1}
+            onOpenOptions={() => setOptionsOpen(true)}
+            onOpenSwitcher={() => setSwitcherOpen(true)}
+          />
 
-        <PortfolioSummary />
+          <PortfolioSummary />
 
-        <InvestmentDayBanner onOpenInvest={() => onSelectTab('invest')} />
+          <InvestmentDayBanner club={selectedClub} onOpenInvest={() => onSelectTab('invest')} />
 
-        <Section title="Strategy">
-          <AllocationBar allocations={clubDashboardDemoData.currentStrategy} />
-        </Section>
-
-        <Section title="Open proposal" isLast>
-          <ProposalCard proposal={clubDashboardDemoData.activeProposal} />
-        </Section>
-      </Screen>
+          <StrategySection key={selectedClub.clubId} clubId={selectedClub.clubId} />
+        </Screen>
+      )}
 
       <BottomNavigation activeTab={activeTab} onSelectTab={onSelectTab} />
+
+      {selectedClub ? (
+        <>
+          <ClubOptionsSheet
+            visible={optionsOpen}
+            isOwner={selectedClub.isOwner}
+            onClose={() => setOptionsOpen(false)}
+            onInvite={() => {
+              void onInvite(selectedClub);
+            }}
+          />
+          <ClubSwitcherSheet
+            visible={switcherOpen}
+            clubs={clubs}
+            selectedClubId={selectedClub.clubId}
+            onSelect={(clubId) => {
+              void selectClub(clubId);
+            }}
+            onClose={() => setSwitcherOpen(false)}
+          />
+          {inviteOpen ? (
+            <InviteMemberSheet
+              visible
+              clubName={selectedClub.name}
+              inviteToken={inviteToken}
+              isGenerating={inviteBusy}
+              error={inviteError}
+              onClose={() => setInviteOpen(false)}
+            />
+          ) : null}
+        </>
+      ) : null}
     </View>
   );
 }
 
-function DashboardHeader() {
+function DashboardHeader({
+  club,
+  canSwitch,
+  onOpenOptions,
+  onOpenSwitcher,
+}: {
+  club: ClubSummary;
+  canSwitch: boolean;
+  onOpenOptions: () => void;
+  onOpenSwitcher: () => void;
+}) {
   const { colors, spacing } = useTheme();
-  const data = clubDashboardDemoData;
 
   return (
     <View style={[styles.header, { marginTop: spacing.md, marginBottom: spacing.md }]}>
       <View style={styles.titleRow}>
-        <AppText variant="title" accessibilityRole="header" style={styles.title}>
-          {data.clubName}
-        </AppText>
+        <Pressable
+          accessibilityRole={canSwitch ? 'button' : undefined}
+          accessibilityLabel={canSwitch ? `Switch club, ${club.name}` : undefined}
+          onPress={canSwitch ? onOpenSwitcher : undefined}
+          disabled={!canSwitch}
+          style={({ pressed }) => [styles.titlePress, { opacity: canSwitch && pressed ? 0.7 : 1 }]}
+        >
+          <AppText variant="title" accessibilityRole="header" style={styles.title}>
+            {club.name}
+          </AppText>
+          {canSwitch ? <Feather name="chevron-down" size={18} color={colors.textSecondary} /> : null}
+        </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Club options"
           hitSlop={10}
+          onPress={onOpenOptions}
           style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
         >
           <Feather name="more-horizontal" size={22} color={colors.textSecondary} />
         </Pressable>
       </View>
 
+      <AppText variant="meta" color="secondary" style={{ marginTop: spacing.xs }}>
+        {governanceLabel(club.governanceThresholdKind)}
+      </AppText>
+
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`${data.members.length} members`}
+        accessibilityLabel={`${club.members.length} members`}
         hitSlop={4}
         style={({ pressed }) => [styles.headerMembersRow, { marginTop: spacing.xs, opacity: pressed ? 0.7 : 1 }]}
       >
-        <AvatarStack people={data.members} />
+        <AvatarStack people={club.members} />
         <AppText variant="meta" color="secondary" style={{ marginLeft: spacing.sm }}>
-          {data.members.length} members
+          {club.members.length} {club.members.length === 1 ? 'member' : 'members'}
         </AppText>
       </Pressable>
     </View>
@@ -84,6 +194,7 @@ function DashboardHeader() {
 
 function PortfolioSummary() {
   const { spacing } = useTheme();
+  // DEMO financial presentation — not loaded from the database.
   const data = clubDashboardDemoData;
 
   return (
@@ -111,16 +222,21 @@ function PortfolioSummary() {
   );
 }
 
-function InvestmentDayBanner({ onOpenInvest }: { onOpenInvest: () => void }) {
+function InvestmentDayBanner({
+  club,
+  onOpenInvest,
+}: {
+  club: ClubSummary;
+  onOpenInvest: () => void;
+}) {
   const { colors, spacing } = useTheme();
   const data = clubDashboardDemoData;
-  const readyCount = data.members.filter((member) => member.isReadyForNextInvestmentDay).length;
 
   return (
     <Pressable
       onPress={onOpenInvest}
       accessibilityRole="button"
-      accessibilityLabel={`Open Invest, ${data.clubName} Investment Day`}
+      accessibilityLabel={`Open Invest, ${club.name} Investment Day`}
       style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
     >
       <Surface
@@ -146,22 +262,35 @@ function InvestmentDayBanner({ onOpenInvest }: { onOpenInvest: () => void }) {
         </View>
 
         <View style={[styles.readinessRow, { marginTop: spacing.md }]}>
-          {data.members.map((member, index) => (
+          {club.members.map((member, index) => (
             <Avatar
               key={member.id}
               initials={member.initials}
               imageSource={member.imageSource}
               size="sm"
-              ring={member.isReadyForNextInvestmentDay ? 'ready' : 'pending'}
               style={index === 0 ? undefined : styles.readinessAvatar}
             />
           ))}
           <AppText variant="meta" color="secondary" style={{ marginLeft: spacing.sm }}>
-            {readyCount} of {data.members.length} ready
+            {club.members.length} {club.members.length === 1 ? 'member' : 'members'}
           </AppText>
         </View>
       </Surface>
     </Pressable>
+  );
+}
+
+function StrategySection({ clubId }: { clubId: string }) {
+  const { allocations } = useClubStrategy(clubId);
+
+  if (allocations.length === 0) {
+    return null;
+  }
+
+  return (
+    <Section title="Strategy" isLast>
+      <AllocationBar allocations={allocations} />
+    </Section>
   );
 }
 
@@ -174,9 +303,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  title: {
+  titlePress: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingRight: 12,
+    gap: 4,
+  },
+  title: {
+    flexShrink: 1,
   },
   headerMembersRow: {
     flexDirection: 'row',

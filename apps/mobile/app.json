@@ -10,7 +10,15 @@
       "supportsTablet": false
     },
     "android": {},
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Vesty uses your photo library so you can add a profile photo."
+        }
+      ]
+    ],
     "experiments": {
       "typedRoutes": true
     }

@@ -4,6 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthLoadingScreen } from '@/features/auth/AuthLoadingScreen';
 import { AuthProvider, useAuth } from '@/features/auth/AuthProvider';
+import { ProfileProvider, useProfile } from '@/features/profile/ProfileProvider';
 import { ThemeProvider } from '@/theme';
 
 export default function RootLayout() {
@@ -11,7 +12,9 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ThemeProvider>
         <AuthProvider>
-          <RootNavigation />
+          <ProfileProvider>
+            <RootNavigation />
+          </ProfileProvider>
         </AuthProvider>
       </ThemeProvider>
     </SafeAreaProvider>
@@ -19,8 +22,12 @@ export default function RootLayout() {
 }
 
 function RootNavigation() {
-  const { isInitializing, profileError, retryProfileSetup } = useAuth();
-  const blocking = isInitializing || Boolean(profileError);
+  const { isInitializing, profileError, retryProfileSetup, session } = useAuth();
+  const { isLoading: profileLoading, error: profileLoadError, profile, refresh } = useProfile();
+  const identityBlocked = Boolean(session) && !profileLoading && Boolean(profileLoadError) && !profile;
+  const blocking =
+    isInitializing || Boolean(profileError) || (Boolean(session) && profileLoading) || identityBlocked;
+  const error = profileError ?? (identityBlocked ? profileLoadError : null);
 
   return (
     <View style={styles.fill}>
@@ -28,8 +35,14 @@ function RootNavigation() {
       {blocking ? (
         <View style={styles.overlay} pointerEvents="auto">
           <AuthLoadingScreen
-            error={profileError}
-            onRetry={profileError ? () => void retryProfileSetup() : undefined}
+            error={error}
+            onRetry={
+              profileError
+                ? () => void retryProfileSetup()
+                : identityBlocked
+                  ? () => void refresh()
+                  : undefined
+            }
           />
         </View>
       ) : null}

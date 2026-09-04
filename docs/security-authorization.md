@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document describes the direct-client authorization boundary implemented by `supabase/migrations/20260903202501_add_rls_authorization_v1.sql`. Product and relational invariants remain authoritative in `docs/domain-model.md` and `docs/database-schema.md`.
+This document describes the direct-client authorization boundary implemented by `supabase/migrations/20260903202501_add_rls_authorization_v1.sql` and the Create / Join Club trusted RPCs in `supabase/migrations/20260904110626_add_club_create_join_v1.sql`. Product and relational invariants remain authoritative in `docs/domain-model.md` and `docs/database-schema.md`.
 
 ## Authorization Principles
 
@@ -30,10 +30,10 @@ The `service_role` and database administration roles remain outside the mobile a
 
 Identity and club:
 
-- `profiles`: users may read themselves plus current-club roster identities, including historical members; they may insert and edit only their own display profile.
+- `profiles`: users may read themselves plus current-club roster identities, including historical members; they may insert their own row and edit only their own `display_name` and `avatar_path`. V1 onboarding is complete when `display_name` is set. Avatar bytes live in the private `avatars` Storage bucket; the table stores only the object path.
 - `clubs`: current active members may read; direct inserts, updates, and deletes are blocked.
 - `club_memberships`: current active members may read their club's current and historical roster; all direct client writes are blocked.
-- `club_invitations`: the current owner may read club invitations; a profile-addressed recipient may read their own invitation. Email-only recipient access is blocked until email is securely bound to authenticated identity.
+- `club_invitations`: the current owner may read club invitations; a profile-addressed recipient may read their own invitation. Email-only recipient access is blocked until email is securely bound to authenticated identity. Shareable token invitations are accepted through `accept_club_invitation`; possession of the token plus `auth.uid()` is the V1 join factor. Token-only invitees cannot read invitation rows before joining.
 - `ownership_transfers`: the current owner and active target member may read relevant transfers; all direct client writes are blocked.
 
 Strategies and governance:
@@ -77,18 +77,21 @@ The sole V1 exception is a membership already frozen into an open proposal elect
 
 Direct clients cannot perform operations that require atomic cross-table validation:
 
-- club creation and archival
-- membership creation, acceptance, removal, leaving, or ownership changes
-- invitation creation, revocation, acceptance, decline, or expiry
+- club archival
+- membership removal, leaving, or ownership changes
+- invitation revocation, decline, or expiry jobs
 - ownership-transfer creation, acceptance, rejection, or expiry
-- genesis strategy creation
 - proposal opening, cancellation, closing, or approval
 - electorate creation
 - approved proposal to StrategyVersion creation
-- strategy and allocation snapshot mutation
+- strategy and allocation snapshot mutation after genesis
 - schedule mutation and cycle generation
 - participation snapshot creation
 - broker verification
+
+Club creation, genesis strategy creation, owner invitation issuance, and invitation acceptance are implemented as private `SECURITY DEFINER` functions with public invoker wrappers. Callers cannot supply `owner_user_id` or another member's identity; `auth.uid()` is authoritative.
+
+Email-bound invitations compare `auth.users.email` for the authenticated user and require `email_confirmed_at`. The mobile UI never accepts a typed email as proof of identity. Local Auth has `enable_confirmations = false`, so development signups are stored as confirmed. When confirmations are enabled, an unconfirmed email cannot accept an email-bound invitation.
 
 Saving-plan replacement can preserve rows through an end followed by an insert, but a future trusted operation is still required if product flows require replacement to be atomic.
 
@@ -122,16 +125,15 @@ Each helper derives identity internally from `auth.uid()`, returns only a boolea
 
 These helpers run with their definer's RLS authority to avoid recursive policy evaluation on memberships, proposals, electorate rows, and participations.
 
+## Profile photos (Storage)
+
+The `avatars` bucket is private. Object keys are `{auth.uid()}/avatar.jpg`. Authenticated users may insert, update, and delete only that exact own path. Reads use `private.can_read_profile` on the folder UUID, matching profile row visibility: self plus identities visible through a club the requester currently belongs to. Former members lose requester-side access because `can_read_profile` requires the requester's membership to be active. Signed URLs are resolved at read time and are not stored on `profiles`.
+
+A public bucket was rejected for V1 so unauthenticated clients cannot fetch avatars from a guessed path.
+
 ## Test Coverage
 
-`supabase/tests/authorization_v1.test.sql` uses pgTAP and the actual `authenticated` Postgres role with JWT claim context. Fixtures include:
-
-- Alice, owner of Club A
-- Bob, member of Club A
-- Charlie, owner of unrelated Club B
-- Diana, former member and frozen electorate member of Club A
-
-The suite verifies club and profile isolation, immutable history, proposal identity, draft-allocation ownership, vote eligibility and privacy, saving-plan and participation privacy, readiness ownership, target immutability, owner-pointer protection, invitation visibility, former-electorate access, and anonymous denial.
+`supabase/tests/authorization_v1.test.sql`, `supabase/tests/club_create_join_v1.test.sql`, and `supabase/tests/profile_onboarding_v1.test.sql` use pgTAP and the actual `authenticated` Postgres role with JWT claim context. The authorization suite verifies club and profile isolation, immutable history, proposal identity, draft-allocation ownership, vote eligibility and privacy, saving-plan and participation privacy, readiness ownership, target immutability, owner-pointer protection, invitation visibility, former-electorate access, and anonymous denial. The create/join suite verifies atomic club creation, genesis allocations, invitation token issuance, acceptance, duplicate/expired/revoked/wrong-recipient rejection, and unchanged ownership. The profile onboarding suite verifies self-only profile updates, display-name length, club-member identity reads, outsider and former-member denial, and avatar Storage write/read isolation. Direct SQL `DELETE` on `storage.objects` is blocked by Storage's `protect_delete` trigger; delete authorization is still enforced by `avatars_delete_own` for the Storage API, and tests cover insert/update isolation plus the delete policy predicate.
 
 Run it with:
 
@@ -141,12 +143,10 @@ pnpm test:db
 
 ## Known Deferred Security and Business Operations
 
-- Safe invitation context for email-only invitees
-- Atomic invitation acceptance and membership creation
+- Safe invitation context for email-only invitees who do not yet have a token
 - Atomic ownership transfer
 - Trusted proposal opening, cancellation, closing, and approval
-- Allocation-total and snapshot validation
-- Atomic StrategyVersion creation
+- Allocation-total validation outside genesis create-club
 - Schedule changes and cycle generation
 - Atomic saving-plan replacement if required by the product flow
 - Safe open-vote turnout/progress projection

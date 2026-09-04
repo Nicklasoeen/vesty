@@ -13,6 +13,11 @@ import type { AuthError, Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase/client';
 import { ensureOwnProfile } from './ensureOwnProfile';
 import { mapAuthError } from './mapAuthError';
+import {
+  isInvalidAuthIdentityError,
+  isInvalidProfileIdentityError,
+  isRetryableAuthTransportError,
+} from './sessionValidity';
 
 export type AuthActionResult =
   | { ok: true }
@@ -51,6 +56,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const sessionRef = useRef<Session | null>(null);
   const submittingRef = useRef(false);
 
+  const clearInvalidSession = useCallback(async () => {
+    const { error } = await supabase.auth.signOut({ scope: 'local' });
+    if (error) {
+      logAuthIssue('local signOut after invalid session', error);
+    }
+
+    sessionRef.current = null;
+    setSession(null);
+    setProfileError(null);
+  }, []);
+
   const applyAuthenticatedSession = useCallback(async (next: Session | null): Promise<boolean> => {
     if (!next?.user) {
       sessionRef.current = null;
@@ -59,20 +75,50 @@ export function AuthProvider({ children }: PropsWithChildren) {
       return true;
     }
 
+    const { data: userResult, error: getUserError } = await supabase.auth.getUser();
+
+    if (getUserError || !userResult.user) {
+      if (isRetryableAuthTransportError(getUserError)) {
+        logAuthIssue('getUser transport failed', getUserError);
+        sessionRef.current = next;
+        setSession(next);
+        setProfileError('Unable to set up your account right now');
+        return false;
+      }
+
+      if (isInvalidAuthIdentityError(getUserError) || !userResult.user) {
+        logAuthIssue('getUser rejected cached session', getUserError);
+        await clearInvalidSession();
+        return true;
+      }
+
+      logAuthIssue('getUser failed', getUserError);
+      sessionRef.current = next;
+      setSession(next);
+      setProfileError('Unable to set up your account right now');
+      return false;
+    }
+
     try {
-      await ensureOwnProfile(next.user.id);
+      await ensureOwnProfile(userResult.user.id);
       sessionRef.current = next;
       setSession(next);
       setProfileError(null);
       return true;
     } catch (error) {
+      if (isInvalidProfileIdentityError(error)) {
+        logAuthIssue('profile bootstrap rejected stale identity', error);
+        await clearInvalidSession();
+        return true;
+      }
+
       logAuthIssue('profile bootstrap failed', error);
       sessionRef.current = next;
       setSession(next);
       setProfileError('Unable to set up your account right now');
       return false;
     }
-  }, []);
+  }, [clearInvalidSession]);
 
   useEffect(() => {
     let cancelled = false;

@@ -1,24 +1,25 @@
 import { StatusBar } from 'expo-status-bar';
 import { Fragment, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View, type ImageSourcePropType } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { clubDashboardDemoData, type DemoPerson } from '@/demo/clubDemoData';
-import {
-  homeClubs,
-  homeOverallPerformanceSummary,
-  overallPerformanceHistoryByRange,
-  OVERALL_PERFORMANCE_DEFAULT_RANGE,
-} from '@/demo/homeDemoData';
-import { ProposalCard } from '@/features/club-dashboard/ProposalCard';
+import { HomeClubsEmpty } from '@/features/clubs/ClubEmptyState';
+import { useClubs } from '@/features/clubs/useClubs';
 import { ProfileSettingsModal } from '@/features/profile/ProfileSettingsModal';
+import { useProfile } from '@/features/profile/useProfile';
 import { BOTTOM_NAVIGATION_HEIGHT, BottomNavigation } from '@/navigation/BottomNavigation';
 import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { useTheme } from '@/theme';
 import { Avatar, Screen, Section, VestyMark } from '@/ui';
+import {
+  homeOverallPerformanceSummary,
+  overallPerformanceHistoryByRange,
+  OVERALL_PERFORMANCE_DEFAULT_RANGE,
+} from '@/demo/homeDemoData';
 import { ClubListItem } from './ClubListItem';
 import { InvestmentDaySummary, type InvestmentDayVisualState } from './InvestmentDaySummary';
 import { OverallPerformanceSection } from './OverallPerformanceSection';
+import { homeInvestmentDayDemo, presentHomeClubs } from './presentHomeClubs';
 
 /**
  * Spike demo switch for Home Investment Day visual states.
@@ -34,17 +35,18 @@ const HOME_INVESTMENT_DAY_STATE: InvestmentDayVisualState = 'upcoming';
  * 3. Which clubs am I in? (Your clubs)
  * 4. Does anything need my attention? (Proposal)
  *
- * Total value owns the top of Home. Investment Day is a secondary event
- * Surface that sits just above the club list so the upcoming club event
- * and the clubs themselves feel connected.
+ * Club identity is real. Overall performance and Investment Day amounts
+ * remain DEMO until the financial pipeline exists.
  */
 export function HomeScreen() {
   const { colorScheme, colors, spacing } = useTheme();
   const insets = useSafeAreaInsets();
   const { activeTab, onSelectTab } = useAppNavigation('home');
-  const data = clubDashboardDemoData;
-  const currentUser = data.members.find((member) => member.isCurrentUser);
+  const { clubs, isLoading, selectClub } = useClubs();
+  const { initials, avatarSource } = useProfile();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const homeClubRows = presentHomeClubs(clubs);
+  const investmentDayClub = clubs[0] ?? null;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -56,7 +58,11 @@ export function HomeScreen() {
           paddingBottom: BOTTOM_NAVIGATION_HEIGHT + insets.bottom + spacing.xl,
         }}
       >
-        <HomeHeader currentUser={currentUser} onOpenSettings={() => setSettingsOpen(true)} />
+        <HomeHeader
+          initials={initials}
+          imageSource={avatarSource}
+          onOpenSettings={() => setSettingsOpen(true)}
+        />
 
         <View style={{ marginBottom: spacing.xl }}>
           <OverallPerformanceSection
@@ -68,38 +74,41 @@ export function HomeScreen() {
           />
         </View>
 
-        <View style={{ marginBottom: spacing.xl }}>
-          <InvestmentDaySummary
-            clubName={data.clubName}
-            investmentDayLabel={data.nextInvestmentDayLabel}
-            investmentDayShortLabel={data.nextInvestmentDayShortLabel}
-            expectedContributionNok={data.expectedContributionNok}
-            members={data.members}
-            visualState={HOME_INVESTMENT_DAY_STATE}
-            onOpenInvest={() => onSelectTab('invest')}
-          />
-        </View>
+        {investmentDayClub ? (
+          <View style={{ marginBottom: spacing.xl }}>
+            <InvestmentDaySummary
+              clubName={investmentDayClub.name}
+              investmentDayLabel={homeInvestmentDayDemo.investmentDayLabel}
+              investmentDayShortLabel={homeInvestmentDayDemo.investmentDayShortLabel}
+              expectedContributionNok={homeInvestmentDayDemo.expectedContributionNok}
+              members={investmentDayClub.members}
+              visualState={HOME_INVESTMENT_DAY_STATE}
+              onOpenInvest={() => onSelectTab('invest')}
+            />
+          </View>
+        ) : null}
 
-        <Section title="Your clubs">
-          {homeClubs.map((club, index) => (
-            <Fragment key={club.id}>
-              {index > 0 ? <View style={{ height: 1, backgroundColor: colors.border }} /> : null}
-              <ClubListItem
-                clubName={club.name}
-                members={club.members}
-                portfolioValueNok={club.portfolioValueNok}
-                returnPercentage={club.returnPercentage}
-                history={club.history}
-                // West Coast and Family are spike-only demo clubs with no
-                // dedicated dashboard yet — tapping them stays a no-op.
-                onPress={club.navigable ? () => onSelectTab('club') : () => {}}
-              />
-            </Fragment>
-          ))}
-        </Section>
-
-        <Section title="Needs your attention" isLast>
-          <ProposalCard proposal={data.activeProposal} />
+        <Section title="Your clubs" isLast>
+          {isLoading && homeClubRows.length === 0 ? null : homeClubRows.length === 0 ? (
+            <HomeClubsEmpty />
+          ) : (
+            homeClubRows.map((club, index) => (
+              <Fragment key={club.clubId}>
+                {index > 0 ? <View style={{ height: 1, backgroundColor: colors.border }} /> : null}
+                <ClubListItem
+                  clubName={club.name}
+                  members={club.members}
+                  portfolioValueNok={club.demoPortfolioValueNok}
+                  returnPercentage={club.demoReturnPercentage}
+                  history={club.demoHistory}
+                  onPress={() => {
+                    void selectClub(club.clubId);
+                    onSelectTab('club');
+                  }}
+                />
+              </Fragment>
+            ))
+          )}
         </Section>
       </Screen>
 
@@ -111,17 +120,18 @@ export function HomeScreen() {
 }
 
 function HomeHeader({
-  currentUser,
+  initials,
+  imageSource,
   onOpenSettings,
 }: {
-  currentUser: DemoPerson | undefined;
+  initials: string;
+  imageSource?: ImageSourcePropType;
   onOpenSettings: () => void;
 }) {
   const { colors, spacing } = useTheme();
 
   return (
     <View style={[styles.headerRow, { marginTop: spacing.md, marginBottom: spacing.md }]}>
-      {/* Standalone site icon — brand identity only, not a control. */}
       <VestyMark color={colors.textPrimary} height={22} />
 
       <Pressable
@@ -131,7 +141,7 @@ function HomeHeader({
         onPress={onOpenSettings}
         style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
       >
-        <Avatar initials={currentUser?.initials ?? ''} size="md" imageSource={currentUser?.imageSource} />
+        <Avatar initials={initials} imageSource={imageSource} size="md" />
       </Pressable>
     </View>
   );

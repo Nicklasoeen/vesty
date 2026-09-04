@@ -1,9 +1,9 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import type { DemoPerson, PortfolioHistoryPoint } from '@/demo/clubDemoData';
+import type { PortfolioHistoryPoint } from '@/demo/clubDemoData';
 import { formatNok, formatSignedPercentage } from '@/lib/currency';
 import { useTheme } from '@/theme';
-import { AppText, AvatarStack } from '@/ui';
+import { AppText, AvatarStack, type AvatarPerson } from '@/ui';
 import { Sparkline } from './Sparkline';
 
 const SPARKLINE_WIDTH = 44;
@@ -11,7 +11,7 @@ const SPARKLINE_HEIGHT = 20;
 
 interface ClubListItemProps {
   clubName: string;
-  members: readonly DemoPerson[];
+  members: readonly AvatarPerson[];
   portfolioValueNok: number;
   returnPercentage: number;
   history: PortfolioHistoryPoint[];

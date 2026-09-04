@@ -7,6 +7,8 @@ This document describes the first physical PostgreSQL schema for the Vesty V1 do
 The schema is created by:
 
 - `supabase/migrations/20260903195622_create_vesty_domain_schema.sql`
+- `supabase/migrations/20260903202501_add_rls_authorization_v1.sql`
+- `supabase/migrations/20260904110626_add_club_create_join_v1.sql`
 
 It uses the Supabase-managed `auth.users` table only as the authentication identity boundary. It does not duplicate credentials, sessions, or authentication state.
 
@@ -61,10 +63,13 @@ Money uses signed PostgreSQL `bigint` columns with positive-value checks. Alloca
   - Primary key: `id`
   - `id` also references `auth.users.id`
   - Contains only application display/profile data and timestamps
+  - `display_name` is optional until onboarding; when set it is trimmed non-empty text up to 80 characters
+  - `avatar_path` is an optional Storage object key (`<auth.uid()>/avatar.jpg`), never a signed URL
 
 - `clubs`
   - Primary key: `id`
   - Stores lifecycle, base currency, locked governance mode, and current owner membership
+  - Club names are trimmed non-empty text up to 80 characters
   - The owner foreign key is deferred so initial club and membership creation can be atomic
 
 - `club_memberships`
@@ -77,7 +82,9 @@ Money uses signed PostgreSQL `bigint` columns with positive-value checks. Alloca
 - `club_invitations`
   - Primary key: `id`
   - References the club, inviting membership, optional existing invitee profile, and accepted membership
-  - Supports either a profile invitee or an email contact, but not both
+  - Supports a profile invitee, an email contact, or neither when a shareable `token_hash` is present
+  - Profile and email cannot both be set on the same invitation
+  - `token_hash` stores SHA-256 of a 12-byte random hex token; the plaintext is returned once at creation and is not stored
   - Stores distinct accepted, declined, revoked, and expired timestamps
 
 - `ownership_transfers`
@@ -92,6 +99,7 @@ Money uses signed PostgreSQL `bigint` columns with positive-value checks. Alloca
   - Global Vesty-managed catalog of funds and ETFs
   - Supports optional broker-neutral ISIN, ticker, and exchange metadata
   - Contains no broker-specific identity columns or mappings
+  - V1 seeds four genesis catalog rows: Global Index, Technology, Norway, Emerging Markets
 
 - `strategy_versions`
   - Primary key: `id`
@@ -186,6 +194,7 @@ PostgreSQL directly enforces:
 - exactly one owner pointer per club
 - one pending invitation per club/profile
 - one pending invitation per club/case-insensitive email
+- unique invitation token hash when present
 - one accepted membership per invitation acceptance record
 - one pending ownership transfer per club
 - unique non-null InvestmentTarget ISIN
@@ -276,14 +285,14 @@ The physical schema directly prevents:
 
 The following require trusted transaction functions, later authorization policy, or lifecycle-specific write paths. They are deliberately not represented by misleading row-level checks:
 
-- allocation rows for a complete strategy version summing to exactly `10000`
+- allocation rows for a complete strategy version summing to exactly `10000` outside the genesis create-club RPC
 - allocation rows for an opened proposal summing to exactly `10000`
 - preventing allocation or target-snapshot mutation after a proposal opens or version is created
 - InvestmentTargets being active when a genesis strategy is finalized or proposal opens
 - preventing semantic InvestmentTarget identity changes after historical use
 - governance mode and finalized historical records being immutable
 - requiring StrategyVersion 1 before later versions and enforcing a gap-free version sequence
-- invitation issuance only after StrategyVersion 1 and atomic invitation acceptance/membership creation
+- invitation issuance only after StrategyVersion 1 and atomic invitation acceptance/membership creation — create/join RPCs now enforce this; other invitation mutations remain deferred
 - detecting the same pending invitee represented once by profile and once by email
 - ownership-transfer initiation by the current owner, target activity at acceptance, and atomic owner-pointer transfer
 - proposal opening against the latest version, freezing electorate/allocation rows, and serializing first vote versus cancellation
@@ -298,6 +307,16 @@ The following require trusted transaction functions, later authorization policy,
 - currency text naming an actual ISO 4217 currency
 - participation report correction only while its cycle is open and report immutability after completion
 - the three-member monetary aggregate threshold, safe club-level status projections, and authorization inside deferred trusted operations
+
+## Trusted write paths
+
+`supabase/migrations/20260904110626_add_club_create_join_v1.sql` adds three public invoker wrappers over private `SECURITY DEFINER` functions:
+
+- `create_club` — authenticates via `auth.uid()`, creates the club, owner membership, owner pointer, genesis StrategyVersion 1, and a complete allocation snapshot totaling 10000 bps
+- `create_club_invitation` — current owner only, after StrategyVersion 1 exists; returns a one-time plaintext token and stores only `token_hash`
+- `accept_club_invitation` — authenticates via `auth.uid()`, validates token/expiry/recipient, creates one active membership, and marks the invitation accepted without changing ownership
+
+Implementations live in the unexposed `private` schema. Direct client writes to clubs, memberships, invitations, and strategy tables remain blocked.
 
 ## RLS Status
 
