@@ -39,7 +39,7 @@ export function RangeSelector<T extends string>({ options, value, onChange, styl
             ]}
           >
             <AppText
-              variant="caption"
+              variant="meta"
               color={selected ? 'primary' : 'secondary'}
               style={selected ? styles.selected : undefined}
             >

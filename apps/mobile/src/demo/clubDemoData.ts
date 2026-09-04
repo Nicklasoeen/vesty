@@ -9,12 +9,45 @@
  * screens.
  */
 
-export interface ClubMemberDemo {
+import type { ImageSourcePropType } from 'react-native';
+
+const nicklasPhoto: ImageSourcePropType = require('../../assets/images/nicklas-profile.png');
+const espenPhoto: ImageSourcePropType = require('../../assets/images/espen-profile.jpg');
+const jonasPhoto: ImageSourcePropType = require('../../assets/images/jonas-profile.jpg');
+
+/** Canonical demo person — one identity, reused everywhere that person appears. */
+export interface DemoPerson {
   id: string;
   name: string;
   initials: string;
+  imageSource?: ImageSourcePropType;
+}
+
+export const demoPeople = {
+  nicklas: { id: 'nicklas', name: 'Nicklas', initials: 'N', imageSource: nicklasPhoto },
+  espen: { id: 'espen', name: 'Espen', initials: 'E', imageSource: espenPhoto },
+  ingrid: { id: 'ingrid', name: 'Ingrid', initials: 'I' },
+  marte: { id: 'marte', name: 'Marte', initials: 'M' },
+  jonas: { id: 'jonas', name: 'Jonas', initials: 'J', imageSource: jonasPhoto },
+  anne: { id: 'anne', name: 'Anne', initials: 'A' },
+  ole: { id: 'ole', name: 'Ole', initials: 'O' },
+  kari: { id: 'kari', name: 'Kari', initials: 'K' },
+} as const satisfies Record<string, DemoPerson>;
+
+export interface ClubMemberDemo extends DemoPerson {
   isCurrentUser: boolean;
   isReadyForNextInvestmentDay: boolean;
+}
+
+function asClubMember(
+  person: DemoPerson,
+  options: { isCurrentUser?: boolean; isReadyForNextInvestmentDay?: boolean } = {},
+): ClubMemberDemo {
+  return {
+    ...person,
+    isCurrentUser: options.isCurrentUser ?? false,
+    isReadyForNextInvestmentDay: options.isReadyForNextInvestmentDay ?? true,
+  };
 }
 
 export interface StrategyAllocationDemo {
@@ -31,7 +64,7 @@ export interface StrategyAllocationChangeDemo {
 }
 
 export interface ActiveProposalDemo {
-  proposedByName: string;
+  proposedBy: DemoPerson;
   changes: StrategyAllocationChangeDemo[];
   votesCast: number;
   votesTotal: number;
@@ -55,6 +88,8 @@ export interface ClubDashboardDemoData {
   estimatedReturnNok: number;
   estimatedReturnPercentage: number;
   nextInvestmentDayLabel: string;
+  /** Compact date form for Home's quieter upcoming state (e.g. "5 Oct"). */
+  nextInvestmentDayShortLabel: string;
   expectedContributionNok: number;
   currentStrategy: StrategyAllocationDemo[];
   activeProposal: ActiveProposalDemo;
@@ -177,16 +212,17 @@ export const clubDashboardDemoData: ClubDashboardDemoData = {
   clubName: 'WRIC',
   currentUserName: 'Nicklas',
   members: [
-    { id: 'nicklas', name: 'Nicklas', initials: 'N', isCurrentUser: true, isReadyForNextInvestmentDay: true },
-    { id: 'espen', name: 'Espen', initials: 'E', isCurrentUser: false, isReadyForNextInvestmentDay: true },
-    { id: 'ingrid', name: 'Ingrid', initials: 'I', isCurrentUser: false, isReadyForNextInvestmentDay: true },
-    { id: 'marte', name: 'Marte', initials: 'M', isCurrentUser: false, isReadyForNextInvestmentDay: false },
+    asClubMember(demoPeople.nicklas, { isCurrentUser: true }),
+    asClubMember(demoPeople.espen),
+    asClubMember(demoPeople.ingrid),
+    asClubMember(demoPeople.marte),
   ],
   portfolioValueNok: 92_480,
   totalContributedNok: 84_000,
   estimatedReturnNok: 8_480,
   estimatedReturnPercentage: 10.1,
   nextInvestmentDayLabel: '5 October',
+  nextInvestmentDayShortLabel: '5 Oct',
   expectedContributionNok: 7_000,
   currentStrategy: [
     { id: 'global-index', label: 'Global Index', percentage: 40 },
@@ -195,7 +231,7 @@ export const clubDashboardDemoData: ClubDashboardDemoData = {
     { id: 'emerging-markets', label: 'Emerging Markets', percentage: 15 },
   ],
   activeProposal: {
-    proposedByName: 'Espen',
+    proposedBy: demoPeople.espen,
     changes: [
       { id: 'technology', label: 'Technology', fromPercentage: 30, toPercentage: 35 },
       { id: 'global-index', label: 'Global Index', fromPercentage: 40, toPercentage: 35 },

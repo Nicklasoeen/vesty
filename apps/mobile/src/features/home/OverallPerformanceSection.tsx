@@ -33,19 +33,17 @@ export function OverallPerformanceSection({
 
   return (
     <View>
-      <AppText variant="body" color="secondary">
-        Total value
-      </AppText>
+      <AppText variant="sectionTitle">Total value</AppText>
       <AppText variant="display" style={{ marginTop: spacing.xs }}>
         {formatNok(totalValueNok)}
       </AppText>
-      <AppText variant="bodyStrong" color="positive" style={{ marginTop: spacing.sm }}>
+      <AppText variant="value" color="positive" style={{ marginTop: spacing.sm }}>
         {formatSignedNok(gainNok)}
         {' \u00B7 '}
         {formatSignedPercentage(gainPercentage)}
       </AppText>
 
-      <View style={{ marginTop: spacing.lg }}>
+      <View style={{ marginTop: spacing.md }}>
         <HomePerformanceChart historyByRange={historyByRange} defaultRange={defaultRange} />
       </View>
     </View>

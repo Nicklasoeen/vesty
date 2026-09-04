@@ -1,4 +1,5 @@
-import { StyleSheet, View } from 'react-native';
+import { Feather } from '@expo/vector-icons';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -7,7 +8,7 @@ import { formatNok, formatSignedNok, formatSignedPercentage } from '@/lib/curren
 import { BOTTOM_NAVIGATION_HEIGHT, BottomNavigation } from '@/navigation/BottomNavigation';
 import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { useTheme } from '@/theme';
-import { AllocationBar, AppearanceToggle, AppText, Avatar, Screen, Section, Surface } from '@/ui';
+import { AllocationBar, AppText, Avatar, AvatarStack, Screen, Section, Surface } from '@/ui';
 import { PortfolioChart } from './PortfolioChart';
 import { ProposalCard } from './ProposalCard';
 
@@ -47,50 +48,36 @@ export function ClubDashboardScreen() {
 }
 
 function DashboardHeader() {
-  const { spacing } = useTheme();
+  const { colors, spacing } = useTheme();
   const data = clubDashboardDemoData;
-  const currentUser = data.members.find((member) => member.isCurrentUser);
 
   return (
-    <View style={[styles.headerRow, { marginTop: spacing.md, marginBottom: spacing.xl }]}>
-      <View>
-        <AppText variant="title" accessibilityRole="header">
+    <View style={[styles.header, { marginTop: spacing.md, marginBottom: spacing.md }]}>
+      <View style={styles.titleRow}>
+        <AppText variant="title" accessibilityRole="header" style={styles.title}>
           {data.clubName}
         </AppText>
-        <View style={[styles.headerMembersRow, { marginTop: spacing.xs }]}>
-          <MemberAvatarStack />
-          <AppText variant="caption" style={{ marginLeft: spacing.sm }}>
-            {data.members.length} members
-          </AppText>
-        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Club options"
+          hitSlop={10}
+          style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+        >
+          <Feather name="more-horizontal" size={22} color={colors.textSecondary} />
+        </Pressable>
       </View>
 
-      <View style={[styles.headerRow, { gap: spacing.sm }]}>
-        <AppearanceToggle />
-        <Avatar initials={currentUser?.initials ?? ''} size="md" />
-      </View>
-    </View>
-  );
-}
-
-function MemberAvatarStack() {
-  const data = clubDashboardDemoData;
-  const visibleMembers = data.members.slice(0, 3);
-  const overflowCount = data.members.length - visibleMembers.length;
-
-  return (
-    <View style={styles.avatarStack}>
-      {visibleMembers.map((member, index) => (
-        <Avatar
-          key={member.id}
-          initials={member.initials}
-          size="sm"
-          style={index === 0 ? undefined : styles.avatarOverlap}
-        />
-      ))}
-      {overflowCount > 0 ? (
-        <Avatar initials={`+${overflowCount}`} size="sm" style={styles.avatarOverlap} />
-      ) : null}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${data.members.length} members`}
+        hitSlop={4}
+        style={({ pressed }) => [styles.headerMembersRow, { marginTop: spacing.xs, opacity: pressed ? 0.7 : 1 }]}
+      >
+        <AvatarStack people={data.members} />
+        <AppText variant="meta" color="secondary" style={{ marginLeft: spacing.sm }}>
+          {data.members.length} members
+        </AppText>
+      </Pressable>
     </View>
   );
 }
@@ -101,17 +88,17 @@ function PortfolioSummary() {
 
   return (
     <View style={{ marginBottom: spacing.xxl }}>
-      <AppText variant="label">Club portfolio</AppText>
+      <AppText variant="sectionTitle">Portfolio</AppText>
       <AppText variant="display" style={{ marginTop: spacing.xs }}>
         {formatNok(data.portfolioValueNok)}
       </AppText>
-      <AppText variant="bodyStrong" color="positive" style={{ marginTop: spacing.sm }}>
+      <AppText variant="value" color="positive" style={{ marginTop: spacing.sm }}>
         {formatSignedNok(data.estimatedReturnNok)}
         {' \u00B7 '}
         {formatSignedPercentage(data.estimatedReturnPercentage)}
       </AppText>
-      <AppText variant="caption" style={{ marginTop: spacing.xs }}>
-        {formatNok(data.totalContributedNok)} contributed
+      <AppText variant="meta" style={{ marginTop: spacing.xs }}>
+        {formatNok(data.totalContributedNok)} invested
       </AppText>
 
       <View style={{ marginTop: spacing.lg }}>
@@ -132,54 +119,62 @@ function InvestmentDayBanner() {
   return (
     <Surface
       variant="secondary"
-      style={{ padding: spacing.lg, marginBottom: spacing.xxl, borderLeftWidth: 2, borderLeftColor: colors.accent }}
+      style={{
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.md,
+        marginBottom: spacing.xxl,
+        borderLeftWidth: 2,
+        borderLeftColor: colors.accent,
+      }}
     >
       <View style={styles.investmentDayRow}>
-        <View>
-          <AppText variant="label">Next Investment Day</AppText>
+        <View style={{ flex: 1, paddingRight: spacing.md }}>
+          <AppText variant="sectionTitle">Next Investment Day</AppText>
           <AppText variant="subtitle" style={{ marginTop: spacing.xs }}>
             {data.nextInvestmentDayLabel}
           </AppText>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
           <AppText variant="bodyStrong">{formatNok(data.expectedContributionNok)} expected</AppText>
-          <AppText variant="caption" style={{ marginTop: spacing.xs }}>
-            {readyCount} of {data.members.length} ready
-          </AppText>
         </View>
       </View>
 
-      <View style={[styles.readinessRow, { marginTop: spacing.lg }]}>
-        {data.members.map((member) => (
+      <View style={[styles.readinessRow, { marginTop: spacing.md }]}>
+        {data.members.map((member, index) => (
           <Avatar
             key={member.id}
             initials={member.initials}
+            imageSource={member.imageSource}
             size="sm"
             ring={member.isReadyForNextInvestmentDay ? 'ready' : 'pending'}
-            style={styles.readinessAvatar}
+            style={index === 0 ? undefined : styles.readinessAvatar}
           />
         ))}
+        <AppText variant="meta" color="secondary" style={{ marginLeft: spacing.sm }}>
+          {readyCount} of {data.members.length} ready
+        </AppText>
       </View>
     </Surface>
   );
 }
 
 const styles = StyleSheet.create({
-  headerRow: {
+  header: {
+    alignItems: 'stretch',
+  },
+  titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  title: {
+    flex: 1,
+    paddingRight: 12,
+  },
   headerMembersRow: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  avatarStack: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  avatarOverlap: {
-    marginLeft: -8,
+    alignSelf: 'flex-start',
   },
   investmentDayRow: {
     flexDirection: 'row',
@@ -188,8 +183,9 @@ const styles = StyleSheet.create({
   },
   readinessRow: {
     flexDirection: 'row',
+    alignItems: 'center',
   },
   readinessAvatar: {
-    marginRight: 8,
+    marginLeft: 8,
   },
 });

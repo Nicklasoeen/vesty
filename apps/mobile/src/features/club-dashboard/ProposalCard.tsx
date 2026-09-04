@@ -2,7 +2,7 @@ import { StyleSheet, View } from 'react-native';
 
 import type { ActiveProposalDemo } from '@/demo/clubDemoData';
 import { useTheme } from '@/theme';
-import { AppText, Button, Surface } from '@/ui';
+import { AppText, Avatar, Button, Surface } from '@/ui';
 
 interface ProposalCardProps {
   proposal: ActiveProposalDemo;
@@ -19,9 +19,16 @@ export function ProposalCard({ proposal }: ProposalCardProps) {
 
   return (
     <Surface bordered style={{ padding: spacing.lg, borderLeftWidth: 2, borderLeftColor: colors.accent }}>
-      <AppText variant="body">
-        <AppText variant="bodyStrong">{proposal.proposedByName}</AppText> proposed a strategy change
-      </AppText>
+      <View style={styles.authorRow}>
+        <Avatar
+          initials={proposal.proposedBy.initials}
+          imageSource={proposal.proposedBy.imageSource}
+          size="sm"
+        />
+        <AppText variant="body" style={{ flex: 1, marginLeft: spacing.sm }}>
+          <AppText variant="bodyStrong">{proposal.proposedBy.name}</AppText> proposed a strategy change
+        </AppText>
+      </View>
 
       <View style={{ marginTop: spacing.md }}>
         {proposal.changes.map((change, index) => (
@@ -37,7 +44,7 @@ export function ProposalCard({ proposal }: ProposalCardProps) {
       </View>
 
       <View style={[styles.footerRow, { marginTop: spacing.lg }]}>
-        <AppText variant="caption">
+        <AppText variant="meta">
           {proposal.votesCast} of {proposal.votesTotal} voted
         </AppText>
         <Button label="View proposal" variant="secondary" />
@@ -47,6 +54,10 @@ export function ProposalCard({ proposal }: ProposalCardProps) {
 }
 
 const styles = StyleSheet.create({
+  authorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   changeRow: {
     flexDirection: 'row',
     alignItems: 'center',

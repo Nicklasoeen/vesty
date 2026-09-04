@@ -1,9 +1,9 @@
 import { StatusBar } from 'expo-status-bar';
-import { Fragment } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Fragment, useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { clubDashboardDemoData } from '@/demo/clubDemoData';
+import { clubDashboardDemoData, type DemoPerson } from '@/demo/clubDemoData';
 import {
   homeClubs,
   homeOverallPerformanceSummary,
@@ -11,21 +11,32 @@ import {
   OVERALL_PERFORMANCE_DEFAULT_RANGE,
 } from '@/demo/homeDemoData';
 import { ProposalCard } from '@/features/club-dashboard/ProposalCard';
+import { ProfileSettingsModal } from '@/features/profile/ProfileSettingsModal';
 import { BOTTOM_NAVIGATION_HEIGHT, BottomNavigation } from '@/navigation/BottomNavigation';
 import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { useTheme } from '@/theme';
-import { AppearanceToggle, Avatar, Screen, Section, VestyWordmark } from '@/ui';
+import { Avatar, Screen, Section, VestyMark } from '@/ui';
 import { ClubListItem } from './ClubListItem';
-import { InvestmentDaySummary } from './InvestmentDaySummary';
+import { InvestmentDaySummary, type InvestmentDayVisualState } from './InvestmentDaySummary';
 import { OverallPerformanceSection } from './OverallPerformanceSection';
 
 /**
- * Home answers "what's happening in Vesty for me right now, and how am I
- * doing overall" — the next Investment Day, an aggregate performance view
- * across every club, a glance at each club, and anything that needs a
- * decision. It intentionally does not repeat Club's detailed strategy
- * breakdown or club-specific header — that level of detail lives on the
- * Club Dashboard.
+ * Spike demo switch for Home Investment Day visual states.
+ * Flip to 'actionRequired' or 'today' for visual QA; leave 'upcoming'
+ * for the default everyday Home screenshot. Not a product control.
+ */
+const HOME_INVESTMENT_DAY_STATE: InvestmentDayVisualState = 'upcoming';
+
+/**
+ * Home answers four questions in order:
+ * 1. How are all my Vesty investments doing? (Total value)
+ * 2. What is happening next? (Investment Day)
+ * 3. Which clubs am I in? (Your clubs)
+ * 4. Does anything need my attention? (Proposal)
+ *
+ * Total value owns the top of Home. Investment Day is a secondary event
+ * Surface that sits just above the club list so the upcoming club event
+ * and the clubs themselves feel connected.
  */
 export function HomeScreen() {
   const { colorScheme, colors, spacing } = useTheme();
@@ -33,6 +44,7 @@ export function HomeScreen() {
   const { activeTab, onSelectTab } = useAppNavigation('home');
   const data = clubDashboardDemoData;
   const currentUser = data.members.find((member) => member.isCurrentUser);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -44,17 +56,7 @@ export function HomeScreen() {
           paddingBottom: BOTTOM_NAVIGATION_HEIGHT + insets.bottom + spacing.xl,
         }}
       >
-        <HomeHeader currentUserInitials={currentUser?.initials ?? ''} />
-
-        <InvestmentDaySummary
-          userName={data.currentUserName}
-          clubName={data.clubName}
-          investmentDayLabel={data.nextInvestmentDayLabel}
-          expectedContributionNok={data.expectedContributionNok}
-          members={data.members}
-        />
-
-        <View style={[styles.divider, { backgroundColor: colors.border, marginVertical: spacing.xl }]} />
+        <HomeHeader currentUser={currentUser} onOpenSettings={() => setSettingsOpen(true)} />
 
         <View style={{ marginBottom: spacing.xl }}>
           <OverallPerformanceSection
@@ -66,13 +68,24 @@ export function HomeScreen() {
           />
         </View>
 
-        <Section title="Your clubs" variant="heading">
+        <View style={{ marginBottom: spacing.xl }}>
+          <InvestmentDaySummary
+            clubName={data.clubName}
+            investmentDayLabel={data.nextInvestmentDayLabel}
+            investmentDayShortLabel={data.nextInvestmentDayShortLabel}
+            expectedContributionNok={data.expectedContributionNok}
+            members={data.members}
+            visualState={HOME_INVESTMENT_DAY_STATE}
+          />
+        </View>
+
+        <Section title="Your clubs">
           {homeClubs.map((club, index) => (
             <Fragment key={club.id}>
               {index > 0 ? <View style={{ height: 1, backgroundColor: colors.border }} /> : null}
               <ClubListItem
                 clubName={club.name}
-                memberCount={club.memberCount}
+                members={club.members}
                 portfolioValueNok={club.portfolioValueNok}
                 returnPercentage={club.returnPercentage}
                 history={club.history}
@@ -84,27 +97,41 @@ export function HomeScreen() {
           ))}
         </Section>
 
-        <Section title="Needs your attention" variant="heading" isLast>
+        <Section title="Needs your attention" isLast>
           <ProposalCard proposal={data.activeProposal} />
         </Section>
       </Screen>
 
       <BottomNavigation activeTab={activeTab} onSelectTab={onSelectTab} />
+
+      <ProfileSettingsModal visible={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </View>
   );
 }
 
-function HomeHeader({ currentUserInitials }: { currentUserInitials: string }) {
+function HomeHeader({
+  currentUser,
+  onOpenSettings,
+}: {
+  currentUser: DemoPerson | undefined;
+  onOpenSettings: () => void;
+}) {
   const { colors, spacing } = useTheme();
 
   return (
-    <View style={[styles.headerRow, { marginTop: spacing.md, marginBottom: spacing.xl }]}>
-      <VestyWordmark color={colors.textPrimary} height={18} />
+    <View style={[styles.headerRow, { marginTop: spacing.md, marginBottom: spacing.md }]}>
+      {/* Standalone site icon — brand identity only, not a control. */}
+      <VestyMark color={colors.textPrimary} height={22} />
 
-      <View style={[styles.headerRow, { gap: spacing.sm }]}>
-        <AppearanceToggle />
-        <Avatar initials={currentUserInitials} size="md" />
-      </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Open profile settings"
+        hitSlop={10}
+        onPress={onOpenSettings}
+        style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+      >
+        <Avatar initials={currentUser?.initials ?? ''} size="md" imageSource={currentUser?.imageSource} />
+      </Pressable>
     </View>
   );
 }
@@ -114,8 +141,5 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-  },
-  divider: {
-    height: 1,
   },
 });

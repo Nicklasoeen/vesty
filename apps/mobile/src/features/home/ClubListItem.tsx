@@ -1,9 +1,9 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import type { PortfolioHistoryPoint } from '@/demo/clubDemoData';
+import type { DemoPerson, PortfolioHistoryPoint } from '@/demo/clubDemoData';
 import { formatNok, formatSignedPercentage } from '@/lib/currency';
 import { useTheme } from '@/theme';
-import { AppText } from '@/ui';
+import { AppText, AvatarStack } from '@/ui';
 import { Sparkline } from './Sparkline';
 
 const SPARKLINE_WIDTH = 44;
@@ -11,7 +11,7 @@ const SPARKLINE_HEIGHT = 20;
 
 interface ClubListItemProps {
   clubName: string;
-  memberCount: number;
+  members: readonly DemoPerson[];
   portfolioValueNok: number;
   returnPercentage: number;
   history: PortfolioHistoryPoint[];
@@ -19,27 +19,29 @@ interface ClubListItemProps {
 }
 
 /**
- * Lightweight club row — typography and a compact sparkline, not a card.
- * Reads like a personal watchlist row (name+members left, trend middle,
- * value+return right) rather than a wealth-dashboard tile, and scales
- * naturally from one club to many without every entry needing its own
- * large surface.
+ * Lightweight club row — people first, then a compact sparkline and value.
+ * Reads as a personal club list, not a wealth-dashboard tile.
  */
-export function ClubListItem({ clubName, memberCount, portfolioValueNok, returnPercentage, history, onPress }: ClubListItemProps) {
+export function ClubListItem({
+  clubName,
+  members,
+  portfolioValueNok,
+  returnPercentage,
+  history,
+  onPress,
+}: ClubListItemProps) {
   const { spacing } = useTheme();
 
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Open ${clubName}`}
+      accessibilityLabel={`Open ${clubName}, ${members.length} members`}
       style={({ pressed }) => [styles.row, { paddingVertical: spacing.md, opacity: pressed ? 0.6 : 1 }]}
     >
       <View style={styles.textBlock}>
         <AppText variant="bodyStrong">{clubName}</AppText>
-        <AppText variant="caption" color="secondary" style={{ marginTop: 2 }}>
-          {memberCount} members
-        </AppText>
+        <AvatarStack people={members} size="stack" style={{ marginTop: 4 }} />
       </View>
 
       <View style={[styles.sparklineBox, { marginHorizontal: spacing.sm }]}>
@@ -48,7 +50,7 @@ export function ClubListItem({ clubName, memberCount, portfolioValueNok, returnP
 
       <View style={styles.valueBlock}>
         <AppText variant="bodyStrong">{formatNok(portfolioValueNok)}</AppText>
-        <AppText variant="caption" color="positive" style={{ marginTop: 2 }}>
+        <AppText variant="meta" color="positive" style={{ marginTop: 2 }}>
           {formatSignedPercentage(returnPercentage)}
         </AppText>
       </View>

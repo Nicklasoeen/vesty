@@ -8,8 +8,8 @@ import { buildSmoothLinePath, type Point2D } from '@/lib/smoothLinePath';
 import { useTheme } from '@/theme';
 import { AppText, RangeSelector } from '@/ui';
 
-const CHART_HEIGHT = 116;
-const VERTICAL_PADDING = 8;
+const CHART_HEIGHT = 100;
+const VERTICAL_PADDING = 6;
 /** Fraction of each interval's width spent rising to the new invested total — the rest stays flat. */
 const CONTRIBUTION_RISE_FRACTION = 0.3;
 
@@ -78,7 +78,7 @@ export function HomePerformanceChart({ historyByRange, defaultRange }: HomePerfo
         ) : null}
       </View>
 
-      <RangeSelector options={PORTFOLIO_RANGE_OPTIONS} value={range} onChange={setRange} style={{ marginTop: spacing.md }} />
+      <RangeSelector options={PORTFOLIO_RANGE_OPTIONS} value={range} onChange={setRange} style={{ marginTop: spacing.sm }} />
     </View>
   );
 }
@@ -100,7 +100,7 @@ function LegendItem({ color, label, dashed, style }: LegendItemProps) {
           { borderColor: color, backgroundColor: dashed ? 'transparent' : color, borderWidth: dashed ? 1.5 : 0 },
         ]}
       />
-      <AppText variant="caption" color="secondary" style={styles.legendLabel}>
+      <AppText variant="meta" color="secondary" style={styles.legendLabel}>
         {label}
       </AppText>
     </View>

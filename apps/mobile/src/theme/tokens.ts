@@ -76,7 +76,33 @@ export const radius = {
   full: 999,
 } as const;
 
-export type AppTextVariant = 'display' | 'title' | 'subtitle' | 'body' | 'bodyStrong' | 'caption' | 'label';
+/**
+ * Semantic typography roles for the design spike.
+ *
+ * display     — strongest number/value on a screen (e.g. 92 480 kr)
+ * hero        — prominent event when the moment warrants it (e.g. Investment Day today)
+ * title       — screen / entity titles (e.g. WRIC)
+ * sectionTitle— natural title-case section headings (Total value, Strategy)
+ * value       — medium financial emphasis (+8 480 kr · +10.1%)
+ * body        — normal descriptive text
+ * bodyStrong  — emphasized body
+ * meta        — secondary information (4 members, 3 of 4 ready)
+ * eyebrow     — rare uppercase contextual/status label (NEXT INVESTMENT DAY)
+ *
+ * Uppercase eyebrows are intentionally sparse — prefer sectionTitle for
+ * ordinary section headings so screens don't read like analytics dashboards.
+ */
+export type AppTextVariant =
+  | 'display'
+  | 'hero'
+  | 'title'
+  | 'sectionTitle'
+  | 'subtitle'
+  | 'value'
+  | 'body'
+  | 'bodyStrong'
+  | 'meta'
+  | 'eyebrow';
 
 export const typography: Record<AppTextVariant, TextStyle> = {
   display: {
@@ -86,16 +112,33 @@ export const typography: Record<AppTextVariant, TextStyle> = {
     letterSpacing: -0.4,
     fontVariant: ['tabular-nums'],
   },
+  hero: {
+    fontSize: 24,
+    lineHeight: 30,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+  },
   title: {
     fontSize: 20,
     lineHeight: 26,
     fontWeight: '600',
     letterSpacing: -0.2,
   },
+  sectionTitle: {
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '600',
+  },
   subtitle: {
     fontSize: 17,
     lineHeight: 22,
     fontWeight: '600',
+  },
+  value: {
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
   },
   body: {
     fontSize: 15,
@@ -107,12 +150,12 @@ export const typography: Record<AppTextVariant, TextStyle> = {
     lineHeight: 21,
     fontWeight: '600',
   },
-  caption: {
+  meta: {
     fontSize: 13,
     lineHeight: 18,
     fontWeight: '500',
   },
-  label: {
+  eyebrow: {
     fontSize: 11,
     lineHeight: 14,
     fontWeight: '700',

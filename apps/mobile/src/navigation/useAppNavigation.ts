@@ -5,6 +5,7 @@ import type { BottomNavigationTabKey } from './BottomNavigation';
 const TAB_ROUTES: Record<BottomNavigationTabKey, Href> = {
   home: '/home',
   club: '/club',
+  invest: '/invest',
   activity: '/activity',
 };
 

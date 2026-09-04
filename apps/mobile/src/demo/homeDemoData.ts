@@ -7,7 +7,7 @@
  * numbers are derived from clubDemoData.ts rather than restated, so the
  * single club shown on both Home and the Club Dashboard can never drift.
  */
-import { clubDashboardDemoData, type PortfolioHistoryPoint, type PortfolioRangeKey } from './clubDemoData';
+import { clubDashboardDemoData, demoPeople, type DemoPerson, type PortfolioHistoryPoint, type PortfolioRangeKey } from './clubDemoData';
 
 export interface OverallPerformancePoint {
   /** ISO calendar date (YYYY-MM-DD). */
@@ -21,7 +21,7 @@ export interface OverallPerformancePoint {
 export interface HomeClubSummary {
   id: string;
   name: string;
-  memberCount: number;
+  members: readonly DemoPerson[];
   portfolioValueNok: number;
   returnPercentage: number;
   /** Small deterministic trend dataset for this club's list-row sparkline. */
@@ -154,7 +154,7 @@ export const homeClubs: HomeClubSummary[] = [
   {
     id: 'wric',
     name: clubDashboardDemoData.clubName,
-    memberCount: clubDashboardDemoData.members.length,
+    members: clubDashboardDemoData.members,
     portfolioValueNok: clubDashboardDemoData.portfolioValueNok,
     returnPercentage: clubDashboardDemoData.estimatedReturnPercentage,
     history: wricSparklineHistory,
@@ -163,7 +163,7 @@ export const homeClubs: HomeClubSummary[] = [
   {
     id: 'west-coast',
     name: 'West Coast',
-    memberCount: 5,
+    members: [demoPeople.nicklas, demoPeople.jonas, demoPeople.kari, demoPeople.anne, demoPeople.ole],
     portfolioValueNok: 54_620,
     returnPercentage: 6.2,
     history: westCoastHistory,
@@ -172,7 +172,7 @@ export const homeClubs: HomeClubSummary[] = [
   {
     id: 'family',
     name: 'Family',
-    memberCount: 3,
+    members: [demoPeople.nicklas, demoPeople.anne, demoPeople.ole],
     portfolioValueNok: 37_220,
     returnPercentage: 4.8,
     history: familyHistory,
