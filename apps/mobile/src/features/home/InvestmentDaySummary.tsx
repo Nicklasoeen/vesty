@@ -1,4 +1,4 @@
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import type { ClubMemberDemo } from '@/demo/clubDemoData';
 import { formatNok } from '@/lib/currency';
@@ -26,6 +26,8 @@ interface InvestmentDaySummaryProps {
   members: ClubMemberDemo[];
   /** Defaults to the calm everyday upcoming treatment. */
   visualState?: InvestmentDayVisualState;
+  /** Optional navigation into Invest. Does not change the card’s design. */
+  onOpenInvest?: () => void;
 }
 
 /**
@@ -42,6 +44,7 @@ export function InvestmentDaySummary({
   expectedContributionNok,
   members,
   visualState = 'upcoming',
+  onOpenInvest,
 }: InvestmentDaySummaryProps) {
   if (visualState === 'actionRequired') {
     return <ActionRequiredState clubName={clubName} dateLabel={investmentDayLabel} members={members} />;
@@ -53,6 +56,7 @@ export function InvestmentDaySummary({
         clubName={clubName}
         expectedContributionNok={expectedContributionNok}
         members={members}
+        onOpenInvest={onOpenInvest}
       />
     );
   }
@@ -63,6 +67,7 @@ export function InvestmentDaySummary({
       dateLabel={investmentDayShortLabel}
       expectedContributionNok={expectedContributionNok}
       members={members}
+      onOpenInvest={onOpenInvest}
     />
   );
 }
@@ -72,39 +77,49 @@ function UpcomingState({
   dateLabel,
   expectedContributionNok,
   members,
+  onOpenInvest,
 }: {
   clubName: string;
   dateLabel: string;
   expectedContributionNok: number;
   members: ClubMemberDemo[];
+  onOpenInvest?: () => void;
 }) {
   const { colors, spacing } = useTheme();
 
   return (
-    <Surface
-      variant="secondary"
-      style={{
-        paddingHorizontal: spacing.lg,
-        paddingVertical: spacing.md,
-        borderLeftWidth: 2,
-        borderLeftColor: colors.accent,
-      }}
+    <Pressable
+      onPress={onOpenInvest}
+      disabled={!onOpenInvest}
+      accessibilityRole={onOpenInvest ? 'button' : undefined}
+      accessibilityLabel={onOpenInvest ? `Open Invest, ${clubName} Investment Day` : undefined}
+      style={({ pressed }) => ({ opacity: onOpenInvest && pressed ? 0.85 : 1 })}
     >
-      <AppText variant="sectionTitle">Next Investment Day</AppText>
-      <AppText variant="title" style={{ marginTop: spacing.xs }}>
-        {dateLabel}
-      </AppText>
-
-      <View style={[styles.metaRow, { marginTop: spacing.sm }]}>
-        <AppText variant="bodyStrong">{clubName}</AppText>
-        <AppText variant="body" color="secondary">
-          {'  \u00B7  '}
-          {formatNok(expectedContributionNok)} expected
+      <Surface
+        variant="secondary"
+        style={{
+          paddingHorizontal: spacing.lg,
+          paddingVertical: spacing.md,
+          borderLeftWidth: 2,
+          borderLeftColor: colors.accent,
+        }}
+      >
+        <AppText variant="sectionTitle">Next Investment Day</AppText>
+        <AppText variant="title" style={{ marginTop: spacing.xs }}>
+          {dateLabel}
         </AppText>
-      </View>
 
-      <ReadinessRow members={members} noun="ready" style={{ marginTop: spacing.md }} />
-    </Surface>
+        <View style={[styles.metaRow, { marginTop: spacing.sm }]}>
+          <AppText variant="bodyStrong">{clubName}</AppText>
+          <AppText variant="body" color="secondary">
+            {'  \u00B7  '}
+            {formatNok(expectedContributionNok)} expected
+          </AppText>
+        </View>
+
+        <ReadinessRow members={members} noun="ready" style={{ marginTop: spacing.md }} />
+      </Surface>
+    </Pressable>
   );
 }
 
@@ -154,10 +169,12 @@ function TodayState({
   clubName,
   expectedContributionNok,
   members,
+  onOpenInvest,
 }: {
   clubName: string;
   expectedContributionNok: number;
   members: ClubMemberDemo[];
+  onOpenInvest?: () => void;
 }) {
   const { colors, spacing } = useTheme();
 
@@ -184,7 +201,7 @@ function TodayState({
       <ReadinessRow members={members} noun="confirmed" style={{ marginTop: spacing.md }} />
 
       <View style={{ marginTop: spacing.md }}>
-        <Button label="View investments" variant="primary" />
+        <Button label="View investments" variant="primary" onPress={onOpenInvest} />
       </View>
     </Surface>
   );

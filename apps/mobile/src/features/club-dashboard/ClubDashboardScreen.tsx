@@ -31,7 +31,7 @@ export function ClubDashboardScreen() {
 
         <PortfolioSummary />
 
-        <InvestmentDayBanner />
+        <InvestmentDayBanner onOpenInvest={() => onSelectTab('invest')} />
 
         <Section title="Strategy">
           <AllocationBar allocations={clubDashboardDemoData.currentStrategy} />
@@ -111,50 +111,57 @@ function PortfolioSummary() {
   );
 }
 
-function InvestmentDayBanner() {
+function InvestmentDayBanner({ onOpenInvest }: { onOpenInvest: () => void }) {
   const { colors, spacing } = useTheme();
   const data = clubDashboardDemoData;
   const readyCount = data.members.filter((member) => member.isReadyForNextInvestmentDay).length;
 
   return (
-    <Surface
-      variant="secondary"
-      style={{
-        paddingHorizontal: spacing.lg,
-        paddingVertical: spacing.md,
-        marginBottom: spacing.xxl,
-        borderLeftWidth: 2,
-        borderLeftColor: colors.accent,
-      }}
+    <Pressable
+      onPress={onOpenInvest}
+      accessibilityRole="button"
+      accessibilityLabel={`Open Invest, ${data.clubName} Investment Day`}
+      style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
     >
-      <View style={styles.investmentDayRow}>
-        <View style={{ flex: 1, paddingRight: spacing.md }}>
-          <AppText variant="sectionTitle">Next Investment Day</AppText>
-          <AppText variant="subtitle" style={{ marginTop: spacing.xs }}>
-            {data.nextInvestmentDayLabel}
+      <Surface
+        variant="secondary"
+        style={{
+          paddingHorizontal: spacing.lg,
+          paddingVertical: spacing.md,
+          marginBottom: spacing.xxl,
+          borderLeftWidth: 2,
+          borderLeftColor: colors.accent,
+        }}
+      >
+        <View style={styles.investmentDayRow}>
+          <View style={{ flex: 1, paddingRight: spacing.md }}>
+            <AppText variant="sectionTitle">Next Investment Day</AppText>
+            <AppText variant="subtitle" style={{ marginTop: spacing.xs }}>
+              {data.nextInvestmentDayLabel}
+            </AppText>
+          </View>
+          <View style={{ alignItems: 'flex-end' }}>
+            <AppText variant="bodyStrong">{formatNok(data.expectedContributionNok)} expected</AppText>
+          </View>
+        </View>
+
+        <View style={[styles.readinessRow, { marginTop: spacing.md }]}>
+          {data.members.map((member, index) => (
+            <Avatar
+              key={member.id}
+              initials={member.initials}
+              imageSource={member.imageSource}
+              size="sm"
+              ring={member.isReadyForNextInvestmentDay ? 'ready' : 'pending'}
+              style={index === 0 ? undefined : styles.readinessAvatar}
+            />
+          ))}
+          <AppText variant="meta" color="secondary" style={{ marginLeft: spacing.sm }}>
+            {readyCount} of {data.members.length} ready
           </AppText>
         </View>
-        <View style={{ alignItems: 'flex-end' }}>
-          <AppText variant="bodyStrong">{formatNok(data.expectedContributionNok)} expected</AppText>
-        </View>
-      </View>
-
-      <View style={[styles.readinessRow, { marginTop: spacing.md }]}>
-        {data.members.map((member, index) => (
-          <Avatar
-            key={member.id}
-            initials={member.initials}
-            imageSource={member.imageSource}
-            size="sm"
-            ring={member.isReadyForNextInvestmentDay ? 'ready' : 'pending'}
-            style={index === 0 ? undefined : styles.readinessAvatar}
-          />
-        ))}
-        <AppText variant="meta" color="secondary" style={{ marginLeft: spacing.sm }}>
-          {readyCount} of {data.members.length} ready
-        </AppText>
-      </View>
-    </Surface>
+      </Surface>
+    </Pressable>
   );
 }
 

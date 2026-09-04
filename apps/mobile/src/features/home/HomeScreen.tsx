@@ -76,6 +76,7 @@ export function HomeScreen() {
             expectedContributionNok={data.expectedContributionNok}
             members={data.members}
             visualState={HOME_INVESTMENT_DAY_STATE}
+            onOpenInvest={() => onSelectTab('invest')}
           />
         </View>
 
