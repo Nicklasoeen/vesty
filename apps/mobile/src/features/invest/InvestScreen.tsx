@@ -1,68 +1,121 @@
 import { useCallback, useMemo, useState } from 'react';
-import { View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import {
-  INVEST_DEMO_DEFAULT_PHASE,
-  investPlanDemo,
-  type InvestFlowPhase,
-  type InvestPlanDemo,
-} from '@/demo/investDemoData';
+import { useClubs } from '@/features/clubs/useClubs';
 import { BrokerPickerSheet } from '@/features/profile/BrokerPickerSheet';
 import { openBrokerActionLabel, type PreferredBroker } from '@/features/profile/brokers';
 import { useProfile } from '@/features/profile/useProfile';
-import { formatNok } from '@/lib/currency';
+import { formatNokFromMinor } from '@/lib/currency';
+import { instrumentSecondaryLabel } from '@/lib/instrumentLabels';
 import { BOTTOM_NAVIGATION_HEIGHT, BottomNavigation } from '@/navigation/BottomNavigation';
 import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { useTheme } from '@/theme';
 import { AppText, Button, Screen } from '@/ui';
+
 import { InvestmentRow, type InvestRowStep } from './InvestmentRow';
+import type { InvestmentDayPlan, InvestTargetRow } from './types';
+import { useInvestmentDay } from './useInvestmentDay';
+
+function formatInvestmentDayShortLabel(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return 'Today';
+  }
+  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' }).format(date);
+}
+
+function rowsFromPlan(plan: InvestmentDayPlan): InvestTargetRow[] {
+  return [...plan.allocations]
+    .sort((left, right) => left.position - right.position)
+    .map((allocation) => {
+      const transaction = plan.transactions.find(
+        (item) => item.investmentTargetId === allocation.investmentTargetId,
+      );
+      return {
+        id: allocation.investmentTargetId,
+        label: allocation.name,
+        secondaryLabel: instrumentSecondaryLabel(allocation.kind, allocation.instrumentCurrency),
+        allocationBps: allocation.allocationBps,
+        amountMinor: transaction?.amountMinor ?? allocation.amountMinor,
+      };
+    });
+}
 
 /**
  * Invest answers: what do I need to do with my investments this cycle?
- * Three phases of one flow — upcoming, today, completed — not three screens.
+ * Completion comes from persisted member-reported transactions, not local demo state.
  */
 export function InvestScreen() {
   const { colorScheme, colors, spacing } = useTheme();
   const insets = useSafeAreaInsets();
   const { activeTab, onSelectTab } = useAppNavigation('invest');
   const { profile } = useProfile();
+  const { selectedClub, isLoading: clubsLoading } = useClubs();
   const preferredBroker = profile?.preferredBroker ?? null;
-  const plan = investPlanDemo;
-  const [rowSteps, setRowSteps] = useState<Readonly<Record<string, InvestRowStep>>>(() =>
-    initialRowSteps(plan),
+  const { plan, isLoading, error, isConfirming, refresh, confirm } = useInvestmentDay(
+    selectedClub?.clubId ?? null,
   );
-  const [confirmed, setConfirmed] = useState(false);
+  const [rowSteps, setRowSteps] = useState<Readonly<Record<string, InvestRowStep>>>({});
   const [brokerPickerOpen, setBrokerPickerOpen] = useState(false);
+  const [confirmError, setConfirmError] = useState<{ cycleId: string; message: string } | null>(null);
 
-  const phase: InvestFlowPhase = useMemo(() => {
-    if (INVEST_DEMO_DEFAULT_PHASE === 'today' && confirmed) {
-      return 'completed';
-    }
-    return INVEST_DEMO_DEFAULT_PHASE;
-  }, [confirmed]);
+  const targets = useMemo(() => (plan ? rowsFromPlan(plan) : []), [plan]);
+  const cycleId = plan?.cycleId ?? null;
 
   const stepFor = useCallback(
-    (id: string): InvestRowStep => rowSteps[id] ?? 'not_started',
-    [rowSteps],
+    (id: string): InvestRowStep => {
+      if (plan?.isCompleted) {
+        return 'done';
+      }
+      if (!cycleId) {
+        return 'not_started';
+      }
+      return rowSteps[`${cycleId}:${id}`] ?? 'not_started';
+    },
+    [cycleId, plan?.isCompleted, rowSteps],
   );
 
-  const doneCount = plan.targets.filter((target) => stepFor(target.id) === 'done').length;
-  const allDone = doneCount === plan.targets.length;
+  const doneCount = targets.filter((target) => stepFor(target.id) === 'done').length;
+  const allDone = targets.length > 0 && doneCount === targets.length;
 
   const openBroker = useCallback((id: string) => {
+    if (!cycleId) {
+      return;
+    }
+    const key = `${cycleId}:${id}`;
     setRowSteps((current) => {
-      if (current[id] === 'done') {
+      if (current[key] === 'done') {
         return current;
       }
-      return { ...current, [id]: 'broker_opened' };
+      return { ...current, [key]: 'broker_opened' };
     });
-  }, []);
+  }, [cycleId]);
 
   const markDone = useCallback((id: string) => {
-    setRowSteps((current) => ({ ...current, [id]: 'done' }));
-  }, []);
+    if (!cycleId) {
+      return;
+    }
+    setRowSteps((current) => ({ ...current, [`${cycleId}:${id}`]: 'done' }));
+  }, [cycleId]);
+
+  const onConfirm = useCallback(async () => {
+    if (isConfirming) {
+      return;
+    }
+    setConfirmError(null);
+    try {
+      await confirm();
+    } catch (caught) {
+      setConfirmError({
+        cycleId: cycleId ?? '',
+        message: caught instanceof Error ? caught.message : 'Unable to confirm investments right now',
+      });
+    }
+  }, [confirm, cycleId, isConfirming]);
+
+  const phase = plan?.isCompleted ? 'completed' : 'today';
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -78,24 +131,52 @@ export function InvestScreen() {
           Invest
         </AppText>
 
-        {phase === 'upcoming' ? <UpcomingBody plan={plan} /> : null}
-
-        {phase === 'today' ? (
+        {clubsLoading || (selectedClub && isLoading && !plan) ? (
+          <View style={{ marginTop: spacing.xxl, alignItems: 'center' }}>
+            <ActivityIndicator accessibilityLabel="Loading Investment Day" color={colors.accent} />
+          </View>
+        ) : !selectedClub ? (
+          <AppText variant="body" color="secondary">
+            Create or join a club to record an Investment Day.
+          </AppText>
+        ) : error && !plan ? (
+          <View>
+            <AppText variant="body" color="secondary">
+              {error}
+            </AppText>
+            <View style={{ marginTop: spacing.lg }}>
+              <Button
+                label="Try again"
+                variant="secondary"
+                onPress={() => {
+                  void refresh();
+                }}
+              />
+            </View>
+          </View>
+        ) : plan && phase === 'today' ? (
           <TodayBody
             plan={plan}
+            targets={targets}
             preferredBroker={preferredBroker}
             stepFor={stepFor}
             doneCount={doneCount}
             allDone={allDone}
+            isConfirming={isConfirming}
+            confirmError={confirmError?.cycleId === cycleId ? confirmError.message : null}
             onOpenBroker={openBroker}
             onMarkDone={markDone}
-            onConfirm={() => setConfirmed(true)}
+            onConfirm={() => {
+              void onConfirm();
+            }}
             onChooseBroker={() => setBrokerPickerOpen(true)}
           />
-        ) : null}
-
-        {phase === 'completed' ? (
-          <CompletedBody plan={plan} onViewActivity={() => onSelectTab('activity')} />
+        ) : plan ? (
+          <CompletedBody
+            plan={plan}
+            targets={targets}
+            onViewActivity={() => onSelectTab('activity')}
+          />
         ) : null}
       </Screen>
 
@@ -105,69 +186,28 @@ export function InvestScreen() {
   );
 }
 
-function initialRowSteps(plan: InvestPlanDemo): Record<string, InvestRowStep> {
-  const steps: Record<string, InvestRowStep> = {};
-  for (const target of plan.targets) {
-    steps[target.id] = 'not_started';
-  }
-  return steps;
-}
-
-function UpcomingBody({ plan }: { plan: InvestPlanDemo }) {
-  const { spacing } = useTheme();
-
-  return (
-    <View>
-      <AppText variant="sectionTitle">Next Investment Day</AppText>
-      <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
-        {plan.clubName}
-        {'  \u00B7  '}
-        {plan.investmentDayShortLabel}
-      </AppText>
-
-      <AppText variant="display" style={{ marginTop: spacing.lg }}>
-        {formatNok(plan.memberAmountNok)}
-      </AppText>
-      <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
-        planned
-      </AppText>
-
-      <AppText variant="sectionTitle" style={{ marginTop: spacing.xxl, marginBottom: spacing.sm }}>
-        Planned investments
-      </AppText>
-
-      <Breakdown
-        plan={plan}
-        preferredBroker={null}
-        showActions={false}
-        stepFor={() => 'not_started'}
-        onOpenBroker={() => undefined}
-        onMarkDone={() => undefined}
-      />
-
-      <AppText variant="meta" color="secondary" style={{ marginTop: spacing.lg }}>
-        Broker actions become available on Investment Day.
-      </AppText>
-    </View>
-  );
-}
-
 function TodayBody({
   plan,
+  targets,
   preferredBroker,
   stepFor,
   doneCount,
   allDone,
+  isConfirming,
+  confirmError,
   onOpenBroker,
   onMarkDone,
   onConfirm,
   onChooseBroker,
 }: {
-  plan: InvestPlanDemo;
+  plan: InvestmentDayPlan;
+  targets: InvestTargetRow[];
   preferredBroker: PreferredBroker | null;
   stepFor: (id: string) => InvestRowStep;
   doneCount: number;
   allDone: boolean;
+  isConfirming: boolean;
+  confirmError: string | null;
   onOpenBroker: (id: string) => void;
   onMarkDone: (id: string) => void;
   onConfirm: () => void;
@@ -182,11 +222,11 @@ function TodayBody({
       <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
         {plan.clubName}
         {'  \u00B7  '}
-        {plan.investmentDayShortLabel}
+        {formatInvestmentDayShortLabel(plan.investmentDayAt)}
       </AppText>
 
       <AppText variant="display" style={{ marginTop: spacing.lg }}>
-        {formatNok(plan.memberAmountNok)}
+        {formatNokFromMinor(plan.expectedAmountMinor)}
       </AppText>
       <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
         to invest today
@@ -197,7 +237,7 @@ function TodayBody({
       </AppText>
 
       <Breakdown
-        plan={plan}
+        targets={targets}
         preferredBroker={preferredBroker}
         showActions={hasBroker}
         stepFor={stepFor}
@@ -224,17 +264,23 @@ function TodayBody({
 
       <View style={{ marginTop: spacing.xxl, paddingBottom: spacing.lg }}>
         <AppText variant="meta" color="secondary">
-          {doneCount} of {plan.targets.length} completed
+          {doneCount} of {targets.length} completed
         </AppText>
         <AppText variant="meta" color="secondary" style={{ marginTop: spacing.sm }}>
           Reported by you. Broker verification is not available yet.
         </AppText>
+        {confirmError ? (
+          <AppText variant="meta" color="negative" style={{ marginTop: spacing.sm }} accessibilityLiveRegion="polite">
+            {confirmError}
+          </AppText>
+        ) : null}
         <View style={{ marginTop: spacing.lg }}>
           <Button
-            label="Confirm investments"
+            label={isConfirming ? 'Confirming…' : 'Confirm investments'}
             variant="primary"
             block
-            disabled={!allDone}
+            disabled={!allDone || isConfirming}
+            busy={isConfirming}
             onPress={onConfirm}
             accessibilityHint={
               allDone
@@ -250,12 +296,16 @@ function TodayBody({
 
 function CompletedBody({
   plan,
+  targets,
   onViewActivity,
 }: {
-  plan: InvestPlanDemo;
+  plan: InvestmentDayPlan;
+  targets: InvestTargetRow[];
   onViewActivity: () => void;
 }) {
   const { spacing } = useTheme();
+  const reportedTotal = plan.transactions.reduce((sum, item) => sum + item.amountMinor, 0);
+  const displayTotal = reportedTotal > 0 ? reportedTotal : plan.expectedAmountMinor;
 
   return (
     <View>
@@ -263,18 +313,18 @@ function CompletedBody({
       <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
         {plan.clubName}
         {'  \u00B7  '}
-        {plan.investmentDayShortLabel}
+        {formatInvestmentDayShortLabel(plan.investmentDayAt)}
       </AppText>
 
       <AppText variant="display" style={{ marginTop: spacing.lg }}>
-        {formatNok(plan.memberAmountNok)}
+        {formatNokFromMinor(displayTotal)}
       </AppText>
       <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
         reported invested
       </AppText>
 
       <AppText variant="meta" color="positive" style={{ marginTop: spacing.md }}>
-        {plan.targets.length} of {plan.targets.length} investments completed
+        {targets.length} of {targets.length} investments completed
       </AppText>
 
       <AppText variant="sectionTitle" style={{ marginTop: spacing.xxl, marginBottom: spacing.sm }}>
@@ -282,7 +332,7 @@ function CompletedBody({
       </AppText>
 
       <Breakdown
-        plan={plan}
+        targets={targets}
         preferredBroker={null}
         showActions={false}
         stepFor={() => 'done'}
@@ -302,14 +352,14 @@ function CompletedBody({
 }
 
 function Breakdown({
-  plan,
+  targets,
   preferredBroker,
   showActions,
   stepFor,
   onOpenBroker,
   onMarkDone,
 }: {
-  plan: InvestPlanDemo;
+  targets: InvestTargetRow[];
   preferredBroker: PreferredBroker | null;
   showActions: boolean;
   stepFor: (id: string) => InvestRowStep;
@@ -321,7 +371,7 @@ function Breakdown({
 
   return (
     <View>
-      {plan.targets.map((target, index) => (
+      {targets.map((target, index) => (
         <InvestmentRow
           key={target.id}
           target={target}

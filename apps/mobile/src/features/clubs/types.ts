@@ -1,3 +1,4 @@
+import { instrumentSecondaryLabel } from '@/lib/instrumentLabels';
 import type { AllocationSlice, AvatarPerson } from '@/ui';
 
 import type { GovernanceThresholdKind } from './governance';
@@ -66,13 +67,23 @@ export function isGovernanceThresholdKind(value: unknown): value is GovernanceTh
 }
 
 export function allocationsToSlices(
-  rows: readonly { id: string; target_name: string; allocation_bps: number; position: number }[],
+  rows: readonly {
+    id: string;
+    target_name: string;
+    target_kind?: string | null;
+    instrument_currency?: string | null;
+    allocation_bps: number;
+    position: number;
+  }[],
 ): AllocationSlice[] {
   return [...rows]
     .sort((left, right) => left.position - right.position)
     .map((row) => ({
       id: row.id,
       label: row.target_name,
+      secondaryLabel: row.target_kind
+        ? instrumentSecondaryLabel(row.target_kind, row.instrument_currency)
+        : undefined,
       percentage: row.allocation_bps / 100,
     }));
 }

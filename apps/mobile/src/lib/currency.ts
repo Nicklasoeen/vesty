@@ -1,12 +1,25 @@
 /**
- * Display-only formatting for demo amounts (already integer NOK kroner).
- * Not a financial calculation module — no rounding of authoritative
- * monetary data happens here, only presentation of pre-computed demo values.
+ * Display-only NOK formatting. Demo screens still pass whole kroner to
+ * formatNok. Authoritative backend amounts are integer øre (minor units)
+ * and must use formatNokFromMinor. No financial rounding happens here.
  */
 const nokFormatter = new Intl.NumberFormat('nb-NO', { maximumFractionDigits: 0 });
 
+export const NOK_MINOR_PER_UNIT = 100;
+
 export function formatNok(amount: number): string {
   return `${nokFormatter.format(Math.abs(amount))} kr`;
+}
+
+export function formatNokFromMinor(amountMinor: number): string {
+  const abs = Math.abs(amountMinor);
+  const kroner = Math.trunc(abs / NOK_MINOR_PER_UNIT);
+  const ore = abs % NOK_MINOR_PER_UNIT;
+  if (ore === 0) {
+    return `${nokFormatter.format(kroner)} kr`;
+  }
+
+  return `${nokFormatter.format(kroner)},${ore.toString().padStart(2, '0')} kr`;
 }
 
 export function formatSignedNok(amount: number): string {

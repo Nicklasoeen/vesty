@@ -6,6 +6,7 @@ import { AppText } from './AppText';
 export interface AllocationSlice {
   id: string;
   label: string;
+  secondaryLabel?: string;
   percentage: number;
 }
 
@@ -44,9 +45,14 @@ export function AllocationBar({ allocations }: AllocationBarProps) {
           >
             <View style={styles.legendLeft}>
               <View style={[styles.dot, { backgroundColor: colors.chart[index % colors.chart.length] }]} />
-              <AppText variant="body" style={{ marginLeft: spacing.sm }}>
-                {allocation.label}
-              </AppText>
+              <View style={{ marginLeft: spacing.sm, flex: 1, paddingRight: spacing.sm }}>
+                <AppText variant="body">{allocation.label}</AppText>
+                {allocation.secondaryLabel ? (
+                  <AppText variant="meta" color="secondary">
+                    {allocation.secondaryLabel}
+                  </AppText>
+                ) : null}
+              </View>
             </View>
             <AppText variant="bodyStrong">{allocation.percentage}%</AppText>
           </View>
@@ -70,6 +76,7 @@ const styles = StyleSheet.create({
   legendLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
   },
   dot: {
     width: 8,

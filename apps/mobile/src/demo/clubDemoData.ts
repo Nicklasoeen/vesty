@@ -3,7 +3,9 @@
  *
  * This module is intentionally isolated from any real data source. It does
  * not query Supabase, does not model the actual domain schema, and must not
- * be imported by production business logic. It exists purely so the
+ * be imported by production business logic. Portfolio current-value charts
+ * and estimated returns here remain demo-only and must not be mixed with
+ * member-reported transaction cost basis. It exists purely so the
  * presentational screens have plausible, typed, shared content to render —
  * kept in one place so the demo WRIC club values aren't duplicated across
  * screens.
@@ -225,16 +227,16 @@ export const clubDashboardDemoData: ClubDashboardDemoData = {
   nextInvestmentDayShortLabel: '5 Oct',
   expectedContributionNok: 7_000,
   currentStrategy: [
-    { id: 'global-index', label: 'Global Index', percentage: 40 },
-    { id: 'technology', label: 'Technology', percentage: 30 },
-    { id: 'norway', label: 'Norway', percentage: 15 },
-    { id: 'emerging-markets', label: 'Emerging Markets', percentage: 15 },
+    { id: 'klp-global', label: 'KLP AksjeGlobal Indeks P', percentage: 40 },
+    { id: 'dnb-teknologi', label: 'DNB Teknologi A', percentage: 30 },
+    { id: 'klp-norge', label: 'KLP AksjeNorge Indeks P', percentage: 15 },
+    { id: 'klp-em', label: 'KLP AksjeFremvoksende Markeder P', percentage: 15 },
   ],
   activeProposal: {
     proposedBy: demoPeople.espen,
     changes: [
-      { id: 'technology', label: 'Technology', fromPercentage: 30, toPercentage: 35 },
-      { id: 'global-index', label: 'Global Index', fromPercentage: 40, toPercentage: 35 },
+      { id: 'dnb-teknologi', label: 'DNB Teknologi A', fromPercentage: 30, toPercentage: 35 },
+      { id: 'klp-global', label: 'KLP AksjeGlobal Indeks P', fromPercentage: 40, toPercentage: 35 },
     ],
     votesCast: 2,
     votesTotal: 4,

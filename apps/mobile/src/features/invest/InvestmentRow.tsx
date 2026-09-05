@@ -1,17 +1,18 @@
 import { Feather } from '@expo/vector-icons';
 import { StyleSheet, View } from 'react-native';
 
-import type { InvestTargetDemo } from '@/demo/investDemoData';
-import { formatNok } from '@/lib/currency';
+import { formatNokFromMinor } from '@/lib/currency';
 import { formatBpsAsPercentLabel } from '@/lib/money';
 import { useTheme } from '@/theme';
 import { AppText, Button } from '@/ui';
 
-/** Local demo interaction only. Opening the broker never means invested. */
+import type { InvestTargetRow } from './types';
+
+/** Local row interaction only. Opening the broker never writes a transaction. */
 export type InvestRowStep = 'not_started' | 'broker_opened' | 'done';
 
 interface InvestmentRowProps {
-  target: InvestTargetDemo;
+  target: InvestTargetRow;
   color: string;
   brokerActionLabel: string;
   step: InvestRowStep;
@@ -24,7 +25,7 @@ interface InvestmentRowProps {
 
 /**
  * One investment target. Today is sequential: open broker, then report done.
- * Opening the broker never marks the row complete.
+ * Opening the broker never marks the row complete and never writes a transaction.
  */
 export function InvestmentRow({
   target,
@@ -38,7 +39,7 @@ export function InvestmentRow({
 }: InvestmentRowProps) {
   const { colors, spacing } = useTheme();
   const percentLabel = formatBpsAsPercentLabel(target.allocationBps);
-  const amountLabel = formatNok(target.amountNok);
+  const amountLabel = formatNokFromMinor(target.amountMinor);
   const isDone = step === 'done';
 
   return (
@@ -50,9 +51,14 @@ export function InvestmentRow({
 
         <View style={styles.body}>
           <View style={styles.titleRow}>
-            <AppText variant="bodyStrong" style={styles.title}>
-              {target.label}
-            </AppText>
+            <View style={styles.title}>
+              <AppText variant="bodyStrong">{target.label}</AppText>
+              {target.secondaryLabel ? (
+                <AppText variant="meta" color="secondary">
+                  {target.secondaryLabel}
+                </AppText>
+              ) : null}
+            </View>
             {isDone ? (
               <View
                 accessible

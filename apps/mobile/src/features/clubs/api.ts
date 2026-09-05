@@ -187,7 +187,9 @@ export async function fetchClubStrategySlices(clubId: string) {
           id,
           allocation_bps,
           position,
-          target_name
+          target_name,
+          target_kind,
+          investment_targets ( currency )
         )
       `,
     )
@@ -204,9 +206,20 @@ export async function fetchClubStrategySlices(clubId: string) {
     allocation_bps: number;
     position: number;
     target_name: string;
+    target_kind: string;
+    investment_targets: { currency: string } | { currency: string }[] | null;
   }[];
 
-  return allocationsToSlices(allocations);
+  return allocationsToSlices(
+    allocations.map((allocation) => ({
+      id: allocation.id,
+      allocation_bps: allocation.allocation_bps,
+      position: allocation.position,
+      target_name: allocation.target_name,
+      target_kind: allocation.target_kind,
+      instrument_currency: unwrapRelation(allocation.investment_targets)?.currency ?? null,
+    })),
+  );
 }
 
 export async function resolveGenesisAllocations(): Promise<GenesisAllocationInput[]> {

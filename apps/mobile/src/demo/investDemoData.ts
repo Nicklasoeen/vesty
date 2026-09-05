@@ -1,9 +1,9 @@
 /**
- * DEMO DATA — Invest / Investment Day design spike only.
+ * DEMO DATA — leftover Invest visual spike only.
  *
- * Isolated from Supabase and the real domain. Amounts are pre-computed
- * integer NOK kroner. Allocation weights are integer basis points.
- * Do not derive money in UI components.
+ * The live Invest screen reads member-reported plans from Supabase.
+ * This file is not the source of truth for Investment Day completion.
+ * Amounts are pre-computed integer NOK kroner, not øre.
  */
 
 import { BPS_PER_WHOLE, sumIntegerAmounts } from '@/lib/money';
@@ -42,10 +42,10 @@ export const investPlanDemo: InvestPlanDemo = {
   memberAmountNok: 2_000,
   currency: 'NOK',
   targets: [
-    { id: 'global-index', label: 'Global Index', allocationBps: 4_000, amountNok: 800 },
-    { id: 'technology', label: 'Technology', allocationBps: 3_000, amountNok: 600 },
-    { id: 'norway', label: 'Norway', allocationBps: 1_500, amountNok: 300 },
-    { id: 'emerging-markets', label: 'Emerging Markets', allocationBps: 1_500, amountNok: 300 },
+    { id: 'klp-global', label: 'KLP AksjeGlobal Indeks P', allocationBps: 4_000, amountNok: 800 },
+    { id: 'dnb-teknologi', label: 'DNB Teknologi A', allocationBps: 3_000, amountNok: 600 },
+    { id: 'klp-norge', label: 'KLP AksjeNorge Indeks P', allocationBps: 1_500, amountNok: 300 },
+    { id: 'klp-em', label: 'KLP AksjeFremvoksende Markeder P', allocationBps: 1_500, amountNok: 300 },
   ],
 };
 

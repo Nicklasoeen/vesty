@@ -13,7 +13,9 @@ import { governanceLabel } from '@/features/clubs/governance';
 import { InviteMemberSheet } from '@/features/clubs/InviteMemberSheet';
 import { useClubStrategy } from '@/features/clubs/useClubStrategy';
 import type { ClubSummary } from '@/features/clubs/types';
-import { formatNok, formatSignedNok, formatSignedPercentage } from '@/lib/currency';
+import { useOwnPositions } from '@/features/invest/useOwnPositions';
+import { formatNok, formatNokFromMinor, formatSignedNok, formatSignedPercentage } from '@/lib/currency';
+import { instrumentSecondaryLabel } from '@/lib/instrumentLabels';
 import { BOTTOM_NAVIGATION_HEIGHT, BottomNavigation } from '@/navigation/BottomNavigation';
 import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { useTheme } from '@/theme';
@@ -90,7 +92,7 @@ export function ClubDashboardScreen() {
             onOpenSwitcher={() => setSwitcherOpen(true)}
           />
 
-          <PortfolioSummary />
+          <PortfolioSummary clubId={selectedClub.clubId} />
 
           <InvestmentDayBanner club={selectedClub} onOpenInvest={() => onSelectTab('invest')} />
 
@@ -193,10 +195,12 @@ function DashboardHeader({
   );
 }
 
-function PortfolioSummary() {
+function PortfolioSummary({ clubId }: { clubId: string }) {
   const { spacing } = useTheme();
-  // DEMO financial presentation — not loaded from the database.
+  // DEMO market-value presentation — isolated from member-reported cost basis.
   const data = clubDashboardDemoData;
+  const { positions } = useOwnPositions(clubId);
+  const ownCostBasisMinor = positions.reduce((sum, position) => sum + position.totalInvestedMinor, 0);
 
   return (
     <View style={{ marginBottom: spacing.xxl }}>
@@ -209,8 +213,8 @@ function PortfolioSummary() {
         {' \u00B7 '}
         {formatSignedPercentage(data.estimatedReturnPercentage)}
       </AppText>
-      <AppText variant="meta" style={{ marginTop: spacing.xs }}>
-        {formatNok(data.totalContributedNok)} invested
+      <AppText variant="meta" color="secondary" style={{ marginTop: spacing.xs }}>
+        Demo market value. Live prices are not available yet.
       </AppText>
 
       <View style={{ marginTop: spacing.lg }}>
@@ -219,6 +223,31 @@ function PortfolioSummary() {
           defaultRange={data.defaultPortfolioRange}
         />
       </View>
+
+      {positions.length > 0 ? (
+        <View style={{ marginTop: spacing.xl }}>
+          <AppText variant="sectionTitle">Your reported positions</AppText>
+          <AppText variant="bodyStrong" style={{ marginTop: spacing.sm }}>
+            {formatNokFromMinor(ownCostBasisMinor)}
+          </AppText>
+          <AppText variant="meta" color="secondary" style={{ marginTop: 2 }}>
+            Reported cost basis. Not current market value.
+          </AppText>
+          <View style={{ marginTop: spacing.md }}>
+            {positions.map((position) => (
+              <View key={position.investmentTargetId} style={{ marginTop: spacing.sm }}>
+                <AppText variant="body">{position.name}</AppText>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <AppText variant="meta" color="secondary">
+                    {instrumentSecondaryLabel(position.kind, position.currency)}
+                  </AppText>
+                  <AppText variant="meta">{formatNokFromMinor(position.totalInvestedMinor)}</AppText>
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
