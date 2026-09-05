@@ -259,7 +259,8 @@ insert into public.investment_targets (
   name,
   kind,
   status,
-  isin
+  isin,
+  currency
 )
 values
   (
@@ -267,14 +268,16 @@ values
     'Active Test Fund',
     'fund',
     'active',
-    'NO0000000001'
+    'NO0000000001',
+    'NOK'
   ),
   (
     '30000000-0000-4000-8000-000000000002',
     'Inactive Historical ETF',
     'etf',
     'inactive',
-    'NO0000000002'
+    'NO0000000002',
+    'NOK'
   );
 
 insert into public.strategy_versions (
@@ -1498,8 +1501,8 @@ select extensions.is(
 select extensions.is(
   tests.statement_sqlstate(
     $statement$
-      insert into public.investment_targets (name, kind, status)
-      values ('Client Target', 'fund', 'active')
+      insert into public.investment_targets (name, kind, status, currency)
+      values ('Client Target', 'fund', 'active', 'NOK')
     $statement$
   ),
   '42501',

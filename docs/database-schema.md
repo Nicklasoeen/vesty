@@ -11,6 +11,8 @@ The schema is created by:
 - `supabase/migrations/20260904110626_add_club_create_join_v1.sql`
 - `supabase/migrations/20260904115953_add_profile_onboarding_v1.sql`
 - `supabase/migrations/20260904172137_add_preferred_broker_v1.sql`
+- `supabase/migrations/20260905075952_add_instruments_transactions_v1.sql`
+- `supabase/migrations/20260905084718_add_market_data_v1.sql`
 
 It uses the Supabase-managed `auth.users` table only as the authentication identity boundary. It does not duplicate credentials, sessions, or authentication state.
 
@@ -39,7 +41,7 @@ Lifecycle and closed-choice values use tightly scoped PostgreSQL enums:
 - `membership_status`: `active`, `left`, `removed`
 - `club_invitation_status`: `pending`, `accepted`, `declined`, `revoked`, `expired`
 - `ownership_transfer_status`: `pending`, `accepted`, `rejected`, `expired`
-- `investment_target_kind`: `fund`, `etf`
+- `investment_target_kind`: `fund`, `etf`, `stock`
 - `investment_target_status`: `active`, `inactive`
 - `strategy_version_origin`: `genesis`, `proposal`
 - `strategy_proposal_status`: `draft`, `open`, `approved`, `rejected`, `expired`, `cancelled`
@@ -53,6 +55,11 @@ Lifecycle and closed-choice values use tightly scoped PostgreSQL enums:
 - `preferred_broker`: `nordnet`, `dnb`, `kron`, `sparebank1`, `other`
 - `verification_state`: `unverified`, `verified`
 - `verification_source`: `import`, `broker_api`, `embedded_broker`
+- `investment_transaction_type`: `buy` (`sell` is reserved for a later migration)
+- `investment_transaction_source`: `manual`, `broker_sync`
+- `investment_transaction_verification`: `member_reported`, `broker_verified`
+- `market_data_provider`: `yahoo_unofficial`, `twelve_data`
+- `market_price_type`: `nav`, `close`, `delayed`
 
 Currency uses constrained `text`, not a reference table. Stored currency values must be three uppercase letters. Validation against the full ISO 4217 code list is deferred.
 
@@ -100,10 +107,12 @@ Money uses signed PostgreSQL `bigint` columns with positive-value checks. Alloca
 
 - `investment_targets`
   - Primary key: `id`
-  - Global Vesty-managed catalog of funds and ETFs
-  - Supports optional broker-neutral ISIN, ticker, and exchange metadata
-  - Contains no broker-specific identity columns or mappings
-  - V1 seeds four genesis catalog rows: Global Index, Technology, Norway, Emerging Markets
+  - Global Vesty-managed catalog of purchasable products: funds, ETFs, and stocks
+  - Required ISO trading/reporting `currency` (metadata only; V1 does not convert FX)
+  - Optional broker-neutral ISIN, ticker, exchange, and `provider_symbol`
+  - Identifier fields stay null unless a verified value exists in project data
+  - Contains no live prices. Provider symbols live on `market_data_instrument_mappings`, not on `provider_symbol`
+  - Four TestFlight fixture IDs (`31000000-0000-4000-8000-00000000000{1-4}`) are verified NOK mutual-fund share classes: KLP AksjeGlobal Indeks P (`NO0010776040`), DNB Teknologi A (`NO0010337678`), KLP AksjeNorge Indeks P (`NO0010455694`), KLP AksjeFremvoksende Markeder Indeks P (`NO0010611809`). Ticker/exchange/`provider_symbol` stay null. See `docs/market-data.md`.
 
 - `strategy_versions`
   - Primary key: `id`
@@ -168,6 +177,41 @@ Money uses signed PostgreSQL `bigint` columns with positive-value checks. Alloca
   - Snapshots expected positive `bigint` amount and currency
   - Keeps member outcome/source/timestamps separate from verification state/source/time
 
+- `member_investment_transactions`
+  - Primary key: `id`
+  - Member-reported investment event for one membership, club, cycle, and target
+  - V1 writes `buy` only, `source = manual`, `verification_status = member_reported`
+  - `amount_minor` is a positive bigint contribution in the club base currency
+  - `quantity` and `unit_price_minor` are nullable and are never fabricated from amount
+  - Unique `(membership_id, investment_cycle_id, investment_target_id, transaction_type)` makes one-buy-per-target-per-cycle idempotent
+  - Clients cannot insert, update, or delete rows; `confirm_investment_day_v1` is the trusted write path
+  - A before-insert trigger rejects targets that are not in the cycle's strategy version
+
+- `member_investment_positions`
+  - `security_invoker` view aggregating the caller's readable buy transactions
+  - Exposes membership, club, target, currency, `total_invested_minor`, and nullable `total_quantity`
+  - Stores no market value and does not bypass transaction RLS
+  - Quantity is still typically null after Investment Day V1, so `quantity × NAV` is not available
+
+- `market_data_instrument_mappings`
+  - Primary key: `id`
+  - Maps one InvestmentTarget to one provider instrument id
+  - At most one active mapping per `(investment_target_id, provider)`
+  - Yahoo unofficial mappings are active because latest and historical NAV were proven by live request
+  - Twelve Data mappings exist for catalog identity but stay inactive until a real key proves NAV
+
+- `market_prices`
+  - Primary key: `id`
+  - One validated observation per `(investment_target_id, provider, price_type, price_date)`
+  - `price` is `numeric(20, 8)` — exact decimal NAV, not bigint øre and not JavaScript float authority
+  - `price_type` is `nav` for these funds
+  - Currency must match `investment_targets.currency`; mismatches are rejected rather than converted
+  - Clients have SELECT only. Ingest is the `sync-market-data` Edge Function using a secret key
+
+- `latest_market_prices`
+  - `security_invoker` view of the newest persisted observation per target, provider, and price type
+  - Exposes `price_date` so callers can treat the value as delayed NAV, not a live quote
+
 ## Concurrent Proposal Rule
 
 A club may retain multiple `draft` and terminal strategy proposals. The partial unique index `strategy_proposals_one_open_per_club_idx` applies only to rows whose status is `open`, so PostgreSQL permits proposal history while rejecting a second simultaneous open ballot. Once the open proposal becomes `approved`, `rejected`, `expired`, or `cancelled`, another proposal may open.
@@ -215,6 +259,7 @@ PostgreSQL directly enforces:
 - one cycle occurrence key per club
 - at most one active saving-plan record per membership
 - one participation per cycle/membership
+- one buy (or later type) per membership/cycle/target in `member_investment_transactions`
 
 ## Important CHECK Constraints
 
@@ -234,7 +279,8 @@ Checks enforce:
 - deterministic required-yes arithmetic for every voting mode
 - schedule revision, calendar day, lead-day, and effective-period ranges
 - cycle deadline, reporting-window, cancellation, and lifecycle consistency
-- positive saving-plan and expected participation amounts
+- positive saving-plan, expected participation, and transaction amounts
+- transaction lot fields either both null or both present
 - saving-plan effective interval consistency
 - member reports using only `member_reported`
 - `expected` participation having no report metadata
@@ -314,16 +360,18 @@ The following require trusted transaction functions, later authorization policy,
 
 ## Trusted write paths
 
-`supabase/migrations/20260904110626_add_club_create_join_v1.sql` adds three public invoker wrappers over private `SECURITY DEFINER` functions:
+`supabase/migrations/20260904110626_add_club_create_join_v1.sql` and `supabase/migrations/20260905075952_add_instruments_transactions_v1.sql` add public invoker wrappers over private `SECURITY DEFINER` functions:
 
 - `create_club` — authenticates via `auth.uid()`, creates the club, owner membership, owner pointer, genesis StrategyVersion 1, and a complete allocation snapshot totaling 10000 bps
 - `create_club_invitation` — current owner only, after StrategyVersion 1 exists; returns a one-time plaintext token and stores only `token_hash`
 - `accept_club_invitation` — authenticates via `auth.uid()`, validates token/expiry/recipient, creates one active membership, and marks the invitation accepted without changing ownership
+- `ensure_open_investment_day_v1` — authenticates via `auth.uid()`, opens or reuses the caller's current TestFlight cycle/participation, and never writes transactions
+- `confirm_investment_day_v1` — authenticates via `auth.uid()`, inserts missing member-reported buys for the caller only, and is idempotent on retry
 
-Implementations live in the unexposed `private` schema. Direct client writes to clubs, memberships, invitations, and strategy tables remain blocked.
+Implementations live in the unexposed `private` schema. Direct client writes to clubs, memberships, invitations, strategy, and transaction tables remain blocked.
 
 ## RLS Status
 
-Row Level Security is enabled and forced for every domain table by `supabase/migrations/20260903202501_add_rls_authorization_v1.sql`. Direct-client grants and policies enforce active-club access, row ownership, immutable-history boundaries, vote privacy, and private monetary rows.
+Row Level Security is enabled and forced for every domain table by `supabase/migrations/20260903202501_add_rls_authorization_v1.sql`, including `member_investment_transactions` and the market-data tables. Direct-client grants and policies enforce active-club access, row ownership, immutable-history boundaries, vote privacy, and private monetary rows. Market prices are shared catalog data: authenticated SELECT, no client writes. The positions and latest-price views use `security_invoker`.
 
 The detailed authorization matrix, helper-function design, test coverage, and deferred trusted operations are documented in `docs/security-authorization.md`. No remote Supabase project is connected.

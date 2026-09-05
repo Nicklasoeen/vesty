@@ -24,7 +24,7 @@ Entity and attribute names below are domain terminology, not a finalized physica
 4. Exact per-member contribution amounts are private. Monetary aggregates may be shown only when they include at least three distinct contributing members.
 5. Each club has exactly one base currency. Every authoritative contribution amount in that club uses that currency in V1.
 6. A strategy is a complete allocation snapshot whose integer basis points total exactly `10000`.
-7. Vesty curates the V1 InvestmentTarget catalog. Targets represent concrete funds or ETFs without coupling their core identity to a broker.
+7. Vesty curates the V1 InvestmentTarget catalog. Targets represent concrete purchasable products (funds, ETFs, stocks) without coupling their core identity to a broker. Generic exposure categories are not instruments.
 8. Planned amounts, member reports, and future broker verification are different facts and must never be conflated.
 9. The owner creates immutable StrategyVersion 1 through a genesis bootstrap path. Every later strategy change requires a proposal and vote, and approval creates a new immutable version.
 10. Proposal rules, electorate, votes, results, strategy history, ownership transfers, and membership tenures must remain auditable.
@@ -60,7 +60,8 @@ Club
 ├─ InvestmentSchedule *
 │  └─ generates
 │     └─ InvestmentCycle *
-│        └─ MemberCycleParticipation * ──for──> ClubMembership
+│        ├─ MemberCycleParticipation * ──for──> ClubMembership
+│        └─ MemberInvestmentTransaction * ──for──> ClubMembership + InvestmentTarget
 └─ ClubMembership
    ├─ MemberSavingPlan *
    └─ StrategyReadiness * ──for──> StrategyVersion
@@ -233,6 +234,9 @@ V1 target kinds:
 
 - `FUND`
 - `ETF`
+- `STOCK`
+
+A target is a purchasable product such as `DNB Teknologi A` or `KLP AksjeGlobal Indeks P`. Labels such as Technology or Norway are not valid production targets. The four TestFlight funds now have verified official names, share classes, ISINs, and NOK currency. Ticker, exchange, and `provider_symbol` stay unset for these mutual funds. Market-data provider symbols live on a separate mapping. Instrument currency is metadata; V1 does not convert FX.
 
 **Relationships:** Is managed by Vesty and may be referenced by allocation snapshots across multiple clubs. Future market-data and broker mappings may reference it from outside the V1 core domain.
 
@@ -563,6 +567,25 @@ V1 member actions produce `MEMBER_REPORTED` outcomes and remain unverified. Whil
 - A participation never represents pooled club money.
 
 **Does not own:** The recurring schedule, mutable membership state, broker orders, custody, or settlement truth.
+
+### 4.17 MemberInvestmentTransaction
+
+**Responsibility:** Record one member-reported investment event against a real InvestmentTarget for a cycle.
+
+**Important attributes:** Club, membership, investment cycle, investment target, transaction type (`BUY` in V1), positive `Money` amount, optional quantity and unit price, executed/reported time, source (`MANUAL` in V1), and verification status (`MEMBER_REPORTED` in V1).
+
+**Relationships:** Belongs to one membership tenure and one Investment Cycle. References a catalog InvestmentTarget that must appear in that cycle's strategy version. Future broker-sync rows may use `BROKER_SYNC` / `BROKER_VERIFIED` without rewriting manual rows.
+
+**Invariants:**
+
+- V1 writes `BUY` only. Quantity and unit price stay null unless a later lot/price flow supplies them. They are never derived from amount.
+- Amount currency is the club base currency: the reported contribution, not an FX-converted instrument purchase.
+- At most one V1 buy exists per membership, cycle, and target.
+- Ordinary UX does not mutate a finalized cycle's transactions.
+- Exact transaction amounts and derived position sizes are private to the owning active membership. Club owners do not automatically see them.
+- Positions are derived cost basis. No current market value is stored.
+
+**Does not own:** Broker execution, market prices, FX, or club-level holdings.
 
 ## 5. Value Objects
 
@@ -1028,11 +1051,11 @@ This section defines intended authority, not RLS implementation.
 - While voting is open, members may see turnout/progress counts but not individual vote choices.
 - Current club members may see individual historical votes after the proposal becomes terminal.
 
-### Saving plans and contribution privacy
+### Saving plans, transactions, and contribution privacy
 
 - Each owner or member may view and manage only their own exact `MemberSavingPlan` amount.
-- Each owner or member may view their own exact cycle expected amount and participation details.
-- Ownership does not grant access to another member's exact amount.
+- Each owner or member may view their own exact cycle expected amount, participation details, transactions, and derived positions.
+- Ownership does not grant access to another member's exact amount, transaction, or position size.
 - Active club members may see readiness/completion counts without access to underlying per-member amounts.
 - Monetary aggregates are visible only when at least three distinct member contribution records are included.
 
@@ -1046,7 +1069,7 @@ This section defines intended authority, not RLS implementation.
 ### Readiness and cycle participation
 
 - Each active owner or member may set only their own `StrategyReadiness`.
-- Each active owner or member may report only their own `MemberCycleParticipation`.
+- Each active owner or member may report only their own `MemberCycleParticipation` and confirm only their own Investment Day transactions.
 - A member may correct their own report while the cycle is `OPEN`.
 - Normal member-facing correction ends when the cycle becomes `COMPLETED`.
 - The owner cannot report or confirm on another member's behalf.
@@ -1164,7 +1187,7 @@ The domain may compare those observations with a `MemberCycleParticipation`. It 
 
 ### Portfolio and market data
 
-Prices, holdings, returns, corporate actions, and instrument reference data can be added as separate read models or bounded contexts. They do not alter immutable governance history.
+V1 stores verified provider mappings and NAV observations in `market_data_instrument_mappings` and `market_prices`. Ingest is server-side only. Current market value still requires real quantity × latest NAV; Investment Day V1 rows usually have null quantity, so Club/Home current-value UI remains demo until quantity exists. Historical portfolio value additionally requires chronological holdings and historical NAVs. See `docs/market-data.md`. Prices do not alter immutable governance history.
 
 ### Verified transactions
 
@@ -1225,6 +1248,7 @@ The smallest recommended domain to carry into database design is:
 14. `InvestmentCycle`
 15. `MemberSavingPlan`
 16. `MemberCycleParticipation`
+17. `MemberInvestmentTransaction` (member-reported buy; positions are derived)
 
 ### Owned value objects
 
@@ -1249,8 +1273,8 @@ The smallest recommended domain to carry into database design is:
 - No generic transfer workflow: `OwnershipTransfer` is a narrow dependent record required for acceptance and audit.
 - No `MemberContributionIntent`: `MemberSavingPlan` is the standing recurring configuration.
 - No separate `MemberCycleReport`: `MemberCycleParticipation` preserves the cycle expectation, member-reported outcome, source, and independent verification dimensions.
-- No `MemberContribution` transaction: Vesty records plans and participation evidence, not receipt of money.
-- No broker account, order, trade, holding, or market-data entity in the V1 core.
+- `MemberInvestmentTransaction` records a member-reported buy as coordination evidence. Vesty still does not receive money, custody assets, or store market value. Positions are derived cost basis only.
+- No broker account, order, trade execution, or live market-data entity in the V1 core.
 - No generic proposal or governance-change framework in V1.
 
 The final set deliberately deviates from a single `VERIFIED` participation status: verification is a separate state because evidence quality is not the same dimension as expected, confirmed, skipped, or failed outcome. This preserves the hard distinction between member report and broker verification without adding another V1 entity.

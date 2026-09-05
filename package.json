@@ -17,7 +17,8 @@
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
     "supabase:status": "supabase status",
-    "test:db": "supabase test db --local supabase/tests"
+    "test:db": "supabase test db --local supabase/tests",
+    "test:market-data": "node --experimental-strip-types --test supabase/functions/_shared/market-data/parseYahooChart.test.ts"
   },
   "devDependencies": {
     "supabase": "2.116.0"
