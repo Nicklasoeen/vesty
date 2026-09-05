@@ -41,6 +41,7 @@ export interface InvestmentDayPlan {
 export interface InvestTargetRow {
   id: string;
   label: string;
+  exposureLabel: string | null;
   ticker: string | null;
   secondaryLabel?: string;
   allocationBps: number;

@@ -8,20 +8,26 @@ import { BrokerPickerSheet } from '@/features/profile/BrokerPickerSheet';
 import { openBrokerActionLabel, type PreferredBroker } from '@/features/profile/brokers';
 import { useProfile } from '@/features/profile/useProfile';
 import { formatNokFromMinor } from '@/lib/currency';
-import { instrumentSecondaryLabel } from '@/lib/instrumentLabels';
 import { BOTTOM_NAVIGATION_HEIGHT, BottomNavigation } from '@/navigation/BottomNavigation';
 import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { useTheme } from '@/theme';
 import { AppText, Button, Screen } from '@/ui';
 
-import { InvestmentRow, type InvestRowStep } from './InvestmentRow';
+import { ExactHoldingsForm } from './ExactHoldingsForm';
+import { rowsFromPlan } from './investRows';
+import {
+  canAddExactHoldings,
+  shouldShowExactHoldingsForm,
+} from './holdingConfidence';
+import { InvestmentRow } from './InvestmentRow';
 import {
   buildExecutionReports,
   canConfirmQuantityReports,
-  confirmationModeForTargetIds,
   parseOptionalExecutionPriceInput,
   parseQuantityInput,
+  planHasMissingQuantity,
   quantityFieldFromRaw,
+  supportsExactHoldings,
   type QuantityFieldState,
 } from './investmentDayReporting';
 import type { InvestmentDayPlan, InvestTargetRow } from './types';
@@ -33,26 +39,6 @@ function formatInvestmentDayShortLabel(iso: string): string {
     return 'Today';
   }
   return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' }).format(date);
-}
-
-function rowsFromPlan(plan: InvestmentDayPlan): InvestTargetRow[] {
-  return [...plan.allocations]
-    .sort((left, right) => left.position - right.position)
-    .map((allocation) => {
-      const transaction = plan.transactions.find(
-        (item) => item.investmentTargetId === allocation.investmentTargetId,
-      );
-      return {
-        id: allocation.investmentTargetId,
-        label: allocation.name,
-        ticker: allocation.ticker,
-        secondaryLabel: instrumentSecondaryLabel(allocation.kind, allocation.instrumentCurrency),
-        allocationBps: allocation.allocationBps,
-        amountMinor: transaction?.amountMinor ?? allocation.amountMinor,
-        quantity: transaction?.quantity ?? null,
-        executionUnitPrice: transaction?.executionUnitPrice ?? null,
-      };
-    });
 }
 
 /**
@@ -69,54 +55,30 @@ export function InvestScreen() {
   const { plan, isLoading, error, isConfirming, refresh, confirm } = useInvestmentDay(
     selectedClub?.clubId ?? null,
   );
-  const [rowSteps, setRowSteps] = useState<Readonly<Record<string, InvestRowStep>>>({});
-  const [quantityFields, setQuantityFields] = useState<Readonly<Record<string, QuantityFieldState>>>({});
-  const [priceFields, setPriceFields] = useState<Readonly<Record<string, QuantityFieldState>>>({});
+  const [brokerOpened, setBrokerOpened] = useState<string | null>(null);
   const [brokerPickerOpen, setBrokerPickerOpen] = useState(false);
   const [confirmError, setConfirmError] = useState<{ cycleId: string; message: string } | null>(null);
+  const [exactHoldingsOpen, setExactHoldingsOpen] = useState(false);
+  const [quantityFields, setQuantityFields] = useState<Readonly<Record<string, QuantityFieldState>>>({});
+  const [priceFields, setPriceFields] = useState<Readonly<Record<string, QuantityFieldState>>>({});
 
   const targets = useMemo(() => (plan ? rowsFromPlan(plan) : []), [plan]);
   const cycleId = plan?.cycleId ?? null;
-  const confirmationMode = useMemo(
-    () => confirmationModeForTargetIds(targets.map((target) => target.id)),
-    [targets],
-  );
-
-  const stepFor = useCallback(
-    (id: string): InvestRowStep => {
-      if (plan?.isCompleted) {
-        return 'done';
-      }
-      if (!cycleId) {
-        return 'not_started';
-      }
-      return rowSteps[`${cycleId}:${id}`] ?? 'not_started';
-    },
-    [cycleId, plan?.isCompleted, rowSteps],
-  );
-
-  const doneCount = targets.filter((target) => stepFor(target.id) === 'done').length;
-  const allDone = targets.length > 0 && doneCount === targets.length;
-
-  const openBroker = useCallback((id: string) => {
-    if (!cycleId) {
-      return;
-    }
-    const key = `${cycleId}:${id}`;
-    setRowSteps((current) => {
-      if (current[key] === 'done') {
-        return current;
-      }
-      return { ...current, [key]: 'broker_opened' };
-    });
-  }, [cycleId]);
-
-  const markDone = useCallback((id: string) => {
-    if (!cycleId) {
-      return;
-    }
-    setRowSteps((current) => ({ ...current, [`${cycleId}:${id}`]: 'done' }));
-  }, [cycleId]);
+  const canReportExact = supportsExactHoldings(targets.map((target) => target.id));
+  const missingQuantity = plan
+    ? planHasMissingQuantity(plan.transactions, plan.allocations.length)
+    : false;
+  const showExactCta = canAddExactHoldings({
+    isCompleted: Boolean(plan?.isCompleted),
+    supportsExactHoldings: canReportExact,
+    missingQuantity,
+  });
+  const showExactForm = shouldShowExactHoldingsForm({
+    isCompleted: Boolean(plan?.isCompleted),
+    supportsExactHoldings: canReportExact,
+    missingQuantity,
+    exactHoldingsOpen,
+  });
 
   const fieldKey = useCallback(
     (id: string): string | null => (cycleId ? `${cycleId}:${id}` : null),
@@ -159,7 +121,8 @@ export function InvestScreen() {
     const next: Record<string, QuantityFieldState> = {};
     for (const target of targets) {
       const key = fieldKey(target.id);
-      next[target.id] = (key && quantityFields[key]) || quantityFieldFromRaw(target.quantity ?? '');
+      next[target.id] = (key && quantityFields[key])
+        || (target.quantity ? parseQuantityInput(target.quantity) : quantityFieldFromRaw(''));
     }
     return next;
   }, [fieldKey, quantityFields, targets]);
@@ -173,11 +136,18 @@ export function InvestScreen() {
     return next;
   }, [fieldKey, priceFields, targets]);
 
-  const quantityReady = canConfirmQuantityReports(
+  const exactHoldingsReady = canConfirmQuantityReports(
     targets.map((target) => target.id),
     quantityStateByTarget,
     priceStateByTarget,
   );
+
+  const onOpenBroker = useCallback(() => {
+    if (!cycleId) {
+      return;
+    }
+    setBrokerOpened(cycleId);
+  }, [cycleId]);
 
   const onConfirm = useCallback(async () => {
     if (isConfirming) {
@@ -185,16 +155,6 @@ export function InvestScreen() {
     }
     setConfirmError(null);
     try {
-      if (confirmationMode === 'quantity_required') {
-        await confirm(
-          buildExecutionReports(
-            targets.map((target) => target.id),
-            quantityStateByTarget,
-            priceStateByTarget,
-          ),
-        );
-        return;
-      }
       await confirm();
     } catch (caught) {
       setConfirmError({
@@ -202,15 +162,29 @@ export function InvestScreen() {
         message: caught instanceof Error ? caught.message : 'Unable to confirm investments right now',
       });
     }
-  }, [
-    confirm,
-    confirmationMode,
-    cycleId,
-    isConfirming,
-    priceStateByTarget,
-    quantityStateByTarget,
-    targets,
-  ]);
+  }, [confirm, cycleId, isConfirming]);
+
+  const onSaveExactHoldings = useCallback(async () => {
+    if (isConfirming) {
+      return;
+    }
+    setConfirmError(null);
+    try {
+      await confirm(
+        buildExecutionReports(
+          targets.map((target) => target.id),
+          quantityStateByTarget,
+          priceStateByTarget,
+        ),
+      );
+      setExactHoldingsOpen(false);
+    } catch (caught) {
+      setConfirmError({
+        cycleId: cycleId ?? '',
+        message: caught instanceof Error ? caught.message : 'Unable to save exact holdings right now',
+      });
+    }
+  }, [confirm, cycleId, isConfirming, priceStateByTarget, quantityStateByTarget, targets]);
 
   const phase = plan?.isCompleted ? 'completed' : 'today';
 
@@ -256,19 +230,10 @@ export function InvestScreen() {
             plan={plan}
             targets={targets}
             preferredBroker={preferredBroker}
-            confirmationMode={confirmationMode}
-            stepFor={stepFor}
-            doneCount={doneCount}
-            allDone={allDone}
-            quantityReady={quantityReady}
-            quantityStateByTarget={quantityStateByTarget}
-            priceStateByTarget={priceStateByTarget}
+            brokerOpened={brokerOpened === cycleId}
             isConfirming={isConfirming}
             confirmError={confirmError?.cycleId === cycleId ? confirmError.message : null}
-            onQuantityChange={onQuantityChange}
-            onExecutionPriceChange={onExecutionPriceChange}
-            onOpenBroker={openBroker}
-            onMarkDone={markDone}
+            onOpenBroker={onOpenBroker}
             onConfirm={() => {
               void onConfirm();
             }}
@@ -278,6 +243,20 @@ export function InvestScreen() {
           <CompletedBody
             plan={plan}
             targets={targets}
+            showExactCta={showExactCta}
+            showExactForm={showExactForm}
+            quantityStateByTarget={quantityStateByTarget}
+            priceStateByTarget={priceStateByTarget}
+            exactHoldingsReady={exactHoldingsReady}
+            isSaving={isConfirming}
+            exactHoldingsError={confirmError?.cycleId === cycleId ? confirmError.message : null}
+            onOpenExactHoldings={() => setExactHoldingsOpen(true)}
+            onQuantityChange={onQuantityChange}
+            onExecutionPriceChange={onExecutionPriceChange}
+            onSaveExactHoldings={() => {
+              void onSaveExactHoldings();
+            }}
+            onCancelExactHoldings={() => setExactHoldingsOpen(false)}
             onViewActivity={() => onSelectTab('activity')}
           />
         ) : null}
@@ -293,44 +272,26 @@ function TodayBody({
   plan,
   targets,
   preferredBroker,
-  confirmationMode,
-  stepFor,
-  doneCount,
-  allDone,
-  quantityReady,
-  quantityStateByTarget,
-  priceStateByTarget,
+  brokerOpened,
   isConfirming,
   confirmError,
-  onQuantityChange,
-  onExecutionPriceChange,
   onOpenBroker,
-  onMarkDone,
   onConfirm,
   onChooseBroker,
 }: {
   plan: InvestmentDayPlan;
   targets: InvestTargetRow[];
   preferredBroker: PreferredBroker | null;
-  confirmationMode: 'quantity_required' | 'amount_only';
-  stepFor: (id: string) => InvestRowStep;
-  doneCount: number;
-  allDone: boolean;
-  quantityReady: boolean;
-  quantityStateByTarget: Readonly<Record<string, QuantityFieldState>>;
-  priceStateByTarget: Readonly<Record<string, QuantityFieldState>>;
+  brokerOpened: boolean;
   isConfirming: boolean;
   confirmError: string | null;
-  onQuantityChange: (id: string, value: string) => void;
-  onExecutionPriceChange: (id: string, value: string) => void;
-  onOpenBroker: (id: string) => void;
-  onMarkDone: (id: string) => void;
+  onOpenBroker: () => void;
   onConfirm: () => void;
   onChooseBroker: () => void;
 }) {
   const { spacing } = useTheme();
   const hasBroker = preferredBroker !== null;
-  const canConfirm = confirmationMode === 'quantity_required' ? quantityReady : allDone;
+  const canConfirm = hasBroker && !isConfirming;
 
   return (
     <View>
@@ -352,32 +313,28 @@ function TodayBody({
         Your investments
       </AppText>
 
-      {confirmationMode === 'quantity_required' ? (
-        <AppText variant="body" color="secondary" style={{ marginBottom: spacing.sm }}>
-          Enter the number of units you purchased. You can find this in your broker after the trade
-          has completed.
-        </AppText>
-      ) : null}
+      <Breakdown targets={targets} />
 
-      <Breakdown
-        targets={targets}
-        preferredBroker={preferredBroker}
-        showActions={confirmationMode === 'quantity_required' || hasBroker}
-        confirmationMode={confirmationMode}
-        quantityStateByTarget={quantityStateByTarget}
-        priceStateByTarget={priceStateByTarget}
-        stepFor={stepFor}
-        onQuantityChange={onQuantityChange}
-        onExecutionPriceChange={onExecutionPriceChange}
-        onOpenBroker={onOpenBroker}
-        onMarkDone={onMarkDone}
-      />
-
-      {hasBroker || confirmationMode === 'quantity_required' ? null : (
+      {hasBroker ? (
+        <View style={{ marginTop: spacing.xl }}>
+          <Button
+            label={openBrokerActionLabel(preferredBroker)}
+            variant="secondary"
+            block
+            onPress={onOpenBroker}
+            accessibilityHint="Opens your broker. This does not save your Investment Day."
+          />
+          {brokerOpened ? (
+            <AppText variant="meta" color="secondary" style={{ marginTop: spacing.sm }}>
+              Come back here when you are done.
+            </AppText>
+          ) : null}
+        </View>
+      ) : (
         <View style={{ marginTop: spacing.xl }}>
           <AppText variant="bodyStrong">Choose a broker to continue</AppText>
           <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
-            Select your preferred broker before opening an investment.
+            Select your broker before you open it from Vesty.
           </AppText>
           <View style={{ marginTop: spacing.md }}>
             <Button
@@ -392,15 +349,7 @@ function TodayBody({
 
       <View style={{ marginTop: spacing.xxl, paddingBottom: spacing.lg }}>
         <AppText variant="meta" color="secondary">
-          {confirmationMode === 'quantity_required'
-            ? quantityReady
-              ? `${targets.length} of ${targets.length} quantities entered`
-              : 'Enter units purchased for every ETF'
-            : `${doneCount} of ${targets.length} completed`}
-        </AppText>
-        <AppText variant="meta" color="secondary" style={{ marginTop: spacing.sm }}>
-          Reported by you. This does not mean Vesty placed the trade. Broker verification is not
-          available yet.
+          Reported by you.
         </AppText>
         {confirmError ? (
           <AppText variant="meta" color="negative" style={{ marginTop: spacing.sm }} accessibilityLiveRegion="polite">
@@ -409,18 +358,16 @@ function TodayBody({
         ) : null}
         <View style={{ marginTop: spacing.lg }}>
           <Button
-            label={isConfirming ? 'Confirming…' : 'Confirm investments'}
+            label={isConfirming ? 'Saving…' : "I've invested"}
             variant="primary"
             block
-            disabled={!canConfirm || isConfirming}
+            disabled={!canConfirm}
             busy={isConfirming}
             onPress={onConfirm}
             accessibilityHint={
               canConfirm
-                ? 'Saves the units you purchased. This is not broker verification.'
-                : confirmationMode === 'quantity_required'
-                  ? 'Available after you enter units purchased for every ETF'
-                  : 'Available after every investment is marked as done'
+                ? "Saves that you invested today's planned amount. Opening a broker does not do this."
+                : 'Choose a broker first'
             }
           />
         </View>
@@ -432,10 +379,34 @@ function TodayBody({
 function CompletedBody({
   plan,
   targets,
+  showExactCta,
+  showExactForm,
+  quantityStateByTarget,
+  priceStateByTarget,
+  exactHoldingsReady,
+  isSaving,
+  exactHoldingsError,
+  onOpenExactHoldings,
+  onQuantityChange,
+  onExecutionPriceChange,
+  onSaveExactHoldings,
+  onCancelExactHoldings,
   onViewActivity,
 }: {
   plan: InvestmentDayPlan;
   targets: InvestTargetRow[];
+  showExactCta: boolean;
+  showExactForm: boolean;
+  quantityStateByTarget: Readonly<Record<string, QuantityFieldState>>;
+  priceStateByTarget: Readonly<Record<string, QuantityFieldState>>;
+  exactHoldingsReady: boolean;
+  isSaving: boolean;
+  exactHoldingsError: string | null;
+  onOpenExactHoldings: () => void;
+  onQuantityChange: (id: string, value: string) => void;
+  onExecutionPriceChange: (id: string, value: string) => void;
+  onSaveExactHoldings: () => void;
+  onCancelExactHoldings: () => void;
   onViewActivity: () => void;
 }) {
   const { spacing } = useTheme();
@@ -444,7 +415,7 @@ function CompletedBody({
 
   return (
     <View>
-      <AppText variant="sectionTitle">Investment Day complete</AppText>
+      <AppText variant="sectionTitle">Investment complete</AppText>
       <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
         {plan.clubName}
         {'  \u00B7  '}
@@ -455,34 +426,48 @@ function CompletedBody({
         {formatNokFromMinor(displayTotal)}
       </AppText>
       <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
-        reported invested
-      </AppText>
-
-      <AppText variant="meta" color="positive" style={{ marginTop: spacing.md }}>
-        {targets.length} of {targets.length} investments completed
+        reported
       </AppText>
 
       <AppText variant="sectionTitle" style={{ marginTop: spacing.xxl, marginBottom: spacing.sm }}>
-        Reported investments
+        Your investments
       </AppText>
 
-      <Breakdown
-        targets={targets}
-        preferredBroker={null}
-        showActions={false}
-        confirmationMode={confirmationModeForTargetIds(targets.map((target) => target.id))}
-        quantityStateByTarget={{}}
-        priceStateByTarget={{}}
-        stepFor={() => 'done'}
-        onQuantityChange={() => undefined}
-        onExecutionPriceChange={() => undefined}
-        onOpenBroker={() => undefined}
-        onMarkDone={() => undefined}
-      />
+      <View>
+        {targets.map((target) => (
+          <AppText key={target.id} variant="body" style={{ marginTop: 6 }}>
+            {target.ticker ?? target.exposureLabel ?? target.label}
+            {'  \u00B7  '}
+            {formatNokFromMinor(target.amountMinor)}
+          </AppText>
+        ))}
+      </View>
 
-      <AppText variant="meta" color="secondary" style={{ marginTop: spacing.lg }}>
-        Reported by you. Broker verification is not available yet.
-      </AppText>
+      {showExactForm ? (
+        <View style={{ marginTop: spacing.xxl }}>
+          <ExactHoldingsForm
+            targets={targets}
+            quantityStateByTarget={quantityStateByTarget}
+            priceStateByTarget={priceStateByTarget}
+            canSave={exactHoldingsReady}
+            isSaving={isSaving}
+            error={exactHoldingsError}
+            onQuantityChange={onQuantityChange}
+            onExecutionPriceChange={onExecutionPriceChange}
+            onSave={onSaveExactHoldings}
+            onCancel={onCancelExactHoldings}
+          />
+        </View>
+      ) : showExactCta ? (
+        <View style={{ marginTop: spacing.xl }}>
+          <Button
+            label="Add exact holdings"
+            variant="secondary"
+            onPress={onOpenExactHoldings}
+            accessibilityHint="Optional. Add the number of units you bought."
+          />
+        </View>
+      ) : null}
 
       <View style={{ marginTop: spacing.lg, marginBottom: spacing.lg }}>
         <Button label="View activity" variant="secondary" onPress={onViewActivity} />
@@ -491,33 +476,8 @@ function CompletedBody({
   );
 }
 
-function Breakdown({
-  targets,
-  preferredBroker,
-  showActions,
-  confirmationMode,
-  quantityStateByTarget,
-  priceStateByTarget,
-  stepFor,
-  onQuantityChange,
-  onExecutionPriceChange,
-  onOpenBroker,
-  onMarkDone,
-}: {
-  targets: InvestTargetRow[];
-  preferredBroker: PreferredBroker | null;
-  showActions: boolean;
-  confirmationMode: 'quantity_required' | 'amount_only';
-  quantityStateByTarget: Readonly<Record<string, QuantityFieldState>>;
-  priceStateByTarget: Readonly<Record<string, QuantityFieldState>>;
-  stepFor: (id: string) => InvestRowStep;
-  onQuantityChange: (id: string, value: string) => void;
-  onExecutionPriceChange: (id: string, value: string) => void;
-  onOpenBroker: (id: string) => void;
-  onMarkDone: (id: string) => void;
-}) {
+function Breakdown({ targets }: { targets: InvestTargetRow[] }) {
   const { colors } = useTheme();
-  const brokerActionLabel = preferredBroker ? openBrokerActionLabel(preferredBroker) : 'Choose broker';
 
   return (
     <View>
@@ -526,19 +486,10 @@ function Breakdown({
           key={target.id}
           target={target}
           color={colors.chart[index % colors.chart.length]}
-          brokerActionLabel={brokerActionLabel}
-          step={stepFor(target.id)}
-          showActions={showActions}
+          brokerActionLabel="Open broker"
+          showBrokerAction={false}
           showSeparator={index > 0}
-          confirmationMode={confirmationMode}
-          quantityValue={quantityStateByTarget[target.id]?.raw ?? ''}
-          quantityError={quantityStateByTarget[target.id]?.error ?? null}
-          executionPriceValue={priceStateByTarget[target.id]?.raw ?? ''}
-          executionPriceError={priceStateByTarget[target.id]?.error ?? null}
-          onQuantityChange={(value) => onQuantityChange(target.id, value)}
-          onExecutionPriceChange={(value) => onExecutionPriceChange(target.id, value)}
-          onOpenBroker={() => onOpenBroker(target.id)}
-          onMarkDone={() => onMarkDone(target.id)}
+          onOpenBroker={() => undefined}
         />
       ))}
     </View>

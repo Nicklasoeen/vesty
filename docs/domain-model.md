@@ -578,13 +578,13 @@ V1 member actions produce `MEMBER_REPORTED` outcomes and remain unverified. Whil
 
 **Invariants:**
 
-- V1 writes `BUY` only. Quantity is member-reported on the curated ETF path and stays null on legacy amount-only rows. Quantity is never derived from amount or from a later market price.
+- V1 writes `BUY` only. Standard confirm stores the planned contribution with null quantity. Optional exact holdings may later store member-reported quantity. Quantity is never derived from amount or from a later market price.
 - Amount currency is the club base currency: the reported contribution, not an FX-converted instrument purchase.
 - Optional execution unit price is instrument currency (EUR for CORE V1 ETFs), not club-base øre.
 - At most one V1 buy exists per membership, cycle, and target.
 - Ordinary UX does not mutate a finalized quantity once stored.
 - Exact transaction amounts, quantities, and derived position sizes are private to the owning active membership. Club owners do not automatically see them.
-- Positions are derived NOK cost basis plus optional complete quantity. Current EUR value is a read model over quantity × latest fresh Marketstack close. No cross-currency gain/loss.
+- Positions are derived NOK reported contributions plus optional exact member-reported quantity. Current EUR value is a read model over exact quantity × latest fresh Marketstack close. Estimated/model performance is not computed until FX exists. No cross-currency gain/loss.
 
 **Does not own:** Broker execution, market prices, FX, or club-level holdings.
 

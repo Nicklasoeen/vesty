@@ -7,6 +7,9 @@ const EXECUTION_PRICE_PATTERN = /^(0|[1-9]\d{0,11})(\.\d{1,8})?$/;
 
 export type InvestmentDayConfirmationMode = 'quantity_required' | 'amount_only';
 
+/** Standard V1 confirm is always amount-only. Quantity is an optional later path. */
+export const DEFAULT_CONFIRMATION_PATH = 'amount_only' as const;
+
 export interface ExecutionReportInput {
   investmentTargetId: string;
   quantity: string;
@@ -29,6 +32,23 @@ export function confirmationModeForTargetIds(
   return targetIds.every((id) => CORE_V1_TARGET_ID_SET.has(id))
     ? 'quantity_required'
     : 'amount_only';
+}
+
+export function supportsExactHoldings(targetIds: readonly string[]): boolean {
+  return confirmationModeForTargetIds(targetIds) === 'quantity_required';
+}
+
+export function planHasMissingQuantity(
+  transactions: readonly { quantity: string | null }[],
+  allocatedCount: number,
+): boolean {
+  if (allocatedCount === 0) {
+    return false;
+  }
+  if (transactions.length < allocatedCount) {
+    return true;
+  }
+  return transactions.some((transaction) => transaction.quantity === null);
 }
 
 export function parsePositiveDecimalInput(

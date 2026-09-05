@@ -247,9 +247,22 @@ Daily NAV is delayed. Weekends and a short holiday gap are not treated as provid
 
 ## Quantity and valuation
 
-Quantity is **member-reported**, never broker-verified, and never inferred from a later Marketstack close. `amount / latest price` is forbidden.
+**Standard V1 Investment Day is amount-only.** The member confirms “I've invested.” Quantity is not required. `confirm_investment_day_v1` writes the planned NOK contribution with `quantity = null`.
 
-`quantity` is `numeric(28, 8)` and nullable. Legacy amount-only rows (`confirm_investment_day_v1`) keep `quantity = null`. Curated V1 ETF confirmation uses `confirm_investment_day_v2` and requires a positive quantity for every allocated ETF.
+Exact holdings are an **optional** later path. `confirm_investment_day_v2` can fill member-reported quantity on those rows. Quantity is never inferred from a later Marketstack close. `amount / latest price` is forbidden.
+
+Confidence states (product, not extra schema):
+
+| State | Meaning | V1 |
+| --- | --- | --- |
+| Reported contribution | Member said they invested the planned amount | Standard confirm |
+| Estimated / modelled holding | Synthetic reference quantity from amount + FX + Investment Day price | Future. Do not implement without FX |
+| Exact member-reported holding | Member entered actual units | Optional. Not verified |
+| Broker-verified holding | Broker evidence | Reserved enum only |
+
+Reported amount ≠ actual security quantity. Estimated/modelled quantity ≠ owned quantity. Exact member-reported quantity ≠ broker-verified quantity.
+
+`quantity` is `numeric(28, 8)` and nullable.
 
 `unit_price_minor` stays unused on the ETF path. EUR execution prints such as IS3N `47.534` cannot be stored in integer øre without losing precision. Optional execution price uses `execution_unit_price numeric(20, 8)` plus server-set `execution_unit_price_currency` from the target (EUR).
 

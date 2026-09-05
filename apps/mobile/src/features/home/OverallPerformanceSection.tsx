@@ -43,7 +43,7 @@ export function OverallPerformanceSection({
         {formatSignedPercentage(gainPercentage)}
       </AppText>
       <AppText variant="meta" color="secondary" style={{ marginTop: spacing.xs }}>
-        Demo market value. EUR/NOK conversion is not available yet.
+        Demo market value.
       </AppText>
 
       <View style={{ marginTop: spacing.md }}>

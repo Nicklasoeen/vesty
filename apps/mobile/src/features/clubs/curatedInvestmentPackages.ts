@@ -21,18 +21,22 @@ export const CORE_V1_TARGET_IDS = {
 export interface CoreV1Target {
   id: string;
   officialName: string;
+  shortName: string;
   ticker: string;
   kind: 'etf';
   currency: 'EUR';
   exchange: 'Xetra';
   isin: string;
+  exposureLabel: ExposureLabel;
 }
 
 export const CORE_V1_TARGETS: readonly CoreV1Target[] = [
   {
     id: CORE_V1_TARGET_IDS.vwce,
     officialName: 'Vanguard FTSE All-World UCITS ETF - (USD) Acc',
+    shortName: 'Vanguard FTSE All-World',
     ticker: 'VWCE',
+    exposureLabel: 'World',
     kind: 'etf',
     currency: 'EUR',
     exchange: 'Xetra',
@@ -41,7 +45,9 @@ export const CORE_V1_TARGETS: readonly CoreV1Target[] = [
   {
     id: CORE_V1_TARGET_IDS.eunk,
     officialName: 'iShares Core MSCI Europe UCITS ETF EUR (Acc)',
+    shortName: 'iShares Core MSCI Europe',
     ticker: 'EUNK',
+    exposureLabel: 'Europe',
     kind: 'etf',
     currency: 'EUR',
     exchange: 'Xetra',
@@ -50,7 +56,9 @@ export const CORE_V1_TARGETS: readonly CoreV1Target[] = [
   {
     id: CORE_V1_TARGET_IDS.is3n,
     officialName: 'iShares Core MSCI EM IMI UCITS ETF USD (Acc)',
+    shortName: 'iShares Core MSCI EM',
     ticker: 'IS3N',
+    exposureLabel: 'Emerging Markets',
     kind: 'etf',
     currency: 'EUR',
     exchange: 'Xetra',
@@ -59,7 +67,9 @@ export const CORE_V1_TARGETS: readonly CoreV1Target[] = [
   {
     id: CORE_V1_TARGET_IDS.sxr8,
     officialName: 'iShares Core S&P 500 UCITS ETF USD (Acc)',
+    shortName: 'iShares Core S&P 500',
     ticker: 'SXR8',
+    exposureLabel: 'US',
     kind: 'etf',
     currency: 'EUR',
     exchange: 'Xetra',
@@ -68,7 +78,9 @@ export const CORE_V1_TARGETS: readonly CoreV1Target[] = [
   {
     id: CORE_V1_TARGET_IDS.sxrv,
     officialName: 'iShares NASDAQ 100 UCITS ETF USD (Acc)',
+    shortName: 'iShares NASDAQ 100',
     ticker: 'SXRV',
+    exposureLabel: 'Technology',
     kind: 'etf',
     currency: 'EUR',
     exchange: 'Xetra',
@@ -150,6 +162,10 @@ export function getCoreV1Target(targetId: string): CoreV1Target {
     throw new Error('Unknown core V1 target');
   }
   return target;
+}
+
+export function findCoreV1Target(targetId: string): CoreV1Target | null {
+  return TARGETS_BY_ID.get(targetId) ?? null;
 }
 
 export function packageAllocationBpsTotal(item: CuratedInvestmentPackage): number {

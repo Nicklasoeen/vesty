@@ -18,8 +18,9 @@ Implemented in this milestone (catalog + package selection only):
 Also shipped:
 
 - Marketstack EOD ingest for the five allowlisted mappings (`VWCE.DE`, `EUNK.DE`, `IS3N.DE`, `SXR8.DE`, `SXRV.DE`).
-- Investment Day quantity capture for curated packages via `confirm_investment_day_v2`.
-- Position-level EUR current value = member-reported quantity × latest fresh Marketstack close.
+- Standard Investment Day is amount-only: open broker, then “I've invested.”
+- Optional exact holdings via `confirm_investment_day_v2` after completion.
+- Position-level EUR current value only when the member later adds exact units.
 
 Still not shipped:
 
@@ -361,7 +362,7 @@ Implemented:
 3. `public.create_club` accepts `p_package_id` only. `private.resolve_curated_package_allocations` builds the allocation JSON. Unknown or inactive ids raise `vesty.invalid_package`.
 4. Snapshot `target_name` / `target_kind` at allocation time (already present).
 5. Marketstack mappings are seeded for the five CORE ETFs only. Approved symbols are `VWCE.DE`, `EUNK.DE`, `IS3N.DE`, `SXR8.DE`, `SXRV.DE`. The adapter never searches or guesses.
-6. FX is still deferred. NOK cost basis and EUR current value are not compared. Club/Home NOK totals stay demo.
+6. FX is still deferred. Do not derive a model/reference quantity from NOK contribution until an authoritative FX source exists. Club/Home NOK totals stay demo.
 
 KLP/DNB targets stay in the catalog. New genesis no longer uses those four funds.
 

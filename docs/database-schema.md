@@ -196,7 +196,7 @@ Money uses signed PostgreSQL `bigint` columns with positive-value checks. Alloca
   - `unit_price_minor` is legacy same-currency minor units and is not used for EUR ETF execution prints
   - `execution_unit_price numeric(20, 8)` plus `execution_unit_price_currency` store optional instrument-currency execution prices
   - Unique `(membership_id, investment_cycle_id, investment_target_id, transaction_type)` makes one-buy-per-target-per-cycle idempotent
-  - Clients cannot insert, update, or delete rows; writes go through `confirm_investment_day_v1` (amount-only) or `confirm_investment_day_v2` (quantity-complete curated ETFs)
+  - Clients cannot insert, update, or delete rows; standard confirm uses `confirm_investment_day_v1` (amount-only). Optional exact holdings use `confirm_investment_day_v2`
   - A before-insert trigger rejects targets that are not in the cycle's strategy version
 
 - `member_investment_positions`

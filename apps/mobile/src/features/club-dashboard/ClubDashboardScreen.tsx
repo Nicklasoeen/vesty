@@ -15,8 +15,9 @@ import { useClubStrategy } from '@/features/clubs/useClubStrategy';
 import type { ClubSummary } from '@/features/clubs/types';
 import { useOwnPositions } from '@/features/invest/useOwnPositions';
 import { formatNok, formatNokFromMinor, formatSignedNok, formatSignedPercentage } from '@/lib/currency';
-import { formatEuroDecimal, formatQuantityLabel } from '@/lib/decimalDisplay';
-import { instrumentSecondaryLabel } from '@/lib/instrumentLabels';
+import { clubPositionDisplay } from '@/features/invest/clubPositionDisplay';
+import { canAddExactHoldings } from '@/features/invest/holdingConfidence';
+import { supportsExactHoldings } from '@/features/invest/investmentDayReporting';
 import { BOTTOM_NAVIGATION_HEIGHT, BottomNavigation } from '@/navigation/BottomNavigation';
 import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { useTheme } from '@/theme';
@@ -93,7 +94,10 @@ export function ClubDashboardScreen() {
             onOpenSwitcher={() => setSwitcherOpen(true)}
           />
 
-          <PortfolioSummary clubId={selectedClub.clubId} />
+          <PortfolioSummary
+            clubId={selectedClub.clubId}
+            onAddExactHoldings={() => onSelectTab('invest')}
+          />
 
           <InvestmentDayBanner club={selectedClub} onOpenInvest={() => onSelectTab('invest')} />
 
@@ -196,7 +200,13 @@ function DashboardHeader({
   );
 }
 
-function PortfolioSummary({ clubId }: { clubId: string }) {
+function PortfolioSummary({
+  clubId,
+  onAddExactHoldings,
+}: {
+  clubId: string;
+  onAddExactHoldings: () => void;
+}) {
   const { spacing } = useTheme();
   // DEMO market-value presentation — isolated from member-reported cost basis.
   const data = clubDashboardDemoData;
@@ -227,59 +237,69 @@ function PortfolioSummary({ clubId }: { clubId: string }) {
 
       {positions.length > 0 ? (
         <View style={{ marginTop: spacing.xl }}>
-          <AppText variant="sectionTitle">Your reported positions</AppText>
+          <AppText variant="sectionTitle">Your investments</AppText>
           <AppText variant="bodyStrong" style={{ marginTop: spacing.sm }}>
-            {formatNokFromMinor(ownCostBasisMinor)}
-          </AppText>
-          <AppText variant="meta" color="secondary" style={{ marginTop: 2 }}>
-            Reported NOK cost basis. EUR current value is shown only when quantity and a fresh
-            Marketstack close are both available. Gain/loss is unavailable until FX exists.
+            {formatNokFromMinor(ownCostBasisMinor)} invested
           </AppText>
           <View style={{ marginTop: spacing.md }}>
-            {positions.map((position) => (
-              <View key={position.investmentTargetId} style={{ marginTop: spacing.sm }}>
-                <AppText variant="body">{position.ticker ?? position.name}</AppText>
-                {position.ticker ? (
-                  <AppText variant="meta" color="secondary">
-                    {position.name}
-                  </AppText>
-                ) : (
-                  <AppText variant="meta" color="secondary">
-                    {instrumentSecondaryLabel(position.kind, position.contributionCurrency)}
-                  </AppText>
-                )}
-                {position.totalQuantity && position.quantityStatus === 'complete' ? (
-                  <AppText variant="meta" color="secondary">
-                    {formatQuantityLabel(position.totalQuantity)}
-                  </AppText>
-                ) : (
-                  <AppText variant="meta" color="secondary">
-                    Quantity not reported
-                  </AppText>
-                )}
-                {position.valuationStatus === 'available'
-                && position.latestPrice
-                && position.currentValue
-                && position.currentValueCurrency === 'EUR' ? (
-                  <>
-                    <AppText variant="meta" color="secondary">
-                      {formatEuroDecimal(position.latestPrice)}
+            {positions.map((position) => {
+              const row = clubPositionDisplay({
+                name: position.name,
+                ticker: position.ticker,
+                totalInvestedMinor: position.totalInvestedMinor,
+                totalQuantity: position.totalQuantity,
+                quantityStatus: position.quantityStatus,
+                currentValue: position.currentValue,
+                currentValueCurrency: position.currentValueCurrency,
+                valuationStatus: position.valuationStatus,
+              });
+
+              return (
+                <View key={position.investmentTargetId} style={{ marginTop: spacing.md }}>
+                  <AppText variant="bodyStrong">{row.title}</AppText>
+                  {row.quantityLabel ? (
+                    <AppText variant="meta" color="secondary" style={{ marginTop: 2 }}>
+                      {row.quantityLabel}
                     </AppText>
-                    <AppText variant="bodyStrong">
-                      {formatEuroDecimal(position.currentValue)} current value
+                  ) : null}
+                  {row.currentValueLabel ? (
+                    <AppText variant="body" style={{ marginTop: 2 }}>
+                      {row.currentValueLabel}
                     </AppText>
-                  </>
-                ) : position.totalQuantity && position.quantityStatus === 'complete' ? (
-                  <AppText variant="meta" color="secondary">
-                    Current value unavailable
+                  ) : null}
+                  <AppText variant="meta" color="secondary" style={{ marginTop: 2 }}>
+                    {row.investedLabel}
                   </AppText>
-                ) : null}
-                <AppText variant="meta">
-                  {formatNokFromMinor(position.totalInvestedMinor)} invested
-                </AppText>
-              </View>
-            ))}
+                  {row.badge ? (
+                    <AppText variant="meta" color="secondary" style={{ marginTop: 2 }}>
+                      {row.badge}
+                    </AppText>
+                  ) : null}
+                  {row.missingExactLabel ? (
+                    <AppText variant="meta" color="secondary" style={{ marginTop: 2 }}>
+                      {row.missingExactLabel}
+                    </AppText>
+                  ) : null}
+                </View>
+              );
+            })}
           </View>
+          {canAddExactHoldings({
+            isCompleted: true,
+            supportsExactHoldings: supportsExactHoldings(
+              positions.map((position) => position.investmentTargetId),
+            ),
+            missingQuantity: positions.some((position) => position.quantityStatus !== 'complete'),
+          }) ? (
+            <View style={{ marginTop: spacing.lg }}>
+              <Button
+                label="Add exact holdings"
+                variant="secondary"
+                onPress={onAddExactHoldings}
+                accessibilityHint="Optional. Add the number of units you bought."
+              />
+            </View>
+          ) : null}
         </View>
       ) : null}
     </View>

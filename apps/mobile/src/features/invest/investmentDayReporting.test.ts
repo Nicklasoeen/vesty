@@ -4,11 +4,14 @@ import test from 'node:test';
 import { CORE_V1_TARGET_IDS } from '../clubs/curatedInvestmentPackages.ts';
 
 import {
+  DEFAULT_CONFIRMATION_PATH,
   buildExecutionReports,
   canConfirmQuantityReports,
   confirmationModeForTargetIds,
   parseOptionalExecutionPriceInput,
   parseQuantityInput,
+  planHasMissingQuantity,
+  supportsExactHoldings,
 } from './investmentDayReporting.ts';
 
 const WORLD_MIX_IDS = [
@@ -17,11 +20,30 @@ const WORLD_MIX_IDS = [
   CORE_V1_TARGET_IDS.is3n,
 ] as const;
 
-test('curated V1 ETF sets require quantity confirmation', () => {
+test('default confirmation is amount-only even for curated ETF clubs', () => {
+  assert.equal(DEFAULT_CONFIRMATION_PATH, 'amount_only');
+  assert.equal(supportsExactHoldings(WORLD_MIX_IDS), true);
   assert.equal(confirmationModeForTargetIds(WORLD_MIX_IDS), 'quantity_required');
   assert.equal(
-    confirmationModeForTargetIds(['31000000-0000-4000-8000-000000000001']),
-    'amount_only',
+    supportsExactHoldings(['31000000-0000-4000-8000-000000000001']),
+    false,
+  );
+});
+
+test('amount-only days can later add exact holdings', () => {
+  assert.equal(
+    planHasMissingQuantity(
+      [{ quantity: null }, { quantity: null }, { quantity: null }],
+      3,
+    ),
+    true,
+  );
+  assert.equal(
+    planHasMissingQuantity(
+      [{ quantity: '0.64' }, { quantity: '1.5' }, { quantity: '12' }],
+      3,
+    ),
+    false,
   );
 });
 
