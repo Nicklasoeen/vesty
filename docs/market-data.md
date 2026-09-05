@@ -47,6 +47,26 @@ Quote, history, EOD, and price for these symbols all return HTTP 404: available 
 
 Yahoo unofficial identifiers remain `0P00018V9L.IR`, `0P00000MVB.IR`, `0P0000HNUP.IR`, `0P0000TJ5D.IR`. That coverage is **dev/probe only**. Production ingest must not use Yahoo.
 
+## Low-cost provider spike (2026-09-05)
+
+A real `ALPHA_VANTAGE_API_KEY` was tested from untracked `supabase/functions/.env` on 2026-09-05 (18 calls). US stocks and one UCITS ETF listing passed. Oslo primary listings were not returned (only LSE/Frankfurt/US ADR). All four Norwegian funds returned empty `SYMBOL_SEARCH` for both official name and ISIN. Alpha Vantage is a stock/ETF candidate only, not a main NAV provider. Free-key access is not a commercial/display right. No `FMP_API_KEY` has been live-tested.
+
+| Provider | All 4 funds | Latest NAV | History | Share-class confidence | Free test | Lowest realistic cost | Commercial / display | Rank |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Yahoo unofficial | YES (prior probe) | YES | ~234 daily bars | High | unofficial HTTP | $0 | no redistribution license | REJECT |
+| Alpha Vantage | NO (0/4 funds) | US/ETF yes; Oslo listing no | compact daily 100 bars when listed | funds empty | 25 calls/day | $0 test; premium from $49.99/mo + written commercial agreement | Free and self-serve premium are personal/non-commercial. Showing prices to other people (including TestFlight) is commercial under their terms | STOCK/ETF ONLY |
+| Financial Modeling Prep | NOT LIVE-TESTED | — | — | — | 250 calls/day | $0 test; Starter $22/mo is US-only; Ultimate $149/mo claims global + ETF/mutual-fund holdings | Personal-use license. Multi-user app display requires a separate Data Display and Licensing Agreement | POSSIBLE only after a key proves coverage |
+| Twelve Data current plan | NO | NO | NO | catalog only | paid key used | Grow/Venture required for these `0P000*` symbols | subscriber API, not a proven redistribution right | REJECT this plan |
+| Euronext Oslo Børs OMFF | likely (2,400+ Norway-saleable funds) | YES (Basic feed) | extra paid modules | ISIN in feed spec | no | Basic feed NOK 26,830/year + startup | licensed Norwegian NAV feed | REJECT for this cheap spike |
+
+No cheap licensed provider covers the four TestFlight funds. Do not activate Yahoo or Alpha Vantage. A future multi-provider split (Alpha Vantage for listed stocks/ETFs, separate NAV source for Norwegian funds) is the technical path if a commercial/display agreement is obtained.
+
+## Marketstack coverage spike (2026-09-05)
+
+A real `MARKETSTACK_API_KEY` was tested from untracked `supabase/functions/.env` on 2026-09-05. Free-tier: 108 HTTP / 122 billed, then `usage_limit_reached`. Basic retest: 12 HTTP / 29 billed. US common stocks pass. `EQNR.XOSL` still returns the NYSE ADR 42.09 labeled `NOK` (Yahoo Oslo close 393.60 NOK on 2026-09-04). `EQNR.OL`, `DNB.OL`, `KOG.OL`, and `MOWI.OL` are real NOK. `ASML.XAMS` latest matches Amsterdam, but history mixes NASDAQ USD bars. Full table: [market-data-marketstack-spike.md](./market-data-marketstack-spike.md). Recommendation **B — US / limited secondary** for a broad Europe/Oslo/guessed-symbol universe.
+
+A later curated-package shortlist (`VWCE.DE`, `SXR8.DE`, `EUNK.DE`, `IS3N.DE`, `SXRV.DE`) verified as Xetra EUR listings. For that allowlist only, Marketstack Basic is a viable V1 EOD source. Product design: [vesty-v1-investment-packages.md](./vesty-v1-investment-packages.md). Do not build the adapter now. Do not activate Marketstack mappings. Do not write Marketstack values into `market_prices`.
+
 ## Provider selection
 
 Production default is `MARKET_DATA_PROVIDER=twelve_data`.
