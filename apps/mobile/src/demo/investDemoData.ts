@@ -45,7 +45,7 @@ export const investPlanDemo: InvestPlanDemo = {
     { id: 'klp-global', label: 'KLP AksjeGlobal Indeks P', allocationBps: 4_000, amountNok: 800 },
     { id: 'dnb-teknologi', label: 'DNB Teknologi A', allocationBps: 3_000, amountNok: 600 },
     { id: 'klp-norge', label: 'KLP AksjeNorge Indeks P', allocationBps: 1_500, amountNok: 300 },
-    { id: 'klp-em', label: 'KLP AksjeFremvoksende Markeder P', allocationBps: 1_500, amountNok: 300 },
+    { id: 'klp-em', label: 'KLP AksjeFremvoksende Markeder Indeks P', allocationBps: 1_500, amountNok: 300 },
   ],
 };
 

@@ -9,7 +9,7 @@ export const GENESIS_STRATEGY_SPEC = [
   { name: 'KLP AksjeGlobal Indeks P', allocationBps: 4000, position: 1, kind: 'fund', currency: 'NOK' },
   { name: 'DNB Teknologi A', allocationBps: 3000, position: 2, kind: 'fund', currency: 'NOK' },
   { name: 'KLP AksjeNorge Indeks P', allocationBps: 1500, position: 3, kind: 'fund', currency: 'NOK' },
-  { name: 'KLP AksjeFremvoksende Markeder P', allocationBps: 1500, position: 4, kind: 'fund', currency: 'NOK' },
+  { name: 'KLP AksjeFremvoksende Markeder Indeks P', allocationBps: 1500, position: 4, kind: 'fund', currency: 'NOK' },
 ] as const;
 
 export const GENESIS_STRATEGY_SLICES: AllocationSlice[] = GENESIS_STRATEGY_SPEC.map((item) => ({

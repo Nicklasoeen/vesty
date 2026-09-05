@@ -230,7 +230,7 @@ export const clubDashboardDemoData: ClubDashboardDemoData = {
     { id: 'klp-global', label: 'KLP AksjeGlobal Indeks P', percentage: 40 },
     { id: 'dnb-teknologi', label: 'DNB Teknologi A', percentage: 30 },
     { id: 'klp-norge', label: 'KLP AksjeNorge Indeks P', percentage: 15 },
-    { id: 'klp-em', label: 'KLP AksjeFremvoksende Markeder P', percentage: 15 },
+    { id: 'klp-em', label: 'KLP AksjeFremvoksende Markeder Indeks P', percentage: 15 },
   ],
   activeProposal: {
     proposedBy: demoPeople.espen,
