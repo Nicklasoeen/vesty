@@ -17,7 +17,8 @@ import { formatNok, formatSignedNok, formatSignedPercentage } from '@/lib/curren
 import { BOTTOM_NAVIGATION_HEIGHT, BottomNavigation } from '@/navigation/BottomNavigation';
 import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { useTheme } from '@/theme';
-import { AllocationBar, AppText, Avatar, AvatarStack, Button, Screen, Section, Surface } from '@/ui';
+import { InvestmentDayCard } from '@/features/investment-day/InvestmentDayCard';
+import { AllocationBar, AppText, Avatar, AvatarStack, Button, Screen, Section } from '@/ui';
 import { PortfolioChart } from './PortfolioChart';
 
 export function ClubDashboardScreen() {
@@ -229,7 +230,7 @@ function InvestmentDayBanner({
   club: ClubSummary;
   onOpenInvest: () => void;
 }) {
-  const { colors, spacing } = useTheme();
+  const { colorScheme, spacing } = useTheme();
   const data = clubDashboardDemoData;
 
   return (
@@ -239,19 +240,21 @@ function InvestmentDayBanner({
       accessibilityLabel={`Open Invest, ${club.name} Investment Day`}
       style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
     >
-      <Surface
-        variant="secondary"
+      <InvestmentDayCard
         style={{
           paddingHorizontal: spacing.lg,
           paddingVertical: spacing.md,
           marginBottom: spacing.xxl,
-          borderLeftWidth: 2,
-          borderLeftColor: colors.accent,
         }}
       >
         <View style={styles.investmentDayRow}>
           <View style={{ flex: 1, paddingRight: spacing.md }}>
-            <AppText variant="sectionTitle">Next Investment Day</AppText>
+            <AppText
+              variant="sectionTitle"
+              style={colorScheme === 'dark' ? styles.investmentDayHeading : undefined}
+            >
+              Next Investment Day
+            </AppText>
             <AppText variant="subtitle" style={{ marginTop: spacing.xs }}>
               {data.nextInvestmentDayLabel}
             </AppText>
@@ -275,7 +278,7 @@ function InvestmentDayBanner({
             {club.members.length} {club.members.length === 1 ? 'member' : 'members'}
           </AppText>
         </View>
-      </Surface>
+      </InvestmentDayCard>
     </Pressable>
   );
 }
@@ -329,5 +332,8 @@ const styles = StyleSheet.create({
   },
   readinessAvatar: {
     marginLeft: 8,
+  },
+  investmentDayHeading: {
+    color: '#A6B6BD',
   },
 });

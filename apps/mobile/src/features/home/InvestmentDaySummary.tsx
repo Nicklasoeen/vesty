@@ -1,8 +1,9 @@
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
+import { InvestmentDayCard } from '@/features/investment-day/InvestmentDayCard';
 import { formatNok } from '@/lib/currency';
 import { useTheme } from '@/theme';
-import { AppText, Avatar, Button, Surface, type AvatarPerson } from '@/ui';
+import { AppText, Avatar, Button, type AvatarPerson } from '@/ui';
 
 /**
  * Visual states for Home's Investment Day module.
@@ -88,7 +89,7 @@ function UpcomingState({
   members: readonly InvestmentDayMember[];
   onOpenInvest?: () => void;
 }) {
-  const { colors, spacing } = useTheme();
+  const { colorScheme, spacing } = useTheme();
 
   return (
     <Pressable
@@ -98,16 +99,18 @@ function UpcomingState({
       accessibilityLabel={onOpenInvest ? `Open Invest, ${clubName} Investment Day` : undefined}
       style={({ pressed }) => ({ opacity: onOpenInvest && pressed ? 0.85 : 1 })}
     >
-      <Surface
-        variant="secondary"
+      <InvestmentDayCard
         style={{
           paddingHorizontal: spacing.lg,
           paddingVertical: spacing.md,
-          borderLeftWidth: 2,
-          borderLeftColor: colors.accent,
         }}
       >
-        <AppText variant="sectionTitle">Next Investment Day</AppText>
+        <AppText
+          variant="sectionTitle"
+          style={colorScheme === 'dark' ? styles.headingLift : undefined}
+        >
+          Next Investment Day
+        </AppText>
         <AppText variant="title" style={{ marginTop: spacing.xs }}>
           {dateLabel}
         </AppText>
@@ -121,7 +124,7 @@ function UpcomingState({
         </View>
 
         <ReadinessRow members={members} noun="ready" style={{ marginTop: spacing.md }} />
-      </Surface>
+      </InvestmentDayCard>
     </Pressable>
   );
 }
@@ -135,16 +138,13 @@ function ActionRequiredState({
   dateLabel: string;
   members: readonly InvestmentDayMember[];
 }) {
-  const { colors, spacing } = useTheme();
+  const { spacing } = useTheme();
 
   return (
-    <Surface
-      variant="secondary"
+    <InvestmentDayCard
       style={{
         paddingHorizontal: spacing.lg,
         paddingVertical: spacing.md,
-        borderLeftWidth: 2,
-        borderLeftColor: colors.accent,
       }}
     >
       <AppText variant="eyebrow">Action required</AppText>
@@ -164,7 +164,7 @@ function ActionRequiredState({
       <View style={{ marginTop: spacing.md }}>
         <Button label="Review changes" variant="primary" />
       </View>
-    </Surface>
+    </InvestmentDayCard>
   );
 }
 
@@ -179,16 +179,13 @@ function TodayState({
   members: readonly InvestmentDayMember[];
   onOpenInvest?: () => void;
 }) {
-  const { colors, spacing } = useTheme();
+  const { spacing } = useTheme();
 
   return (
-    <Surface
-      variant="secondary"
+    <InvestmentDayCard
       style={{
         paddingHorizontal: spacing.lg,
         paddingVertical: spacing.md,
-        borderLeftWidth: 2,
-        borderLeftColor: colors.accent,
       }}
     >
       <AppText variant="hero">Investment Day is today</AppText>
@@ -206,7 +203,7 @@ function TodayState({
       <View style={{ marginTop: spacing.md }}>
         <Button label="View investments" variant="primary" onPress={onOpenInvest} />
       </View>
-    </Surface>
+    </InvestmentDayCard>
   );
 }
 
@@ -255,5 +252,8 @@ const styles = StyleSheet.create({
   },
   avatarSpacing: {
     marginLeft: 8,
+  },
+  headingLift: {
+    color: '#A6B6BD',
   },
 });

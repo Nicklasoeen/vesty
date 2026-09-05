@@ -1,9 +1,10 @@
 import { Feather } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Defs, LinearGradient, RadialGradient, Rect, Stop } from 'react-native-svg';
 
-import { spacing, useTheme } from '@/theme';
+import { spacing, useTheme, type ColorScheme } from '@/theme';
 import { AppText, VestyMark } from '@/ui';
 
 import { QuickActionsSheet } from './QuickActionsSheet';
@@ -36,26 +37,29 @@ const TABS: TabConfig[] = [
 
 const NAV_SLOTS = ['home', 'club', 'action', 'invest', 'activity'] as const;
 
-/** Visual height of the inset nav container (icon + label row). */
-const NAV_CONTAINER_HEIGHT = 52;
+/** Compact capsule height: large enough for icon + label without wasted space. */
+const NAV_CONTAINER_HEIGHT = 62;
 
 /** Gap between the nav container and the home-indicator / screen edge. */
 const NAV_BOTTOM_GAP = spacing.sm;
 
 /** Horizontal inset from screen edges. */
-const NAV_HORIZONTAL_INSET = spacing.md;
+const NAV_HORIZONTAL_INSET = spacing.lg;
 
-/**
- * Softer than radius.lg, short of a stadium/pill (half of 52 would be 26).
- * Local to the nav so other surfaces stay on the existing radius scale.
- */
-const NAV_CONTAINER_RADIUS = 22;
+const NAV_CONTAINER_RADIUS = NAV_CONTAINER_HEIGHT / 2;
 
+/** Active and inactive content share these dimensions so selection never shifts layout. */
+const TAB_CAPSULE_HEIGHT = 46;
+const TAB_CAPSULE_MAX_WIDTH = 76;
+
+/** Fixed middle slot prevents the central action from stealing adjacent tab taps. */
+const ACTION_SLOT_WIDTH = 60;
 const ACTION_BUTTON_SIZE = 48;
-const ACTION_BUTTON_LIFT = 10;
-const ACTION_BUTTON_OVERHANG = 8;
-const ACTION_ICON_COLOR = '#032C3C';
-const ACTION_BUTTON_BACKGROUND = '#FFFFFF';
+const ACTION_BUTTON_LIFT = 3;
+const ACTION_BUTTON_OVERHANG = 2;
+
+const ICON_SIZE = 18;
+const MARK_HEIGHT = 13;
 
 /**
  * Vertical clearance screens should reserve above the safe-area inset:
@@ -64,24 +68,63 @@ const ACTION_BUTTON_BACKGROUND = '#FFFFFF';
  */
 export const BOTTOM_NAVIGATION_HEIGHT = NAV_CONTAINER_HEIGHT + NAV_BOTTOM_GAP + ACTION_BUTTON_OVERHANG;
 
-const ICON_SIZE = 20;
-/** Optically matches Feather 20 icons; mark viewBox is wider than it is tall. */
-const MARK_HEIGHT = 15;
-
 interface BottomNavigationProps {
   activeTab: BottomNavigationTabKey;
   onSelectTab: (tab: BottomNavigationTabKey) => void;
 }
 
+interface NavMaterials {
+  containerFill: string;
+  containerBorder: string;
+  activeFill: string;
+  activeBorder: string;
+  activeHighlight: string;
+  actionFill: string;
+  actionBorder: string;
+  actionHighlight: string;
+  actionIcon: string;
+  actionShadow: string;
+}
+
+function navMaterials(scheme: ColorScheme): NavMaterials {
+  if (scheme === 'dark') {
+    return {
+      containerFill: 'rgba(8, 26, 34, 0.96)',
+      containerBorder: 'rgba(255, 255, 255, 0.14)',
+      activeFill: 'rgba(43, 67, 78, 0.94)',
+      activeBorder: 'rgba(79, 166, 184, 0.22)',
+      activeHighlight: 'rgba(255, 255, 255, 0.10)',
+      actionFill: 'rgba(255, 255, 255, 0.98)',
+      actionBorder: 'rgba(255, 255, 255, 0.62)',
+      actionHighlight: 'rgba(255, 255, 255, 0.94)',
+      actionIcon: '#032C3C',
+      actionShadow: '#021820',
+    };
+  }
+
+  return {
+    containerFill: 'rgba(255, 255, 255, 0.97)',
+    containerBorder: 'rgba(3, 44, 60, 0.12)',
+    activeFill: 'rgba(3, 44, 60, 0.10)',
+    activeBorder: 'rgba(3, 44, 60, 0.14)',
+    activeHighlight: 'rgba(255, 255, 255, 0.46)',
+    actionFill: 'rgba(255, 255, 255, 0.98)',
+    actionBorder: 'rgba(3, 44, 60, 0.16)',
+    actionHighlight: 'rgba(255, 255, 255, 0.94)',
+    actionIcon: '#032C3C',
+    actionShadow: '#032C3C',
+  };
+}
+
 /**
- * App-shell bottom navigation — a softly rounded inset control layer,
- * shared across Home / Club / Invest / Activity. The central + is an
- * action control, not a fifth route.
+ * App-shell bottom navigation. Four real tabs plus a central action that
+ * is not a route. Selection is a stable icon-and-label capsule.
  */
 export function BottomNavigation({ activeTab, onSelectTab }: BottomNavigationProps) {
-  const { colors } = useTheme();
+  const { colors, colorScheme } = useTheme();
   const insets = useSafeAreaInsets();
   const [actionsOpen, setActionsOpen] = useState(false);
+  const materials = navMaterials(colorScheme);
 
   return (
     <View
@@ -100,14 +143,16 @@ export function BottomNavigation({ activeTab, onSelectTab }: BottomNavigationPro
           styles.container,
           {
             height: NAV_CONTAINER_HEIGHT,
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
+            backgroundColor: materials.containerFill,
+            borderColor: materials.containerBorder,
           },
         ]}
       >
+        <NavTopReflection dark={colorScheme === 'dark'} />
+
         {NAV_SLOTS.map((slot) => {
           if (slot === 'action') {
-            return <View key="action" style={styles.item} pointerEvents="none" />;
+            return <View key="action" style={styles.actionSlot} pointerEvents="none" />;
           }
 
           const tab = TABS.find((item) => item.key === slot);
@@ -130,10 +175,19 @@ export function BottomNavigation({ activeTab, onSelectTab }: BottomNavigationPro
             >
               <View
                 style={[
-                  styles.activeChip,
-                  { backgroundColor: isActive ? colors.accentMuted : 'transparent' },
+                  styles.tabCapsule,
+                  {
+                    backgroundColor: isActive ? materials.activeFill : 'transparent',
+                    borderColor: isActive ? materials.activeBorder : 'transparent',
+                  },
                 ]}
               >
+                {isActive ? (
+                  <View
+                    pointerEvents="none"
+                    style={[styles.tabHighlight, { backgroundColor: materials.activeHighlight }]}
+                  />
+                ) : null}
                 {tab.key === 'home' ? (
                   <VestyMark color={iconColor} height={MARK_HEIGHT} />
                 ) : (
@@ -153,25 +207,91 @@ export function BottomNavigation({ activeTab, onSelectTab }: BottomNavigationPro
       </View>
 
       <View pointerEvents="box-none" style={styles.actionLayer}>
-        <Pressable
-          onPress={() => setActionsOpen(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Create or join a club"
-          accessibilityHint="Opens quick actions to create or join a club"
-          hitSlop={6}
-          style={({ pressed }) => [
-            styles.actionButton,
+        <View
+          pointerEvents="box-none"
+          style={[
+            styles.actionLift,
             {
               top: (NAV_CONTAINER_HEIGHT - ACTION_BUTTON_SIZE) / 2 - ACTION_BUTTON_LIFT,
-              opacity: pressed ? 0.85 : 1,
+              shadowColor: materials.actionShadow,
             },
           ]}
         >
-          <Feather name="plus" size={22} color={ACTION_ICON_COLOR} />
-        </Pressable>
+          <Pressable
+            onPress={() => setActionsOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Create or join a club"
+            accessibilityHint="Opens quick actions to create or join a club"
+            hitSlop={6}
+            style={({ pressed }) => [
+              styles.actionButton,
+              {
+                backgroundColor: materials.actionFill,
+                borderColor: materials.actionBorder,
+                opacity: pressed ? 0.88 : 1,
+              },
+            ]}
+          >
+            <View pointerEvents="none" style={[styles.actionHighlight, { backgroundColor: materials.actionHighlight }]} />
+            <Feather name="plus" size={22} color={materials.actionIcon} />
+          </Pressable>
+        </View>
       </View>
 
       <QuickActionsSheet visible={actionsOpen} onClose={() => setActionsOpen(false)} />
+    </View>
+  );
+}
+
+const NAV_REFLECTION_HEIGHT = 10;
+
+/**
+ * Soft light on the top edge of the nav material. Weaker than the selected
+ * pill and the center action. Does not replace the structural border.
+ */
+function NavTopReflection({ dark }: { dark: boolean }) {
+  const [width, setWidth] = useState(0);
+
+  const handleLayout = (event: LayoutChangeEvent) => {
+    const next = Math.round(event.nativeEvent.layout.width);
+    if (next !== width) {
+      setWidth(next);
+    }
+  };
+
+  return (
+    <View pointerEvents="none" style={styles.topReflection} onLayout={handleLayout}>
+      {width > 0 ? (
+        <Svg width={width} height={NAV_REFLECTION_HEIGHT}>
+          <Defs>
+            <LinearGradient
+              id="navTopWash"
+              x1={0}
+              y1={0}
+              x2={0}
+              y2={NAV_REFLECTION_HEIGHT}
+              gradientUnits="userSpaceOnUse"
+            >
+              <Stop offset="0" stopColor="#FFFFFF" stopOpacity={dark ? 0.035 : 0.12} />
+              <Stop offset="1" stopColor="#FFFFFF" stopOpacity={0} />
+            </LinearGradient>
+            <RadialGradient
+              id="navTopCatch"
+              cx={width * 0.36}
+              cy={0}
+              rx={width * 0.5}
+              ry={NAV_REFLECTION_HEIGHT * 1.2}
+              gradientUnits="userSpaceOnUse"
+            >
+              <Stop offset="0" stopColor="#FFFFFF" stopOpacity={dark ? 0.10 : 0.28} />
+              <Stop offset="0.48" stopColor="#FFFFFF" stopOpacity={dark ? 0.035 : 0.10} />
+              <Stop offset="1" stopColor="#FFFFFF" stopOpacity={0} />
+            </RadialGradient>
+          </Defs>
+          <Rect width={width} height={NAV_REFLECTION_HEIGHT} fill="url(#navTopWash)" />
+          <Rect width={width} height={NAV_REFLECTION_HEIGHT} fill="url(#navTopCatch)" />
+        </Svg>
+      ) : null}
     </View>
   );
 }
@@ -186,40 +306,74 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: NAV_CONTAINER_RADIUS,
-    paddingHorizontal: 4,
+    paddingHorizontal: 6,
+    overflow: 'hidden',
+  },
+  topReflection: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: NAV_REFLECTION_HEIGHT,
   },
   item: {
     flex: 1,
+    minWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
     height: '100%',
+  },
+  actionSlot: {
+    width: ACTION_SLOT_WIDTH,
+    height: '100%',
+  },
+  tabCapsule: {
+    width: '100%',
+    maxWidth: TAB_CAPSULE_MAX_WIDTH,
+    height: TAB_CAPSULE_HEIGHT,
+    borderRadius: TAB_CAPSULE_HEIGHT / 2,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  tabHighlight: {
+    position: 'absolute',
+    top: 0,
+    left: 7,
+    right: 7,
+    height: StyleSheet.hairlineWidth,
   },
   actionLayer: {
     ...StyleSheet.absoluteFill,
     alignItems: 'center',
   },
-  actionButton: {
+  actionLift: {
     position: 'absolute',
     width: ACTION_BUTTON_SIZE,
     height: ACTION_BUTTON_SIZE,
     borderRadius: ACTION_BUTTON_SIZE / 2,
-    backgroundColor: ACTION_BUTTON_BACKGROUND,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(3, 44, 60, 0.14)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: ACTION_ICON_COLOR,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.32,
+    shadowRadius: 7,
+    elevation: 6,
   },
-  activeChip: {
+  actionButton: {
+    width: ACTION_BUTTON_SIZE,
+    height: ACTION_BUTTON_SIZE,
+    borderRadius: ACTION_BUTTON_SIZE / 2,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  actionHighlight: {
+    position: 'absolute',
+    top: 0,
+    left: 7,
+    right: 7,
+    height: 1,
   },
   label: {
     marginTop: 2,
