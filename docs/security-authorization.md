@@ -54,7 +54,9 @@ Investment Day coordination:
 - `member_cycle_participations`: only the owning active membership may read the raw row. While its cycle is open, the owner may update only member-report fields. Creation, snapshot fields, verification fields, and deletion are blocked.
 - `member_investment_transactions`: only the owning active membership may read rows. Direct insert, update, and delete are revoked. Writes go through `confirm_investment_day_v1` or `confirm_investment_day_v2`.
 - `member_investment_positions` and `member_position_valuations_v1`: `security_invoker` read models over those transactions, so another member's cost basis, quantity, and EUR current value are not visible.
+- `member_investment_lots_v1` and `member_estimated_positions_v1`: same invoker RLS. Modelled quantity and estimated NOK value are private to the owning membership.
 - `market_data_instrument_mappings`, `market_prices`, `latest_market_prices`, and `latest_market_price_status`: any authenticated user may read shared catalog NAV/mappings and freshness metadata. Anonymous users have no access. Clients cannot INSERT, UPDATE, or DELETE mappings or prices. Ingest is the `sync-market-data` Edge Function, which requires a secret API key and writes with the service role. `TWELVE_DATA_API_KEY` is server-only and never an `EXPO_PUBLIC_*` value. Yahoo unofficial ingest is an explicit probe, not the production default.
+- `fx_rates`, `latest_fx_rates`, and `latest_fx_rate_status`: authenticated SELECT only. Clients cannot write. Ingest is `sync-fx-rates` with the secret key. Norges Bank requires no provider secret.
 
 ## Sensitive Monetary Data
 
@@ -92,6 +94,7 @@ Direct clients cannot perform operations that require atomic cross-table validat
 - participation snapshot creation
 - member investment transaction creation (use `confirm_investment_day_v1` or `confirm_investment_day_v2`)
 - market price ingest (use `sync-market-data`)
+- FX ingest (use `sync-fx-rates`)
 - broker verification
 
 Club creation, genesis strategy creation, owner invitation issuance, invitation acceptance, opening the current Investment Day, and confirming member-reported buys are implemented as private `SECURITY DEFINER` functions with public invoker wrappers. Callers cannot supply `owner_user_id`, another member's identity, or raw genesis allocations; `auth.uid()` is authoritative and `create_club` accepts only an allowlisted package id.
@@ -104,15 +107,17 @@ Saving-plan replacement can preserve rows through an end followed by an insert, 
 
 ## Aggregate Privacy Boundary
 
-No raw monetary table is broadly readable and no aggregate function is created in this migration. A future aggregate RPC must:
+No raw monetary table is broadly readable. Home and Club headlines use the caller's own estimated portfolio (`member_estimated_portfolio_v1`), so they do not expose another member's amount.
 
-- require active club membership
+`club_estimated_portfolio_v1` and `club_portfolio_history_v1` are fixed-shape trusted aggregates:
+
+- require an active club membership
 - expose a fixed aggregate without arbitrary member filters
-- include at least three distinct contributing memberships
-- preserve separate expected, member-reported, and independently verified meanings
+- return money only when at least three distinct contributing memberships are included on that result (per chart date for history)
 - return no row-level amounts
+- treat estimated club totals as member-reported / modelled, not independently verified
 
-Non-monetary club status/count projections require the same careful fixed-shape design where the underlying raw table also contains private amount fields.
+When the threshold is not met, monetary columns are null. Non-monetary club status/count projections still require the same careful fixed-shape design.
 
 ## RLS Helper Functions
 
@@ -160,7 +165,6 @@ pnpm test:db
 - Atomic saving-plan replacement if required by the product flow
 - Safe open-vote turnout/progress projection
 - Club-level readiness and participation status projections
-- Monetary aggregates enforcing the three-member threshold
 - Broker evidence ingestion and verification
 - Licensed production market-data provider and hosted daily NAV scheduling
 - Exceptional support, legal-retention, and post-completion correction workflows

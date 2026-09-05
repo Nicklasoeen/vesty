@@ -16,6 +16,9 @@ import {
   overallPerformanceHistoryByRange,
   OVERALL_PERFORMANCE_DEFAULT_RANGE,
 } from '@/demo/homeDemoData';
+import { historyByRange } from '@/features/portfolio/buildPortfolioChartSeries';
+import { useMemberPortfolio } from '@/features/portfolio/useMemberPortfolio';
+import { portfolioValueCaption, portfolioValueChartLabel } from '@/features/portfolio/valuationLabels';
 import { ClubListItem } from './ClubListItem';
 import { InvestmentDaySummary, type InvestmentDayVisualState } from './InvestmentDaySummary';
 import { OverallPerformanceSection } from './OverallPerformanceSection';
@@ -45,7 +48,10 @@ export function HomeScreen() {
   const { clubs, isLoading, selectClub } = useClubs();
   const { initials, avatarSource } = useProfile();
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const homeClubRows = presentHomeClubs(clubs);
+  const { summary, history, clubSummaries } = useMemberPortfolio();
+  const useEstimated = summary?.modellingScope === 'curated_etf';
+  const homeClubRows = presentHomeClubs(clubs, clubSummaries);
+  const estimatedHistory = historyByRange(history);
   const investmentDayClub = clubs[0] ?? null;
 
   return (
@@ -66,11 +72,34 @@ export function HomeScreen() {
 
         <View style={{ marginBottom: spacing.xl }}>
           <OverallPerformanceSection
-            totalValueNok={homeOverallPerformanceSummary.totalValueNok}
-            gainNok={homeOverallPerformanceSummary.gainNok}
-            gainPercentage={homeOverallPerformanceSummary.gainPercentage}
-            historyByRange={overallPerformanceHistoryByRange}
+            totalValueNok={
+              useEstimated
+                ? Math.trunc((summary?.estimatedCurrentValueMinor ?? summary?.investedMinor ?? 0) / 100)
+                : homeOverallPerformanceSummary.totalValueNok
+            }
+            gainNok={
+              useEstimated
+                ? summary?.gainLossMinor != null
+                  ? Math.trunc(summary.gainLossMinor / 100)
+                  : null
+                : homeOverallPerformanceSummary.gainNok
+            }
+            gainPercentage={
+              useEstimated
+                ? summary?.gainLossBps != null
+                  ? summary.gainLossBps / 100
+                  : null
+                : homeOverallPerformanceSummary.gainPercentage
+            }
+            historyByRange={useEstimated ? estimatedHistory : overallPerformanceHistoryByRange}
             defaultRange={OVERALL_PERFORMANCE_DEFAULT_RANGE}
+            caption={useEstimated && summary ? portfolioValueCaption(summary.valuationConfidence) : null}
+            valueLegendLabel={
+              useEstimated && summary
+                ? portfolioValueChartLabel(summary.valuationConfidence)
+                : 'Value'
+            }
+            isDemo={!useEstimated}
           />
         </View>
 
@@ -98,9 +127,9 @@ export function HomeScreen() {
                 <ClubListItem
                   clubName={club.name}
                   members={club.members}
-                  portfolioValueNok={club.demoPortfolioValueNok}
-                  returnPercentage={club.demoReturnPercentage}
-                  history={club.demoHistory}
+                  portfolioValueNok={club.portfolioValueNok ?? 0}
+                  returnPercentage={club.returnPercentage}
+                  history={club.history}
                   onPress={() => {
                     void selectClub(club.clubId);
                     onSelectTab('club');

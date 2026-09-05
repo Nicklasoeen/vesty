@@ -2,6 +2,11 @@ import { formatNokFromMinor } from '../../lib/currency.ts';
 import { formatEuroDecimal, formatQuantityLabel } from '../../lib/decimalDisplay.ts';
 
 import {
+  portfolioValueCaption,
+  type PortfolioValuationConfidence,
+} from '../portfolio/valuationLabels.ts';
+
+import {
   confidenceForHolding,
   exactHoldingsBadge,
   missingExactHoldingsLabel,
@@ -27,13 +32,20 @@ export function clubPositionDisplay(input: {
   currentValue: string | null;
   currentValueCurrency: string | null;
   valuationStatus: string;
+  estimatedCurrentValueMinor?: number | null;
+  valuationConfidence?: PortfolioValuationConfidence | null;
 }): ClubPositionDisplay {
   const confidence = confidenceForHolding({ quantityStatus: input.quantityStatus });
   const showExactValue =
     confidence === 'exact_member_reported'
     && input.valuationStatus === 'available'
     && input.currentValue
-    && input.currentValueCurrency === 'EUR';
+    && input.currentValueCurrency === 'EUR'
+    && input.estimatedCurrentValueMinor == null;
+  const estimatedValueLabel =
+    input.estimatedCurrentValueMinor != null
+      ? `${formatNokFromMinor(input.estimatedCurrentValueMinor)} current value`
+      : null;
 
   return {
     title: input.ticker ?? input.name,
@@ -43,10 +55,14 @@ export function clubPositionDisplay(input: {
       confidence === 'exact_member_reported' && input.totalQuantity
         ? formatQuantityLabel(input.totalQuantity)
         : null,
-    currentValueLabel: showExactValue && input.currentValue
-      ? `${formatEuroDecimal(input.currentValue)} current value`
-      : null,
-    badge: exactHoldingsBadge(confidence),
+    currentValueLabel: estimatedValueLabel
+      ?? (showExactValue && input.currentValue
+        ? `${formatEuroDecimal(input.currentValue)} current value`
+        : null),
+    badge:
+      input.valuationConfidence
+        ? portfolioValueCaption(input.valuationConfidence)
+        : exactHoldingsBadge(confidence),
     missingExactLabel: missingExactHoldingsLabel(confidence),
   };
 }

@@ -16,6 +16,7 @@ const CONTRIBUTION_RISE_FRACTION = 0.3;
 interface HomePerformanceChartProps {
   historyByRange: Record<PortfolioRangeKey, OverallPerformancePoint[]>;
   defaultRange: PortfolioRangeKey;
+  valueLegendLabel?: string;
 }
 
 /**
@@ -26,7 +27,11 @@ interface HomePerformanceChartProps {
  * Value is foreground (solid, filled); invested capital is background
  * (dashed, muted) — a reference line, not a second headline number.
  */
-export function HomePerformanceChart({ historyByRange, defaultRange }: HomePerformanceChartProps) {
+export function HomePerformanceChart({
+  historyByRange,
+  defaultRange,
+  valueLegendLabel = 'Value',
+}: HomePerformanceChartProps) {
   const { colors, spacing } = useTheme();
   const [range, setRange] = useState<PortfolioRangeKey>(defaultRange);
   const [width, setWidth] = useState(0);
@@ -44,7 +49,7 @@ export function HomePerformanceChart({ historyByRange, defaultRange }: HomePerfo
   return (
     <View>
       <View style={styles.legendRow}>
-        <LegendItem color={colors.accent} label="Value" />
+        <LegendItem color={colors.accent} label={valueLegendLabel} />
         <LegendItem color={colors.textSecondary} label="Invested" style={{ marginLeft: spacing.lg }} dashed />
       </View>
 

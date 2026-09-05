@@ -27,6 +27,15 @@ export function formatSignedNok(amount: number): string {
   return `${sign}${formatNok(amount)}`;
 }
 
+export function formatSignedNokFromMinor(amountMinor: number): string {
+  const sign = amountMinor > 0 ? '+' : amountMinor < 0 ? '\u2212' : '';
+  return `${sign}${formatNokFromMinor(amountMinor)}`;
+}
+
+export function formatSignedBps(bps: number): string {
+  return formatSignedPercentage(bps / 100);
+}
+
 export function formatSignedPercentage(value: number): string {
   const sign = value > 0 ? '+' : value < 0 ? '\u2212' : '';
   return `${sign}${Math.abs(value).toFixed(1)}%`;

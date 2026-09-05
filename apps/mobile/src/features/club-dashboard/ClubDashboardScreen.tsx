@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -13,11 +13,18 @@ import { governanceLabel } from '@/features/clubs/governance';
 import { InviteMemberSheet } from '@/features/clubs/InviteMemberSheet';
 import { useClubStrategy } from '@/features/clubs/useClubStrategy';
 import type { ClubSummary } from '@/features/clubs/types';
-import { useOwnPositions } from '@/features/invest/useOwnPositions';
-import { formatNok, formatNokFromMinor, formatSignedNok, formatSignedPercentage } from '@/lib/currency';
+import { formatNok, formatNokFromMinor, formatSignedBps, formatSignedNok, formatSignedNokFromMinor, formatSignedPercentage } from '@/lib/currency';
 import { clubPositionDisplay } from '@/features/invest/clubPositionDisplay';
 import { canAddExactHoldings } from '@/features/invest/holdingConfidence';
 import { supportsExactHoldings } from '@/features/invest/investmentDayReporting';
+import { HomePerformanceChart } from '@/features/home/HomePerformanceChart';
+import { historyByRange } from '@/features/portfolio/buildPortfolioChartSeries';
+import { useMemberPortfolio } from '@/features/portfolio/useMemberPortfolio';
+import {
+  ESTIMATED_VALUATION_INFO,
+  portfolioValueCaption,
+  portfolioValueChartLabel,
+} from '@/features/portfolio/valuationLabels';
 import { BOTTOM_NAVIGATION_HEIGHT, BottomNavigation } from '@/navigation/BottomNavigation';
 import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { useTheme } from '@/theme';
@@ -208,31 +215,71 @@ function PortfolioSummary({
   onAddExactHoldings: () => void;
 }) {
   const { spacing } = useTheme();
-  // DEMO market-value presentation — isolated from member-reported cost basis.
   const data = clubDashboardDemoData;
-  const { positions } = useOwnPositions(clubId);
+  const { summary, history, positions } = useMemberPortfolio(clubId);
+  const useEstimated = summary?.modellingScope === 'curated_etf';
   const ownCostBasisMinor = positions.reduce((sum, position) => sum + position.totalInvestedMinor, 0);
+  const chartHistory = historyByRange(history);
+  const caption = useEstimated && summary ? portfolioValueCaption(summary.valuationConfidence) : null;
+  const gainColor =
+    useEstimated && summary?.gainLossMinor != null && summary.gainLossMinor < 0 ? 'negative' : 'positive';
 
   return (
     <View style={{ marginBottom: spacing.xxl }}>
       <AppText variant="sectionTitle">Portfolio</AppText>
       <AppText variant="display" style={{ marginTop: spacing.xs }}>
-        {formatNok(data.portfolioValueNok)}
+        {useEstimated && summary?.estimatedCurrentValueMinor != null
+          ? formatNokFromMinor(summary.estimatedCurrentValueMinor)
+          : useEstimated
+            ? formatNokFromMinor(summary?.investedMinor ?? 0)
+            : formatNok(data.portfolioValueNok)}
       </AppText>
-      <AppText variant="value" color="positive" style={{ marginTop: spacing.sm }}>
-        {formatSignedNok(data.estimatedReturnNok)}
-        {' \u00B7 '}
-        {formatSignedPercentage(data.estimatedReturnPercentage)}
-      </AppText>
-      <AppText variant="meta" color="secondary" style={{ marginTop: spacing.xs }}>
-        Demo market value. Live prices are not available yet.
-      </AppText>
+      {useEstimated && summary?.gainLossMinor != null && summary.gainLossBps != null ? (
+        <AppText variant="value" color={gainColor} style={{ marginTop: spacing.sm }}>
+          {formatSignedNokFromMinor(summary.gainLossMinor)}
+          {' \u00B7 '}
+          {formatSignedBps(summary.gainLossBps)}
+        </AppText>
+      ) : useEstimated ? null : (
+        <AppText variant="value" color="positive" style={{ marginTop: spacing.sm }}>
+          {formatSignedNok(data.estimatedReturnNok)}
+          {' \u00B7 '}
+          {formatSignedPercentage(data.estimatedReturnPercentage)}
+        </AppText>
+      )}
+      {useEstimated ? (
+        caption ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${caption}. ${ESTIMATED_VALUATION_INFO}`}
+            onPress={() => Alert.alert(caption, ESTIMATED_VALUATION_INFO)}
+          >
+            <AppText variant="meta" color="secondary" style={{ marginTop: spacing.xs }}>
+              {caption}
+            </AppText>
+          </Pressable>
+        ) : null
+      ) : (
+        <AppText variant="meta" color="secondary" style={{ marginTop: spacing.xs }}>
+          Demo market value. Live prices are not available yet.
+        </AppText>
+      )}
 
       <View style={{ marginTop: spacing.lg }}>
-        <PortfolioChart
-          historyByRange={data.portfolioHistoryByRange}
-          defaultRange={data.defaultPortfolioRange}
-        />
+        {useEstimated && chartHistory.ALL.length >= 2 ? (
+          <HomePerformanceChart
+            historyByRange={chartHistory}
+            defaultRange="3M"
+            valueLegendLabel={
+              summary ? portfolioValueChartLabel(summary.valuationConfidence) : 'Estimated value'
+            }
+          />
+        ) : useEstimated ? null : (
+          <PortfolioChart
+            historyByRange={data.portfolioHistoryByRange}
+            defaultRange={data.defaultPortfolioRange}
+          />
+        )}
       </View>
 
       {positions.length > 0 ? (
@@ -247,11 +294,13 @@ function PortfolioSummary({
                 name: position.name,
                 ticker: position.ticker,
                 totalInvestedMinor: position.totalInvestedMinor,
-                totalQuantity: position.totalQuantity,
+                totalQuantity: position.exactQuantity,
                 quantityStatus: position.quantityStatus,
-                currentValue: position.currentValue,
-                currentValueCurrency: position.currentValueCurrency,
-                valuationStatus: position.valuationStatus,
+                currentValue: null,
+                currentValueCurrency: null,
+                valuationStatus: position.estimatedCurrentValueMinor != null ? 'available' : 'unavailable',
+                estimatedCurrentValueMinor: position.estimatedCurrentValueMinor,
+                valuationConfidence: position.valuationConfidence,
               });
 
               return (

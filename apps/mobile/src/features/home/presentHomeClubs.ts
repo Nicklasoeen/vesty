@@ -6,6 +6,8 @@
 import { clubDashboardDemoData, type PortfolioHistoryPoint } from '@/demo/clubDemoData';
 import { homeClubs } from '@/demo/homeDemoData';
 import type { ClubSummary } from '@/features/clubs/types';
+import type { MemberPortfolioSummary, PortfolioHistoryPoint as EstimatedHistoryPoint } from '@/features/portfolio/portfolioApi';
+import { toChartPoints } from '@/features/portfolio/buildPortfolioChartSeries';
 import type { AvatarPerson } from '@/ui';
 
 export interface HomeClubRow {
@@ -13,12 +15,10 @@ export interface HomeClubRow {
   name: string;
   members: readonly AvatarPerson[];
   memberCount: number;
-  /** DEMO — not loaded from the database. */
-  demoPortfolioValueNok: number;
-  /** DEMO — not loaded from the database. */
-  demoReturnPercentage: number;
-  /** DEMO — not loaded from the database. */
-  demoHistory: PortfolioHistoryPoint[];
+  portfolioValueNok: number | null;
+  returnPercentage: number | null;
+  history: PortfolioHistoryPoint[];
+  presentation: 'estimated' | 'demo';
 }
 
 const DEMO_FINANCIAL_PALETTES = homeClubs.map((club) => ({
@@ -35,17 +35,40 @@ function demoPaletteFor(clubId: string) {
   return DEMO_FINANCIAL_PALETTES[hash % DEMO_FINANCIAL_PALETTES.length] ?? DEMO_FINANCIAL_PALETTES[0]!;
 }
 
-export function presentHomeClubs(clubs: readonly ClubSummary[]): HomeClubRow[] {
+export function presentHomeClubs(
+  clubs: readonly ClubSummary[],
+  portfolios: readonly MemberPortfolioSummary[] = [],
+  historyByClub: Record<string, EstimatedHistoryPoint[]> = {},
+): HomeClubRow[] {
   return clubs.map((club) => {
+    const estimated = portfolios.find((row) => row.clubId === club.clubId);
+    if (estimated?.modellingScope === 'curated_etf') {
+      const valueMinor = estimated.estimatedCurrentValueMinor ?? estimated.investedMinor;
+      return {
+        clubId: club.clubId,
+        name: club.name,
+        members: club.members,
+        memberCount: club.members.length,
+        portfolioValueNok: Math.trunc(valueMinor / 100),
+        returnPercentage: estimated.gainLossBps != null ? estimated.gainLossBps / 100 : null,
+        history: toChartPoints(historyByClub[club.clubId] ?? []).map((point) => ({
+          date: point.date,
+          valueNok: point.portfolioValueNok,
+        })),
+        presentation: 'estimated',
+      };
+    }
+
     const demo = demoPaletteFor(club.clubId);
     return {
       clubId: club.clubId,
       name: club.name,
       members: club.members,
       memberCount: club.members.length,
-      demoPortfolioValueNok: demo.portfolioValueNok,
-      demoReturnPercentage: demo.returnPercentage,
-      demoHistory: demo.history,
+      portfolioValueNok: demo.portfolioValueNok,
+      returnPercentage: demo.returnPercentage,
+      history: demo.history,
+      presentation: 'demo',
     };
   });
 }

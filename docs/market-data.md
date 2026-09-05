@@ -10,7 +10,7 @@
 | Twelve Data catalog identity | PARTIAL | Authenticated `/funds?symbol=` returns all four candidate ids in NOK. `/funds?isin=` is empty without the ISIN add-on. Catalog names are slightly wrong for the KLP classes |
 | Twelve Data latest + historical NAV | BLOCKED | Real key loads. `/quote`, `/time_series`, `/eod`, and `/price` return 404: these mutual-fund symbols require a Grow or Venture plan. Mappings stay inactive |
 | Licensed production ingest | NOT ACTIVATED | All-four NAV gate failed. Do not activate Twelve Data. Do not use Yahoo as production ingest |
-| Club/Home current value, gain %, charts | DEMO | Club/Home NOK aggregates stay demo. No EUR/NOK FX exists. Do not compute `amount / today's close` |
+| Club/Home current value, gain %, charts | ESTIMATED (curated V1) | Curated ETF clubs use modelled/exact lots × historical Marketstack close × Norges Bank EUR/NOK. Legacy KLP/DNB stay demo/unavailable |
 | Curated V1 ETF quantity | REAL (member-reported) | Investment Day v2 stores actual purchased units. Never inferred from Marketstack |
 | Curated V1 ETF current value | REAL (EUR, position-level) | `total_quantity × latest fresh Marketstack close` when quantity is complete. Instrument currency only |
 
@@ -256,7 +256,7 @@ Confidence states (product, not extra schema):
 | State | Meaning | V1 |
 | --- | --- | --- |
 | Reported contribution | Member said they invested the planned amount | Standard confirm |
-| Estimated / modelled holding | Synthetic reference quantity from amount + FX + Investment Day price | Future. Do not implement without FX |
+| Estimated / modelled holding | Synthetic reference quantity from amount + Investment Day FX + Investment Day close | Implemented. Never stored as `quantity` |
 | Exact member-reported holding | Member entered actual units | Optional. Not verified |
 | Broker-verified holding | Broker evidence | Reserved enum only |
 
@@ -283,7 +283,7 @@ Rules:
 - No demo prices
 - No guessed FX
 
-**EUR/NOK FX is not implemented.** Club base currency is NOK. Contribution `amount_minor` is NOK. ETF market value is EUR. Do not multiply EUR value and label it NOK. Do not hardcode a rate. Club/Home aggregate market value and gain/loss stay demo/unavailable until an authoritative FX source exists.
+**EUR/NOK FX is implemented from Norges Bank.** See the FX section below. Club/Home NOK totals for curated V1 ETF clubs are estimated from reported contributions, reference FX, and Marketstack closes. Legacy KLP/DNB clubs stay demo/unavailable.
 
 Cost basis remains the reported NOK invested amount. If both quantity and execution unit price are present, `quantity × execution_unit_price` is an optional instrument-currency execution cost, not a replacement for contribution cost basis.
 
@@ -293,12 +293,90 @@ Valuation states:
 - `quantity_incomplete` — null or partial quantity; show invested amount only
 - `no_mapping` / `no_price` / `price_not_fresh` / `currency_mismatch` — quantity may exist; current value stays hidden
 
-Club shows labeled demo NOK market value plus real own NOK cost basis and, when available, real EUR position value. Home stays on the labeled demo adapter.
+Club/Home headlines for curated V1 ETF clubs use the member's own estimated NOK portfolio. Club-wide monetary aggregates exist only through `club_estimated_portfolio_v1` / `club_portfolio_history_v1` and stay hidden unless at least three distinct members have contributed. Legacy KLP/DNB clubs keep the labeled demo adapter.
 
-Historical Value charts still need chronological holdings and historical closes. Do not project today's quantity backward.
+## EUR/NOK FX (Norges Bank)
+
+Authoritative daily EUR/NOK middle rates come from Norges Bank's open data API (`EXR/B.EUR.NOK.SP`). No API key. License: [Norwegian Licence for Open Government Data (NLOD) 2.0](https://data.norge.no/nlod/en/2.0). Attribution: contains data under NLOD distributed by Norges Bank.
+
+| Topic | Rule |
+| --- | --- |
+| Convention | A stored rate `R` means **1 EUR = R NOK**. Never invert. |
+| Frequency | Business-day middle rates, published about 16:00 CET. Indicative, not binding on Norges Bank. |
+| Weekends / holidays | No row is stored. Do not fabricate prints. |
+| Historical coverage | Official series goes back decades. Vesty backfills about one UTC year, same window as Marketstack. |
+| Fallback | For a date with no print, use the most recent prior rate within **10 calendar days**. Never a future rate. Outside the window → unavailable. |
+| Freshness | Same weekday + holiday buffer as `market_nav_freshness_v1`. |
+| Writes | Clients have SELECT only. Ingest is `sync-fx-rates` with the secret key. |
+
+```sh
+curl -sS -X POST "$SUPABASE_URL/functions/v1/sync-fx-rates" \
+  --header "apikey: $SUPABASE_SECRET_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{}'
+
+curl -sS -X POST "$SUPABASE_URL/functions/v1/sync-fx-rates" \
+  --header "apikey: $SUPABASE_SECRET_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{"backfill":true}'
+```
+
+## Modelled quantity and NOK valuation
+
+Amount-only lots derive a **modelled** reference quantity. This is not ownership and is never written to `member_investment_transactions.quantity`.
+
+Reference date = `investment_cycles.investment_day_at` in the cycle timezone (`Europe/Oslo` by default). Not confirmation time (`executed_at`) and not today.
+
+```text
+modelled_quantity = (amount_minor / 100) / EURNOK_on_or_before(reference_date) / ETF_close_on_or_before(reference_date)
+```
+
+Reference ETF price is the allowlisted Marketstack EOD close on that date, else the nearest prior close within 10 calendar days. No interpolation. No future close. Missing inputs → that lot is unavailable.
+
+Exact member-reported `quantity` takes precedence for that lot. The lot is not also modelled. No double count.
+
+Lot current NOK value:
+
+```text
+lot_quantity × latest_fresh_EUR_close × latest_fresh_EURNOK
+```
+
+`lot_quantity` is exact quantity when present, otherwise modelled quantity.
+
+Position / portfolio confidence:
+
+| Confidence | Meaning |
+| --- | --- |
+| `exact` | Every valued lot has member-reported quantity |
+| `estimated` | Every valued lot uses modelled quantity |
+| `mixed` | Some exact, some estimated |
+| `unavailable` | A lot is missing FX or a reference close, or latest marks are not fresh |
+
+Value and gain/loss are exposed only when every lot in the aggregate can be valued. Invested NOK is always the sum of reported `amount_minor`.
+
+```text
+gain_loss_nok = estimated_current_value_nok − (invested_minor / 100)
+gain_loss_bps = round(gain_loss_nok / (invested_minor / 100) × 10000)
+```
+
+UI labels: Estimated / Based on reported holdings / Partly estimated. Never Verified, Exact, or Broker confirmed unless a broker verification path exists.
+
+## Historical chart
+
+`member_portfolio_history_v1` returns weekly points (default 7-day step):
+
+- Invested = cumulative reported NOK for lots whose Investment Day is on or before the point
+- Value = those lots' quantity (exact or modelled) × that date's (or prior) ETF close × that date's (or prior) EUR/NOK
+- A contribution does not appear on earlier points
+- Today's FX or close is never applied backward
+- If any included lot cannot be valued on that date, the value is omitted (gap)
+
+Home/Club charts for curated clubs use this series. Legacy clubs do not.
 
 ## Tests
 
 - `supabase/tests/market_data_v1.test.sql`
 - `supabase/tests/quantity_valuation_v1.test.sql`
+- `supabase/tests/fx_portfolio_modelling_v1.test.sql`
 - `pnpm test:market-data` — Marketstack, Twelve Data, and Yahoo parser/adapter fixtures, no live provider network
+- `pnpm test:fx` — Norges Bank SDMX parser/adapter fixtures, no live provider network

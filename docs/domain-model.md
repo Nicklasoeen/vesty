@@ -1188,7 +1188,7 @@ The domain may compare those observations with a `MemberCycleParticipation`. It 
 
 ### Portfolio and market data
 
-V1 stores verified provider mappings and price observations in `market_data_instrument_mappings` and `market_prices`. Ingest is server-side only. Curated V1 ETFs use allowlisted Marketstack EOD closes. Twelve Data fund NAV remains unproven; Yahoo unofficial remains probe-only. Position current value is quantity × latest fresh Marketstack close in EUR only. Club/Home NOK aggregates stay demo because EUR/NOK FX is not implemented. Historical portfolio value additionally requires chronological holdings and historical closes. See `docs/market-data.md`. Prices do not alter immutable governance history.
+V1 stores verified provider mappings and price observations in `market_data_instrument_mappings` and `market_prices`, and authoritative EUR/NOK prints in `fx_rates`. Ingest is server-side only. Curated V1 ETFs use allowlisted Marketstack EOD closes. EUR/NOK uses Norges Bank daily middle rates (1 EUR = rate NOK). Amount-only lots derive a modelled reference quantity from the Investment Day FX and close; that quantity is not stored as holdings. Current NOK value is lot quantity × latest fresh EUR close × latest fresh EUR/NOK. Exact member-reported quantity takes precedence per lot. Legacy KLP/DNB clubs are not modelled from ETF prices. See `docs/market-data.md`. Prices do not alter immutable governance history.
 
 ### Verified transactions
 

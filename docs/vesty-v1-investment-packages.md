@@ -21,10 +21,11 @@ Also shipped:
 - Standard Investment Day is amount-only: open broker, then “I've invested.”
 - Optional exact holdings via `confirm_investment_day_v2` after completion.
 - Position-level EUR current value only when the member later adds exact units.
+- Norges Bank EUR/NOK FX, modelled reference quantity for amount-only lots, and estimated NOK Home/Club totals for curated ETF clubs.
 
 Still not shipped:
 
-- Spotlight, sliders, instrument search, broker APIs, EUR/NOK FX, truthful NOK portfolio totals, or gain/loss.
+- Spotlight, sliders, instrument search, broker APIs, or licensed NAV for legacy KLP/DNB funds.
 
 Mobile display copy and target ids also live in `apps/mobile/src/features/clubs/curatedInvestmentPackages.ts`. Database rows remain authoritative for genesis allocations.
 
@@ -362,7 +363,7 @@ Implemented:
 3. `public.create_club` accepts `p_package_id` only. `private.resolve_curated_package_allocations` builds the allocation JSON. Unknown or inactive ids raise `vesty.invalid_package`.
 4. Snapshot `target_name` / `target_kind` at allocation time (already present).
 5. Marketstack mappings are seeded for the five CORE ETFs only. Approved symbols are `VWCE.DE`, `EUNK.DE`, `IS3N.DE`, `SXR8.DE`, `SXRV.DE`. The adapter never searches or guesses.
-6. FX is still deferred. Do not derive a model/reference quantity from NOK contribution until an authoritative FX source exists. Club/Home NOK totals stay demo.
+6. EUR/NOK FX is Norges Bank daily middle rates. Amount-only lots derive a modelled reference quantity from the Investment Day rate and close. That quantity is not stored as holdings. Club/Home NOK totals for curated ETF clubs are estimated. Legacy KLP/DNB stay demo/unavailable.
 
 KLP/DNB targets stay in the catalog. New genesis no longer uses those four funds.
 

@@ -40,3 +40,23 @@ test('exact holdings rows show units and EUR value without calling it verified',
   assert.equal(row.badge, 'Exact holdings');
   assert.equal(row.missingExactLabel, null);
 });
+
+test('estimated NOK value is labelled estimated and does not invent units', () => {
+  const row = clubPositionDisplay({
+    name: 'Vanguard FTSE All-World UCITS ETF - (USD) Acc',
+    ticker: 'VWCE',
+    totalInvestedMinor: 120000,
+    totalQuantity: null,
+    quantityStatus: 'unavailable',
+    currentValue: null,
+    currentValueCurrency: null,
+    valuationStatus: 'quantity_incomplete',
+    estimatedCurrentValueMinor: 137500,
+    valuationConfidence: 'estimated',
+  });
+
+  assert.equal(row.quantityLabel, null);
+  assert.equal(row.currentValueLabel, '1\u00a0375 kr current value');
+  assert.equal(row.badge, 'Estimated');
+  assert.equal(row.missingExactLabel, 'Exact holdings not added');
+});

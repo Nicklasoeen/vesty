@@ -209,6 +209,30 @@ Money uses signed PostgreSQL `bigint` columns with positive-value checks. Alloca
   - `security_invoker` read model: complete quantity × latest fresh Marketstack close
   - Current value is instrument currency only (EUR for CORE V1 ETFs)
   - No EUR/NOK conversion, no club aggregate, no cross-currency gain/loss
+  - Remains the EUR-only exact-quantity view. NOK estimates live in `member_estimated_positions_v1`
+
+- `fx_rates`
+  - Primary key: `id`
+  - Unique `(base_currency, quote_currency, provider, rate_date)`
+  - V1 pair is EUR/NOK only. `rate numeric(20, 8)` means 1 EUR = rate NOK
+  - Provider enum: `norges_bank`
+  - Clients have SELECT only. Ingest is `sync-fx-rates`
+
+- `latest_fx_rates` / `latest_fx_rate_status`
+  - Latest print per pair/provider plus `market_nav_freshness_v1`
+
+- `member_investment_lots_v1`
+  - `security_invoker` per-buy lot. `exact_quantity` is the stored member-reported units. `modelled_quantity` is derived and never written back
+  - Reference date is the cycle Investment Day
+
+- `member_estimated_positions_v1`
+  - Own-position estimated NOK value and `valuation_confidence` (`exact` / `mixed` / `estimated` / `unavailable`)
+
+- `member_estimated_portfolio_v1` / `member_estimated_portfolios_v1` / `member_portfolio_history_v1`
+  - Caller-owned curated ETF totals and history. Legacy clubs return `modelling_scope = legacy`
+
+- `club_estimated_portfolio_v1` / `club_portfolio_history_v1`
+  - Club-wide money is null unless the caller is an active member and at least three distinct members have contributed
 
 - `market_data_instrument_mappings`
   - Primary key: `id`

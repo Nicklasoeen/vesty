@@ -13,7 +13,7 @@ interface ClubListItemProps {
   clubName: string;
   members: readonly AvatarPerson[];
   portfolioValueNok: number;
-  returnPercentage: number;
+  returnPercentage: number | null;
   history: PortfolioHistoryPoint[];
   onPress?: () => void;
 }
@@ -50,9 +50,15 @@ export function ClubListItem({
 
       <View style={styles.valueBlock}>
         <AppText variant="bodyStrong">{formatNok(portfolioValueNok)}</AppText>
-        <AppText variant="meta" color="positive" style={{ marginTop: 2 }}>
-          {formatSignedPercentage(returnPercentage)}
-        </AppText>
+        {returnPercentage != null ? (
+          <AppText
+            variant="meta"
+            color={returnPercentage < 0 ? 'negative' : 'positive'}
+            style={{ marginTop: 2 }}
+          >
+            {formatSignedPercentage(returnPercentage)}
+          </AppText>
+        ) : null}
       </View>
     </Pressable>
   );
