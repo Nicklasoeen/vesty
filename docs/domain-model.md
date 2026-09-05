@@ -1187,7 +1187,7 @@ The domain may compare those observations with a `MemberCycleParticipation`. It 
 
 ### Portfolio and market data
 
-V1 stores verified provider mappings and NAV observations in `market_data_instrument_mappings` and `market_prices`. Ingest is server-side only. Current market value still requires real quantity × latest NAV; Investment Day V1 rows usually have null quantity, so Club/Home current-value UI remains demo until quantity exists. Historical portfolio value additionally requires chronological holdings and historical NAVs. See `docs/market-data.md`. Prices do not alter immutable governance history.
+V1 stores verified provider mappings and NAV observations in `market_data_instrument_mappings` and `market_prices`. Ingest is server-side only. Production ingest is intended to be Twelve Data after a real key proves all four TestFlight funds; those mappings stay inactive until that proof. Yahoo unofficial remains probe-only. Current market value still requires real quantity × latest NAV; Investment Day V1 rows usually have null quantity, so Club/Home current-value UI remains demo until quantity exists. Historical portfolio value additionally requires chronological holdings and historical NAVs. See `docs/market-data.md`. Prices do not alter immutable governance history.
 
 ### Verified transactions
 

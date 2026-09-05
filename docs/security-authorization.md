@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document describes the direct-client authorization boundary implemented by `supabase/migrations/20260903202501_add_rls_authorization_v1.sql`, the Create / Join Club trusted RPCs in `supabase/migrations/20260904110626_add_club_create_join_v1.sql`, the Investment Day transaction RPCs in `supabase/migrations/20260905075952_add_instruments_transactions_v1.sql`, and the market-data tables in `supabase/migrations/20260905084718_add_market_data_v1.sql`. Product and relational invariants remain authoritative in `docs/domain-model.md` and `docs/database-schema.md`.
+This document describes the direct-client authorization boundary implemented by `supabase/migrations/20260903202501_add_rls_authorization_v1.sql`, the Create / Join Club trusted RPCs in `supabase/migrations/20260904110626_add_club_create_join_v1.sql`, the Investment Day transaction RPCs in `supabase/migrations/20260905075952_add_instruments_transactions_v1.sql`, and the market-data tables in `supabase/migrations/20260905084718_add_market_data_v1.sql` and `supabase/migrations/20260905090042_add_market_data_twelve_data_v1.sql`. Product and relational invariants remain authoritative in `docs/domain-model.md` and `docs/database-schema.md`.
 
 ## Authorization Principles
 
@@ -54,7 +54,7 @@ Investment Day coordination:
 - `member_cycle_participations`: only the owning active membership may read the raw row. While its cycle is open, the owner may update only member-report fields. Creation, snapshot fields, verification fields, and deletion are blocked.
 - `member_investment_transactions`: only the owning active membership may read rows. Direct insert, update, and delete are revoked. Writes go through `confirm_investment_day_v1`.
 - `member_investment_positions`: a `security_invoker` read model over those transactions, so another member's cost basis is not visible.
-- `market_data_instrument_mappings`, `market_prices`, and `latest_market_prices`: any authenticated user may read shared catalog NAV/mappings. Anonymous users have no access. Clients cannot INSERT, UPDATE, or DELETE. Ingest is the `sync-market-data` Edge Function, which requires a secret API key and writes with the service role. Provider API secrets are never `EXPO_PUBLIC_*` values.
+- `market_data_instrument_mappings`, `market_prices`, `latest_market_prices`, and `latest_market_price_status`: any authenticated user may read shared catalog NAV/mappings and freshness metadata. Anonymous users have no access. Clients cannot INSERT, UPDATE, or DELETE mappings or prices. Ingest is the `sync-market-data` Edge Function, which requires a secret API key and writes with the service role. `TWELVE_DATA_API_KEY` is server-only and never an `EXPO_PUBLIC_*` value. Yahoo unofficial ingest is an explicit probe, not the production default.
 
 ## Sensitive Monetary Data
 

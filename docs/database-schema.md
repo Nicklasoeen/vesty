@@ -13,6 +13,7 @@ The schema is created by:
 - `supabase/migrations/20260904172137_add_preferred_broker_v1.sql`
 - `supabase/migrations/20260905075952_add_instruments_transactions_v1.sql`
 - `supabase/migrations/20260905084718_add_market_data_v1.sql`
+- `supabase/migrations/20260905090042_add_market_data_twelve_data_v1.sql`
 
 It uses the Supabase-managed `auth.users` table only as the authentication identity boundary. It does not duplicate credentials, sessions, or authentication state.
 
@@ -197,8 +198,9 @@ Money uses signed PostgreSQL `bigint` columns with positive-value checks. Alloca
   - Primary key: `id`
   - Maps one InvestmentTarget to one provider instrument id
   - At most one active mapping per `(investment_target_id, provider)`
-  - Yahoo unofficial mappings are active because latest and historical NAV were proven by live request
-  - Twelve Data mappings exist for catalog identity but stay inactive until a real key proves NAV
+  - At most one active mapping per `investment_target_id` (authoritative ingest)
+  - Yahoo unofficial mappings remain active only as a probe source until Twelve Data NAV is proven
+  - Twelve Data mappings exist for catalog identity but stay inactive until a real key proves NAV for all four funds
 
 - `market_prices`
   - Primary key: `id`
@@ -211,6 +213,11 @@ Money uses signed PostgreSQL `bigint` columns with positive-value checks. Alloca
 - `latest_market_prices`
   - `security_invoker` view of the newest persisted observation per target, provider, and price type
   - Exposes `price_date` so callers can treat the value as delayed NAV, not a live quote
+
+- `latest_market_price_status`
+  - `security_invoker` view over `latest_market_prices` plus `market_nav_freshness_v1`
+  - Freshness is `fresh`, `stale`, or `unavailable`. Weekends and a short holiday gap are not provider failure
+  - Not a valuation and not wired into Home/Club UI
 
 ## Concurrent Proposal Rule
 
@@ -260,6 +267,9 @@ PostgreSQL directly enforces:
 - at most one active saving-plan record per membership
 - one participation per cycle/membership
 - one buy (or later type) per membership/cycle/target in `member_investment_transactions`
+- one active market-data mapping per InvestmentTarget
+- one active market-data mapping per InvestmentTarget and provider
+- one NAV observation per target, provider, price type, and as-of date
 
 ## Important CHECK Constraints
 
@@ -302,6 +312,8 @@ Partial and composite indexes support realistic V1 operations:
 - cycles by club/date, schedule, and strategy
 - active/effective saving plans by membership
 - participation lookup by membership and source plan
+- one active market-data mapping per target and per target/provider
+- market-price lookup by target, price type, and as-of date
 
 Primary-key and unique-constraint indexes cover direct proposal, electorate, vote, cycle-participation, allocation, and revision lookups without redundant secondary indexes.
 

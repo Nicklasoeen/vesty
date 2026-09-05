@@ -1,0 +1,40 @@
+-- EXAMPLE ONLY. Do not apply locally and do not treat this as a live cron job.
+-- Hosted Supabase can invoke sync-market-data daily after a remote project exists.
+--
+-- sync-market-data uses withSupabase({ auth: 'secret' }). A publishable key
+-- returns 401. Store the secret API key in Vault, never in this file.
+--
+-- Prerequisites on the hosted project:
+--   supabase secrets set TWELVE_DATA_API_KEY=...
+--   supabase secrets set MARKET_DATA_PROVIDER=twelve_data
+--   supabase functions deploy sync-market-data
+--   create extension if not exists pg_cron;
+--   create extension if not exists pg_net;
+--
+-- Daily weekday NAV refresh around 18:15 Europe/Oslo (16:15 UTC in winter):
+
+-- select vault.create_secret('https://<project-ref>.supabase.co', 'project_url');
+-- select vault.create_secret('<SUPABASE_SECRET_KEY>', 'sync_market_data_secret_key');
+--
+-- select cron.schedule(
+--   'sync-market-data-daily',
+--   '15 16 * * *',
+--   $$
+--   select net.http_post(
+--     url := (select decrypted_secret from vault.decrypted_secrets where name = 'project_url')
+--       || '/functions/v1/sync-market-data',
+--     headers := jsonb_build_object(
+--       'Content-Type', 'application/json',
+--       'apikey', (select decrypted_secret from vault.decrypted_secrets where name = 'sync_market_data_secret_key')
+--     ),
+--     body := '{}'::jsonb,
+--     timeout_milliseconds := 60000
+--   ) as request_id;
+--   $$
+-- );
+--
+-- Optional conservative backfill, run once after activation:
+-- curl -sS -X POST "$SUPABASE_URL/functions/v1/sync-market-data" \
+--   --header "apikey: $SUPABASE_SECRET_KEY" \
+--   --header "Content-Type: application/json" \
+--   --data '{"backfill":true}'

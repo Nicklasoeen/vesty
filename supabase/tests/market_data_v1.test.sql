@@ -175,6 +175,50 @@ select extensions.is(
   'Twelve Data mappings stay inactive until NAV coverage is proven'
 );
 
+select extensions.is(
+  (
+    select count(*)
+    from public.market_data_instrument_mappings
+    where investment_target_id in (
+      '31000000-0000-4000-8000-000000000001',
+      '31000000-0000-4000-8000-000000000002',
+      '31000000-0000-4000-8000-000000000003',
+      '31000000-0000-4000-8000-000000000004'
+    )
+      and active
+  ),
+  4::bigint,
+  'Exactly one active mapping exists per TestFlight target'
+);
+
+select extensions.is(
+  tests.statement_sqlstate($sql$
+    update public.market_data_instrument_mappings
+    set active = true
+    where id = '41000000-0000-4000-8000-000000000011';
+  $sql$),
+  '23505',
+  'A second active mapping for the same target is rejected'
+);
+
+select extensions.is(
+  public.market_nav_freshness_v1(date '2026-09-04', timestamptz '2026-09-05 12:00:00+00'),
+  'fresh',
+  'Friday NAV stays fresh over the weekend'
+);
+
+select extensions.is(
+  public.market_nav_freshness_v1(date '2026-08-20', timestamptz '2026-09-05 12:00:00+00'),
+  'stale',
+  'NAV older than the weekday plus holiday buffer is stale'
+);
+
+select extensions.is(
+  public.market_nav_freshness_v1(null::date, timestamptz '2026-09-05 12:00:00+00'),
+  'unavailable',
+  'Missing NAV is unavailable rather than a fake price'
+);
+
 insert into public.market_prices (
   investment_target_id,
   provider,
@@ -350,6 +394,54 @@ select extensions.is(
   $sql$),
   '42501',
   'Authenticated mobile users cannot delete market prices'
+);
+
+select extensions.is(
+  tests.statement_sqlstate($sql$
+    insert into public.market_data_instrument_mappings (
+      investment_target_id,
+      provider,
+      provider_instrument_id,
+      active
+    )
+    values (
+      '31000000-0000-4000-8000-000000000002',
+      'twelve_data',
+      '0P00000MVB',
+      true
+    );
+  $sql$),
+  '42501',
+  'Authenticated mobile users cannot insert provider mappings'
+);
+
+select extensions.is(
+  tests.statement_sqlstate($sql$
+    update public.market_data_instrument_mappings
+    set active = true
+    where provider = 'twelve_data';
+  $sql$),
+  '42501',
+  'Authenticated mobile users cannot activate provider mappings'
+);
+
+select extensions.is(
+  tests.statement_sqlstate($sql$
+    delete from public.market_data_instrument_mappings
+    where provider = 'yahoo_unofficial';
+  $sql$),
+  '42501',
+  'Authenticated mobile users cannot delete provider mappings'
+);
+
+select extensions.ok(
+  (
+    select freshness in ('fresh', 'stale', 'unavailable')
+    from public.latest_market_price_status
+    where investment_target_id = '31000000-0000-4000-8000-000000000001'
+      and provider = 'yahoo_unofficial'
+  ),
+  'Authenticated users can read freshness metadata for persisted NAV'
 );
 
 select extensions.is(

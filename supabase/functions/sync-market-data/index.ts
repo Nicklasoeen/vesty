@@ -2,13 +2,19 @@ import '@supabase/functions-js/edge-runtime.d.ts';
 
 import { withSupabase } from '@supabase/server';
 
-import { ProviderSyncError } from '../_shared/market-data/types.ts';
-import { fetchHistory, fetchLatest } from '../_shared/market-data/yahooUnofficial.ts';
+import { classifyNavFreshness } from '../_shared/market-data/freshness.ts';
+import {
+  assertKnownProvider,
+  fetchHistory,
+  fetchLatest,
+  resolveInstrument,
+} from '../_shared/market-data/provider.ts';
+import { ProviderSyncError, type MarketDataProvider } from '../_shared/market-data/types.ts';
 
 interface MappingRow {
   id: string;
   investment_target_id: string;
-  provider: 'yahoo_unofficial' | 'twelve_data';
+  provider: MarketDataProvider;
   provider_instrument_id: string;
   active: boolean;
   investment_targets:
@@ -20,17 +26,22 @@ interface MappingRow {
 interface SyncRequest {
   backfill?: boolean;
   investment_target_id?: string;
+  probe?: string;
 }
 
 interface InstrumentReport {
   investment_target_id: string;
   name: string;
   isin: string | null;
+  provider: MarketDataProvider;
+  provider_instrument_id: string;
+  provider_name: string | null;
   status: 'upserted' | 'skipped' | 'failed';
   observation_count: number;
   latest_price_date: string | null;
   latest_price: string | null;
   currency: string | null;
+  freshness: ReturnType<typeof classifyNavFreshness> | null;
   error_code: string | null;
   error_message: string | null;
 }
@@ -45,6 +56,31 @@ function unwrapTarget(value: MappingRow['investment_targets']) {
 
 function json(status: number, body: unknown) {
   return Response.json(body, { status });
+}
+
+function selectedProvider(body: SyncRequest): MarketDataProvider {
+  if (body.probe) {
+    const probe = assertKnownProvider(body.probe);
+    if (probe !== 'yahoo_unofficial') {
+      throw new ProviderSyncError('unknown_instrument', 'Only yahoo_unofficial is a probe provider');
+    }
+
+    return probe;
+  }
+
+  return assertKnownProvider(Deno.env.get('MARKET_DATA_PROVIDER') ?? 'twelve_data');
+}
+
+function providerOptions(provider: MarketDataProvider) {
+  if (provider === 'twelve_data') {
+    return { apiKey: Deno.env.get('TWELVE_DATA_API_KEY') ?? '' };
+  }
+
+  return {};
+}
+
+async function pauseBetweenRequests() {
+  await new Promise((resolve) => setTimeout(resolve, 800));
 }
 
 export default {
@@ -63,13 +99,30 @@ export default {
       }
     }
 
+    let provider: MarketDataProvider;
+    try {
+      provider = selectedProvider(body);
+    } catch (error) {
+      return json(400, {
+        error: error instanceof ProviderSyncError ? error.code : 'unknown_instrument',
+        message: error instanceof Error ? error.message : 'Unknown provider',
+      });
+    }
+
+    if (provider === 'twelve_data' && !(Deno.env.get('TWELVE_DATA_API_KEY') ?? '').trim()) {
+      return json(503, {
+        error: 'missing_provider_key',
+        message: 'TWELVE_DATA_API_KEY must be set in the Edge Function environment',
+      });
+    }
+
     const backfill = body.backfill === true;
     let query = ctx.supabaseAdmin
       .from('market_data_instrument_mappings')
       .select(
         'id, investment_target_id, provider, provider_instrument_id, active, investment_targets(currency, isin, name)',
       )
-      .eq('provider', 'yahoo_unofficial')
+      .eq('provider', provider)
       .eq('active', true);
 
     if (body.investment_target_id) {
@@ -82,18 +135,27 @@ export default {
     }
 
     const reports: InstrumentReport[] = [];
+    const options = providerOptions(provider);
+    const mappings = (mappingsResult.data ?? []) as MappingRow[];
 
-    for (const mapping of (mappingsResult.data ?? []) as MappingRow[]) {
+    for (const [index, mapping] of mappings.entries()) {
+      if (index > 0) {
+        await pauseBetweenRequests();
+      }
       const target = unwrapTarget(mapping.investment_targets);
       const baseReport: InstrumentReport = {
         investment_target_id: mapping.investment_target_id,
         name: target?.name ?? '',
         isin: target?.isin ?? null,
+        provider,
+        provider_instrument_id: mapping.provider_instrument_id,
+        provider_name: null,
         status: 'failed',
         observation_count: 0,
         latest_price_date: null,
         latest_price: null,
         currency: target?.currency ?? null,
+        freshness: null,
         error_code: null,
         error_message: null,
       };
@@ -108,25 +170,53 @@ export default {
       }
 
       try {
+        if (target.isin) {
+          const resolved = await resolveInstrument(provider, target.isin, {
+            ...options,
+            expectedCurrency: target.currency,
+          });
+          if (resolved) {
+            baseReport.provider_name = resolved.name;
+            if (resolved.providerInstrumentId !== mapping.provider_instrument_id) {
+              throw new ProviderSyncError(
+                'unknown_instrument',
+                `Provider symbol ${resolved.providerInstrumentId} does not match mapping ${mapping.provider_instrument_id}`,
+              );
+            }
+          }
+        }
+
         const history = backfill
-          ? await fetchHistory(mapping.provider_instrument_id, {
+          ? await fetchHistory(provider, mapping.provider_instrument_id, {
+              ...options,
               expectedCurrency: target.currency,
             })
-          : {
-              providerInstrumentId: mapping.provider_instrument_id,
-              currency: target.currency,
-              observations: [
-                (
-                  await fetchLatest(mapping.provider_instrument_id, {
-                    expectedCurrency: target.currency,
-                  })
-                ).observation,
-              ],
-            };
+          : await (async () => {
+              const latest = await fetchLatest(provider, mapping.provider_instrument_id, {
+                ...options,
+                expectedCurrency: target.currency,
+              });
+              return {
+                providerInstrumentId: latest.providerInstrumentId,
+                currency: latest.currency,
+                observations: [latest.observation],
+              };
+            })();
+
+        if (history.providerInstrumentId !== mapping.provider_instrument_id) {
+          throw new ProviderSyncError(
+            'unknown_instrument',
+            `Fetched symbol ${history.providerInstrumentId} does not match mapping ${mapping.provider_instrument_id}`,
+          );
+        }
+
+        if (history.observations.length === 0) {
+          throw new ProviderSyncError('missing_price', 'Provider returned no persistable NAV');
+        }
 
         const rows = history.observations.map((observation) => ({
           investment_target_id: mapping.investment_target_id,
-          provider: 'yahoo_unofficial' as const,
+          provider,
           price_date: observation.priceDate,
           price: observation.price,
           currency: observation.currency,
@@ -156,6 +246,7 @@ export default {
           latest_price_date: latest.priceDate,
           latest_price: latest.price,
           currency: latest.currency,
+          freshness: classifyNavFreshness(latest.priceDate),
         });
       } catch (error) {
         reports.push({
@@ -168,9 +259,17 @@ export default {
     }
 
     return json(200, {
-      provider: 'yahoo_unofficial',
+      provider,
       backfill,
-      license: 'unofficial_http_not_a_redistribution_agreement',
+      license:
+        provider === 'twelve_data'
+          ? 'twelve_data_api_subscriber_access'
+          : 'unofficial_http_probe_only',
+      mapping_count: mappings.length,
+      note:
+        provider === 'twelve_data' && mappings.length === 0
+          ? 'No active twelve_data mappings. Do not activate until live NAV coverage is proven for all four funds.'
+          : undefined,
       instruments: reports,
     });
   }),

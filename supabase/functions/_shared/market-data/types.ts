@@ -25,11 +25,20 @@ export interface ProviderHistoryResult {
 export type ProviderFailureCode =
   | 'timeout'
   | 'unavailable'
+  | 'unauthorized'
   | 'malformed'
   | 'rate_limited'
   | 'unknown_instrument'
   | 'currency_mismatch'
-  | 'missing_price';
+  | 'missing_price'
+  | 'stale';
+
+export interface ResolveInstrumentResult {
+  providerInstrumentId: string;
+  name: string | null;
+  currency: string;
+  isin: string | null;
+}
 
 export class ProviderSyncError extends Error {
   readonly code: ProviderFailureCode;
