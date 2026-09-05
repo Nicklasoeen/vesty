@@ -42,6 +42,9 @@ export function OverallPerformanceSection({
         {' \u00B7 '}
         {formatSignedPercentage(gainPercentage)}
       </AppText>
+      <AppText variant="meta" color="secondary" style={{ marginTop: spacing.xs }}>
+        Demo market value. EUR/NOK conversion is not available yet.
+      </AppText>
 
       <View style={{ marginTop: spacing.md }}>
         <HomePerformanceChart historyByRange={historyByRange} defaultRange={defaultRange} />

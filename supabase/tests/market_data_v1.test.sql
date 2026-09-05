@@ -412,7 +412,12 @@ values (
   168.06000000,
   'EUR',
   'close'
-);
+)
+on conflict on constraint market_prices_observation_key
+do update
+set
+  price = excluded.price,
+  fetched_at = now();
 
 insert into public.market_prices (
   investment_target_id,
@@ -478,6 +483,10 @@ select extensions.is(
     from public.market_prices
     where investment_target_id = '31000000-0000-4000-8000-000000000011'
       and provider = 'marketstack'
+      and price_date = date '2026-09-03'
+      and price = 168.06000000
+      and currency = 'EUR'
+      and price_type = 'close'
   ),
   1::bigint,
   'Existing good Marketstack data survives a later validation failure'

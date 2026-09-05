@@ -15,13 +15,15 @@ Implemented in this milestone (catalog + package selection only):
 - UI copy uses relative language (broadest mix / more US / more tech). No Low/Medium/High risk, Recommended, Safe, or projected returns.
 - Legacy KLP/DNB fixture targets (`…000001`–`004`) stay active. Existing StrategyVersion snapshots are not rewritten.
 
-Not in the package-selection milestone; added later for ingest only:
+Also shipped:
 
-- Marketstack adapter and five allowlisted mappings (`VWCE.DE`, `EUNK.DE`, `IS3N.DE`, `SXR8.DE`, `SXRV.DE`). No live price UI.
+- Marketstack EOD ingest for the five allowlisted mappings (`VWCE.DE`, `EUNK.DE`, `IS3N.DE`, `SXR8.DE`, `SXRV.DE`).
+- Investment Day quantity capture for curated packages via `confirm_investment_day_v2`.
+- Position-level EUR current value = member-reported quantity × latest fresh Marketstack close.
 
 Still not shipped:
 
-- Spotlight, sliders, instrument search, broker APIs, portfolio value, or price graphs.
+- Spotlight, sliders, instrument search, broker APIs, EUR/NOK FX, truthful NOK portfolio totals, or gain/loss.
 
 Mobile display copy and target ids also live in `apps/mobile/src/features/clubs/curatedInvestmentPackages.ts`. Database rows remain authoritative for genesis allocations.
 
@@ -359,7 +361,7 @@ Implemented:
 3. `public.create_club` accepts `p_package_id` only. `private.resolve_curated_package_allocations` builds the allocation JSON. Unknown or inactive ids raise `vesty.invalid_package`.
 4. Snapshot `target_name` / `target_kind` at allocation time (already present).
 5. Marketstack mappings are seeded for the five CORE ETFs only. Approved symbols are `VWCE.DE`, `EUNK.DE`, `IS3N.DE`, `SXR8.DE`, `SXRV.DE`. The adapter never searches or guesses.
-6. FX is still deferred. V1 shows weights and NOK cost basis only.
+6. FX is still deferred. NOK cost basis and EUR current value are not compared. Club/Home NOK totals stay demo.
 
 KLP/DNB targets stay in the catalog. New genesis no longer uses those four funds.
 

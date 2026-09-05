@@ -15,6 +15,15 @@ import { useTheme } from '@/theme';
 import { AppText, Button, Screen } from '@/ui';
 
 import { InvestmentRow, type InvestRowStep } from './InvestmentRow';
+import {
+  buildExecutionReports,
+  canConfirmQuantityReports,
+  confirmationModeForTargetIds,
+  parseOptionalExecutionPriceInput,
+  parseQuantityInput,
+  quantityFieldFromRaw,
+  type QuantityFieldState,
+} from './investmentDayReporting';
 import type { InvestmentDayPlan, InvestTargetRow } from './types';
 import { useInvestmentDay } from './useInvestmentDay';
 
@@ -36,9 +45,12 @@ function rowsFromPlan(plan: InvestmentDayPlan): InvestTargetRow[] {
       return {
         id: allocation.investmentTargetId,
         label: allocation.name,
+        ticker: allocation.ticker,
         secondaryLabel: instrumentSecondaryLabel(allocation.kind, allocation.instrumentCurrency),
         allocationBps: allocation.allocationBps,
         amountMinor: transaction?.amountMinor ?? allocation.amountMinor,
+        quantity: transaction?.quantity ?? null,
+        executionUnitPrice: transaction?.executionUnitPrice ?? null,
       };
     });
 }
@@ -58,11 +70,17 @@ export function InvestScreen() {
     selectedClub?.clubId ?? null,
   );
   const [rowSteps, setRowSteps] = useState<Readonly<Record<string, InvestRowStep>>>({});
+  const [quantityFields, setQuantityFields] = useState<Readonly<Record<string, QuantityFieldState>>>({});
+  const [priceFields, setPriceFields] = useState<Readonly<Record<string, QuantityFieldState>>>({});
   const [brokerPickerOpen, setBrokerPickerOpen] = useState(false);
   const [confirmError, setConfirmError] = useState<{ cycleId: string; message: string } | null>(null);
 
   const targets = useMemo(() => (plan ? rowsFromPlan(plan) : []), [plan]);
   const cycleId = plan?.cycleId ?? null;
+  const confirmationMode = useMemo(
+    () => confirmationModeForTargetIds(targets.map((target) => target.id)),
+    [targets],
+  );
 
   const stepFor = useCallback(
     (id: string): InvestRowStep => {
@@ -100,12 +118,83 @@ export function InvestScreen() {
     setRowSteps((current) => ({ ...current, [`${cycleId}:${id}`]: 'done' }));
   }, [cycleId]);
 
+  const fieldKey = useCallback(
+    (id: string): string | null => (cycleId ? `${cycleId}:${id}` : null),
+    [cycleId],
+  );
+
+  const onQuantityChange = useCallback(
+    (id: string, value: string) => {
+      const key = fieldKey(id);
+      if (!key) {
+        return;
+      }
+      const parsed = parseQuantityInput(value);
+      setQuantityFields((current) => ({
+        ...current,
+        [key]: {
+          ...parsed,
+          error: value.trim() === '' ? null : parsed.error,
+        },
+      }));
+    },
+    [fieldKey],
+  );
+
+  const onExecutionPriceChange = useCallback(
+    (id: string, value: string) => {
+      const key = fieldKey(id);
+      if (!key) {
+        return;
+      }
+      setPriceFields((current) => ({
+        ...current,
+        [key]: parseOptionalExecutionPriceInput(value),
+      }));
+    },
+    [fieldKey],
+  );
+
+  const quantityStateByTarget = useMemo(() => {
+    const next: Record<string, QuantityFieldState> = {};
+    for (const target of targets) {
+      const key = fieldKey(target.id);
+      next[target.id] = (key && quantityFields[key]) || quantityFieldFromRaw(target.quantity ?? '');
+    }
+    return next;
+  }, [fieldKey, quantityFields, targets]);
+
+  const priceStateByTarget = useMemo(() => {
+    const next: Record<string, QuantityFieldState> = {};
+    for (const target of targets) {
+      const key = fieldKey(target.id);
+      next[target.id] = (key && priceFields[key]) || quantityFieldFromRaw(target.executionUnitPrice ?? '');
+    }
+    return next;
+  }, [fieldKey, priceFields, targets]);
+
+  const quantityReady = canConfirmQuantityReports(
+    targets.map((target) => target.id),
+    quantityStateByTarget,
+    priceStateByTarget,
+  );
+
   const onConfirm = useCallback(async () => {
     if (isConfirming) {
       return;
     }
     setConfirmError(null);
     try {
+      if (confirmationMode === 'quantity_required') {
+        await confirm(
+          buildExecutionReports(
+            targets.map((target) => target.id),
+            quantityStateByTarget,
+            priceStateByTarget,
+          ),
+        );
+        return;
+      }
       await confirm();
     } catch (caught) {
       setConfirmError({
@@ -113,7 +202,15 @@ export function InvestScreen() {
         message: caught instanceof Error ? caught.message : 'Unable to confirm investments right now',
       });
     }
-  }, [confirm, cycleId, isConfirming]);
+  }, [
+    confirm,
+    confirmationMode,
+    cycleId,
+    isConfirming,
+    priceStateByTarget,
+    quantityStateByTarget,
+    targets,
+  ]);
 
   const phase = plan?.isCompleted ? 'completed' : 'today';
 
@@ -159,11 +256,17 @@ export function InvestScreen() {
             plan={plan}
             targets={targets}
             preferredBroker={preferredBroker}
+            confirmationMode={confirmationMode}
             stepFor={stepFor}
             doneCount={doneCount}
             allDone={allDone}
+            quantityReady={quantityReady}
+            quantityStateByTarget={quantityStateByTarget}
+            priceStateByTarget={priceStateByTarget}
             isConfirming={isConfirming}
             confirmError={confirmError?.cycleId === cycleId ? confirmError.message : null}
+            onQuantityChange={onQuantityChange}
+            onExecutionPriceChange={onExecutionPriceChange}
             onOpenBroker={openBroker}
             onMarkDone={markDone}
             onConfirm={() => {
@@ -190,11 +293,17 @@ function TodayBody({
   plan,
   targets,
   preferredBroker,
+  confirmationMode,
   stepFor,
   doneCount,
   allDone,
+  quantityReady,
+  quantityStateByTarget,
+  priceStateByTarget,
   isConfirming,
   confirmError,
+  onQuantityChange,
+  onExecutionPriceChange,
   onOpenBroker,
   onMarkDone,
   onConfirm,
@@ -203,11 +312,17 @@ function TodayBody({
   plan: InvestmentDayPlan;
   targets: InvestTargetRow[];
   preferredBroker: PreferredBroker | null;
+  confirmationMode: 'quantity_required' | 'amount_only';
   stepFor: (id: string) => InvestRowStep;
   doneCount: number;
   allDone: boolean;
+  quantityReady: boolean;
+  quantityStateByTarget: Readonly<Record<string, QuantityFieldState>>;
+  priceStateByTarget: Readonly<Record<string, QuantityFieldState>>;
   isConfirming: boolean;
   confirmError: string | null;
+  onQuantityChange: (id: string, value: string) => void;
+  onExecutionPriceChange: (id: string, value: string) => void;
   onOpenBroker: (id: string) => void;
   onMarkDone: (id: string) => void;
   onConfirm: () => void;
@@ -215,6 +330,7 @@ function TodayBody({
 }) {
   const { spacing } = useTheme();
   const hasBroker = preferredBroker !== null;
+  const canConfirm = confirmationMode === 'quantity_required' ? quantityReady : allDone;
 
   return (
     <View>
@@ -236,16 +352,28 @@ function TodayBody({
         Your investments
       </AppText>
 
+      {confirmationMode === 'quantity_required' ? (
+        <AppText variant="body" color="secondary" style={{ marginBottom: spacing.sm }}>
+          Enter the number of units you purchased. You can find this in your broker after the trade
+          has completed.
+        </AppText>
+      ) : null}
+
       <Breakdown
         targets={targets}
         preferredBroker={preferredBroker}
-        showActions={hasBroker}
+        showActions={confirmationMode === 'quantity_required' || hasBroker}
+        confirmationMode={confirmationMode}
+        quantityStateByTarget={quantityStateByTarget}
+        priceStateByTarget={priceStateByTarget}
         stepFor={stepFor}
+        onQuantityChange={onQuantityChange}
+        onExecutionPriceChange={onExecutionPriceChange}
         onOpenBroker={onOpenBroker}
         onMarkDone={onMarkDone}
       />
 
-      {hasBroker ? null : (
+      {hasBroker || confirmationMode === 'quantity_required' ? null : (
         <View style={{ marginTop: spacing.xl }}>
           <AppText variant="bodyStrong">Choose a broker to continue</AppText>
           <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
@@ -264,10 +392,15 @@ function TodayBody({
 
       <View style={{ marginTop: spacing.xxl, paddingBottom: spacing.lg }}>
         <AppText variant="meta" color="secondary">
-          {doneCount} of {targets.length} completed
+          {confirmationMode === 'quantity_required'
+            ? quantityReady
+              ? `${targets.length} of ${targets.length} quantities entered`
+              : 'Enter units purchased for every ETF'
+            : `${doneCount} of ${targets.length} completed`}
         </AppText>
         <AppText variant="meta" color="secondary" style={{ marginTop: spacing.sm }}>
-          Reported by you. Broker verification is not available yet.
+          Reported by you. This does not mean Vesty placed the trade. Broker verification is not
+          available yet.
         </AppText>
         {confirmError ? (
           <AppText variant="meta" color="negative" style={{ marginTop: spacing.sm }} accessibilityLiveRegion="polite">
@@ -279,13 +412,15 @@ function TodayBody({
             label={isConfirming ? 'Confirming…' : 'Confirm investments'}
             variant="primary"
             block
-            disabled={!allDone || isConfirming}
+            disabled={!canConfirm || isConfirming}
             busy={isConfirming}
             onPress={onConfirm}
             accessibilityHint={
-              allDone
-                ? "Records that you completed today's planned investments. This is not broker verification."
-                : 'Available after every investment is marked as done'
+              canConfirm
+                ? 'Saves the units you purchased. This is not broker verification.'
+                : confirmationMode === 'quantity_required'
+                  ? 'Available after you enter units purchased for every ETF'
+                  : 'Available after every investment is marked as done'
             }
           />
         </View>
@@ -335,7 +470,12 @@ function CompletedBody({
         targets={targets}
         preferredBroker={null}
         showActions={false}
+        confirmationMode={confirmationModeForTargetIds(targets.map((target) => target.id))}
+        quantityStateByTarget={{}}
+        priceStateByTarget={{}}
         stepFor={() => 'done'}
+        onQuantityChange={() => undefined}
+        onExecutionPriceChange={() => undefined}
         onOpenBroker={() => undefined}
         onMarkDone={() => undefined}
       />
@@ -355,14 +495,24 @@ function Breakdown({
   targets,
   preferredBroker,
   showActions,
+  confirmationMode,
+  quantityStateByTarget,
+  priceStateByTarget,
   stepFor,
+  onQuantityChange,
+  onExecutionPriceChange,
   onOpenBroker,
   onMarkDone,
 }: {
   targets: InvestTargetRow[];
   preferredBroker: PreferredBroker | null;
   showActions: boolean;
+  confirmationMode: 'quantity_required' | 'amount_only';
+  quantityStateByTarget: Readonly<Record<string, QuantityFieldState>>;
+  priceStateByTarget: Readonly<Record<string, QuantityFieldState>>;
   stepFor: (id: string) => InvestRowStep;
+  onQuantityChange: (id: string, value: string) => void;
+  onExecutionPriceChange: (id: string, value: string) => void;
   onOpenBroker: (id: string) => void;
   onMarkDone: (id: string) => void;
 }) {
@@ -380,6 +530,13 @@ function Breakdown({
           step={stepFor(target.id)}
           showActions={showActions}
           showSeparator={index > 0}
+          confirmationMode={confirmationMode}
+          quantityValue={quantityStateByTarget[target.id]?.raw ?? ''}
+          quantityError={quantityStateByTarget[target.id]?.error ?? null}
+          executionPriceValue={priceStateByTarget[target.id]?.raw ?? ''}
+          executionPriceError={priceStateByTarget[target.id]?.error ?? null}
+          onQuantityChange={(value) => onQuantityChange(target.id, value)}
+          onExecutionPriceChange={(value) => onExecutionPriceChange(target.id, value)}
           onOpenBroker={() => onOpenBroker(target.id)}
           onMarkDone={() => onMarkDone(target.id)}
         />

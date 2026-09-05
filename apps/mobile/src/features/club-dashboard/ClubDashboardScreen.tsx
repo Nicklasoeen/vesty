@@ -15,6 +15,7 @@ import { useClubStrategy } from '@/features/clubs/useClubStrategy';
 import type { ClubSummary } from '@/features/clubs/types';
 import { useOwnPositions } from '@/features/invest/useOwnPositions';
 import { formatNok, formatNokFromMinor, formatSignedNok, formatSignedPercentage } from '@/lib/currency';
+import { formatEuroDecimal, formatQuantityLabel } from '@/lib/decimalDisplay';
 import { instrumentSecondaryLabel } from '@/lib/instrumentLabels';
 import { BOTTOM_NAVIGATION_HEIGHT, BottomNavigation } from '@/navigation/BottomNavigation';
 import { useAppNavigation } from '@/navigation/useAppNavigation';
@@ -231,18 +232,51 @@ function PortfolioSummary({ clubId }: { clubId: string }) {
             {formatNokFromMinor(ownCostBasisMinor)}
           </AppText>
           <AppText variant="meta" color="secondary" style={{ marginTop: 2 }}>
-            Reported cost basis. Not current market value.
+            Reported NOK cost basis. EUR current value is shown only when quantity and a fresh
+            Marketstack close are both available. Gain/loss is unavailable until FX exists.
           </AppText>
           <View style={{ marginTop: spacing.md }}>
             {positions.map((position) => (
               <View key={position.investmentTargetId} style={{ marginTop: spacing.sm }}>
-                <AppText variant="body">{position.name}</AppText>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <AppText variant="body">{position.ticker ?? position.name}</AppText>
+                {position.ticker ? (
                   <AppText variant="meta" color="secondary">
-                    {instrumentSecondaryLabel(position.kind, position.currency)}
+                    {position.name}
                   </AppText>
-                  <AppText variant="meta">{formatNokFromMinor(position.totalInvestedMinor)}</AppText>
-                </View>
+                ) : (
+                  <AppText variant="meta" color="secondary">
+                    {instrumentSecondaryLabel(position.kind, position.contributionCurrency)}
+                  </AppText>
+                )}
+                {position.totalQuantity && position.quantityStatus === 'complete' ? (
+                  <AppText variant="meta" color="secondary">
+                    {formatQuantityLabel(position.totalQuantity)}
+                  </AppText>
+                ) : (
+                  <AppText variant="meta" color="secondary">
+                    Quantity not reported
+                  </AppText>
+                )}
+                {position.valuationStatus === 'available'
+                && position.latestPrice
+                && position.currentValue
+                && position.currentValueCurrency === 'EUR' ? (
+                  <>
+                    <AppText variant="meta" color="secondary">
+                      {formatEuroDecimal(position.latestPrice)}
+                    </AppText>
+                    <AppText variant="bodyStrong">
+                      {formatEuroDecimal(position.currentValue)} current value
+                    </AppText>
+                  </>
+                ) : position.totalQuantity && position.quantityStatus === 'complete' ? (
+                  <AppText variant="meta" color="secondary">
+                    Current value unavailable
+                  </AppText>
+                ) : null}
+                <AppText variant="meta">
+                  {formatNokFromMinor(position.totalInvestedMinor)} invested
+                </AppText>
               </View>
             ))}
           </View>

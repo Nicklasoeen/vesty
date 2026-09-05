@@ -578,12 +578,13 @@ V1 member actions produce `MEMBER_REPORTED` outcomes and remain unverified. Whil
 
 **Invariants:**
 
-- V1 writes `BUY` only. Quantity and unit price stay null unless a later lot/price flow supplies them. They are never derived from amount.
+- V1 writes `BUY` only. Quantity is member-reported on the curated ETF path and stays null on legacy amount-only rows. Quantity is never derived from amount or from a later market price.
 - Amount currency is the club base currency: the reported contribution, not an FX-converted instrument purchase.
+- Optional execution unit price is instrument currency (EUR for CORE V1 ETFs), not club-base øre.
 - At most one V1 buy exists per membership, cycle, and target.
-- Ordinary UX does not mutate a finalized cycle's transactions.
-- Exact transaction amounts and derived position sizes are private to the owning active membership. Club owners do not automatically see them.
-- Positions are derived cost basis. No current market value is stored.
+- Ordinary UX does not mutate a finalized quantity once stored.
+- Exact transaction amounts, quantities, and derived position sizes are private to the owning active membership. Club owners do not automatically see them.
+- Positions are derived NOK cost basis plus optional complete quantity. Current EUR value is a read model over quantity × latest fresh Marketstack close. No cross-currency gain/loss.
 
 **Does not own:** Broker execution, market prices, FX, or club-level holdings.
 
@@ -1187,7 +1188,7 @@ The domain may compare those observations with a `MemberCycleParticipation`. It 
 
 ### Portfolio and market data
 
-V1 stores verified provider mappings and NAV observations in `market_data_instrument_mappings` and `market_prices`. Ingest is server-side only. Production ingest is intended to be Twelve Data after a real key proves all four TestFlight funds; those mappings stay inactive until that proof. Yahoo unofficial remains probe-only. Current market value still requires real quantity × latest NAV; Investment Day V1 rows usually have null quantity, so Club/Home current-value UI remains demo until quantity exists. Historical portfolio value additionally requires chronological holdings and historical NAVs. See `docs/market-data.md`. Prices do not alter immutable governance history.
+V1 stores verified provider mappings and price observations in `market_data_instrument_mappings` and `market_prices`. Ingest is server-side only. Curated V1 ETFs use allowlisted Marketstack EOD closes. Twelve Data fund NAV remains unproven; Yahoo unofficial remains probe-only. Position current value is quantity × latest fresh Marketstack close in EUR only. Club/Home NOK aggregates stay demo because EUR/NOK FX is not implemented. Historical portfolio value additionally requires chronological holdings and historical closes. See `docs/market-data.md`. Prices do not alter immutable governance history.
 
 ### Verified transactions
 

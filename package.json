@@ -19,7 +19,7 @@
     "supabase:status": "supabase status",
     "test:db": "supabase test db --local supabase/tests",
     "test:market-data": "node --experimental-strip-types --test supabase/functions/_shared/market-data/*.test.ts",
-    "test:packages": "node --experimental-strip-types --test apps/mobile/src/features/clubs/*.test.ts"
+    "test:packages": "node --experimental-strip-types --test apps/mobile/src/features/clubs/*.test.ts apps/mobile/src/features/invest/*.test.ts apps/mobile/src/lib/*.test.ts"
   },
   "devDependencies": {
     "supabase": "2.116.0"

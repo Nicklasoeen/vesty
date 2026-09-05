@@ -8,6 +8,13 @@ const PRODUCT_MESSAGES: Record<string, string> = {
   'vesty.amount_invalid': 'Unable to confirm investments right now',
   'vesty.invalid_target': 'Unable to confirm investments right now',
   'vesty.invalid_allocations': 'Unable to confirm investments right now',
+  'vesty.quantity_invalid': 'Enter the number of units you purchased for each investment',
+  'vesty.execution_price_invalid': 'Enter a positive execution price, or leave it blank',
+  'vesty.execution_reports_invalid': 'Enter the number of units you purchased for each investment',
+  'vesty.duplicate_execution_report': 'Unable to confirm investments right now',
+  'vesty.execution_targets_incomplete': 'Enter the number of units you purchased for each investment',
+  'vesty.confirmation_mode_invalid': 'Unable to confirm investments right now',
+  'vesty.execution_already_reported': 'These units were already reported. They cannot be changed here.',
 };
 
 function logInvestIssue(context: string, error: { code?: string } | unknown): void {

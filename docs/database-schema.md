@@ -192,16 +192,23 @@ Money uses signed PostgreSQL `bigint` columns with positive-value checks. Alloca
   - Member-reported investment event for one membership, club, cycle, and target
   - V1 writes `buy` only, `source = manual`, `verification_status = member_reported`
   - `amount_minor` is a positive bigint contribution in the club base currency
-  - `quantity` and `unit_price_minor` are nullable and are never fabricated from amount
+  - `quantity numeric(28, 8)` is nullable and is never fabricated from amount or from a later market price
+  - `unit_price_minor` is legacy same-currency minor units and is not used for EUR ETF execution prints
+  - `execution_unit_price numeric(20, 8)` plus `execution_unit_price_currency` store optional instrument-currency execution prices
   - Unique `(membership_id, investment_cycle_id, investment_target_id, transaction_type)` makes one-buy-per-target-per-cycle idempotent
-  - Clients cannot insert, update, or delete rows; `confirm_investment_day_v1` is the trusted write path
+  - Clients cannot insert, update, or delete rows; writes go through `confirm_investment_day_v1` (amount-only) or `confirm_investment_day_v2` (quantity-complete curated ETFs)
   - A before-insert trigger rejects targets that are not in the cycle's strategy version
 
 - `member_investment_positions`
   - `security_invoker` view aggregating the caller's readable buy transactions
-  - Exposes membership, club, target, currency, `total_invested_minor`, and nullable `total_quantity`
+  - Exposes membership, club, target, contribution currency, `total_invested_minor`, `total_quantity`, and `quantity_status` (`complete` / `partial` / `unavailable`)
+  - `total_quantity` sums only rows that have quantity
   - Stores no market value and does not bypass transaction RLS
-  - Quantity is still typically null after Investment Day V1, so `quantity × NAV` is not available
+
+- `member_position_valuations_v1`
+  - `security_invoker` read model: complete quantity × latest fresh Marketstack close
+  - Current value is instrument currency only (EUR for CORE V1 ETFs)
+  - No EUR/NOK conversion, no club aggregate, no cross-currency gain/loss
 
 - `market_data_instrument_mappings`
   - Primary key: `id`
@@ -387,7 +394,8 @@ The following require trusted transaction functions, later authorization policy,
 - `create_club_invitation` — current owner only, after StrategyVersion 1 exists; returns a one-time plaintext token and stores only `token_hash`
 - `accept_club_invitation` — authenticates via `auth.uid()`, validates token/expiry/recipient, creates one active membership, and marks the invitation accepted without changing ownership
 - `ensure_open_investment_day_v1` — authenticates via `auth.uid()`, opens or reuses the caller's current TestFlight cycle/participation, and never writes transactions
-- `confirm_investment_day_v1` — authenticates via `auth.uid()`, inserts missing member-reported buys for the caller only, and is idempotent on retry
+- `confirm_investment_day_v1` — authenticates via `auth.uid()`, inserts missing member-reported amount-only buys for the caller only, and is idempotent on retry
+- `confirm_investment_day_v2` — same membership/cycle checks, requires the exact allocated CORE V1 ETF set, stores member-reported quantity and optional execution price, fills null quantity on retry, and rejects a different quantity once stored
 
 Implementations live in the unexposed `private` schema. Direct client writes to clubs, memberships, invitations, strategy, and transaction tables remain blocked.
 

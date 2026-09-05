@@ -52,8 +52,8 @@ Investment Day coordination:
 - `investment_cycles`: current active members may read cycle metadata; client writes are blocked.
 - `member_saving_plans`: only the owning active membership may read exact rows, insert a new active plan, or end its current active plan. Amount history cannot be updated in place and rows cannot be deleted.
 - `member_cycle_participations`: only the owning active membership may read the raw row. While its cycle is open, the owner may update only member-report fields. Creation, snapshot fields, verification fields, and deletion are blocked.
-- `member_investment_transactions`: only the owning active membership may read rows. Direct insert, update, and delete are revoked. Writes go through `confirm_investment_day_v1`.
-- `member_investment_positions`: a `security_invoker` read model over those transactions, so another member's cost basis is not visible.
+- `member_investment_transactions`: only the owning active membership may read rows. Direct insert, update, and delete are revoked. Writes go through `confirm_investment_day_v1` or `confirm_investment_day_v2`.
+- `member_investment_positions` and `member_position_valuations_v1`: `security_invoker` read models over those transactions, so another member's cost basis, quantity, and EUR current value are not visible.
 - `market_data_instrument_mappings`, `market_prices`, `latest_market_prices`, and `latest_market_price_status`: any authenticated user may read shared catalog NAV/mappings and freshness metadata. Anonymous users have no access. Clients cannot INSERT, UPDATE, or DELETE mappings or prices. Ingest is the `sync-market-data` Edge Function, which requires a secret API key and writes with the service role. `TWELVE_DATA_API_KEY` is server-only and never an `EXPO_PUBLIC_*` value. Yahoo unofficial ingest is an explicit probe, not the production default.
 
 ## Sensitive Monetary Data
@@ -90,13 +90,13 @@ Direct clients cannot perform operations that require atomic cross-table validat
 - strategy and allocation snapshot mutation after genesis
 - schedule mutation and cycle generation
 - participation snapshot creation
-- member investment transaction creation (use `confirm_investment_day_v1`)
+- member investment transaction creation (use `confirm_investment_day_v1` or `confirm_investment_day_v2`)
 - market price ingest (use `sync-market-data`)
 - broker verification
 
 Club creation, genesis strategy creation, owner invitation issuance, invitation acceptance, opening the current Investment Day, and confirming member-reported buys are implemented as private `SECURITY DEFINER` functions with public invoker wrappers. Callers cannot supply `owner_user_id`, another member's identity, or raw genesis allocations; `auth.uid()` is authoritative and `create_club` accepts only an allowlisted package id.
 
-`ensure_open_investment_day_v1` may create a TestFlight schedule, an open cycle, a default 2000.00 NOK saving plan, and the caller's participation. It does not write transactions. `confirm_investment_day_v1` allocates the participation amount in integer minor units, inserts missing `buy` rows, and marks that participation confirmed. Retry is idempotent via the unique membership/cycle/target/type constraint. Opening a broker in the app is not a database write.
+`ensure_open_investment_day_v1` may create a TestFlight schedule, an open cycle, a default 2000.00 NOK saving plan, and the caller's participation. It does not write transactions. `confirm_investment_day_v1` allocates the participation amount in integer minor units, inserts missing amount-only `buy` rows, and marks that participation confirmed. `confirm_investment_day_v2` is the curated V1 ETF path: the client may send only target ids, quantity, and optional execution price. Amounts and allocations stay server-derived. Retry is idempotent; a stored quantity is not overwritten by a different value. Opening a broker in the app is not a database write.
 
 Email-bound invitations compare `auth.users.email` for the authenticated user and require `email_confirmed_at`. The mobile UI never accepts a typed email as proof of identity. Local Auth has `enable_confirmations = false`, so development signups are stored as confirmed. When confirmations are enabled, an unconfirmed email cannot accept an email-bound invitation.
 

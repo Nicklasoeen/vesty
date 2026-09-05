@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { confirmInvestmentDay, ensureOpenInvestmentDay } from './api';
+import type { ExecutionReportInput } from './investmentDayReporting';
 import type { InvestmentDayPlan } from './types';
 
 export function useInvestmentDay(clubId: string | null): {
@@ -9,7 +10,7 @@ export function useInvestmentDay(clubId: string | null): {
   error: string | null;
   isConfirming: boolean;
   refresh: () => Promise<InvestmentDayPlan | null>;
-  confirm: () => Promise<InvestmentDayPlan>;
+  confirm: (executionReports?: ExecutionReportInput[]) => Promise<InvestmentDayPlan>;
 } {
   const [plan, setPlan] = useState<InvestmentDayPlan | null>(null);
   const [loadedClubId, setLoadedClubId] = useState<string | null>(null);
@@ -62,7 +63,9 @@ export function useInvestmentDay(clubId: string | null): {
     };
   }, [clubId]);
 
-  const confirm = useCallback(async (): Promise<InvestmentDayPlan> => {
+  const confirm = useCallback(async (
+    executionReports?: ExecutionReportInput[],
+  ): Promise<InvestmentDayPlan> => {
     if (!plan || !clubId) {
       throw new Error('Unable to confirm investments right now');
     }
@@ -71,7 +74,11 @@ export function useInvestmentDay(clubId: string | null): {
     setError(null);
 
     try {
-      const next = await confirmInvestmentDay(plan.clubId, plan.cycleId);
+      const next = await confirmInvestmentDay({
+        clubId: plan.clubId,
+        cycleId: plan.cycleId,
+        executionReports,
+      });
       setPlan(next);
       setLoadedClubId(clubId);
       setIsConfirming(false);

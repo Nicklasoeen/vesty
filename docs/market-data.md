@@ -10,7 +10,9 @@
 | Twelve Data catalog identity | PARTIAL | Authenticated `/funds?symbol=` returns all four candidate ids in NOK. `/funds?isin=` is empty without the ISIN add-on. Catalog names are slightly wrong for the KLP classes |
 | Twelve Data latest + historical NAV | BLOCKED | Real key loads. `/quote`, `/time_series`, `/eod`, and `/price` return 404: these mutual-fund symbols require a Grow or Venture plan. Mappings stay inactive |
 | Licensed production ingest | NOT ACTIVATED | All-four NAV gate failed. Do not activate Twelve Data. Do not use Yahoo as production ingest |
-| Club/Home current value, gain %, charts | DEMO | Quantity is still null on Investment Day transactions. Do not compute `amount / today's NAV` |
+| Club/Home current value, gain %, charts | DEMO | Club/Home NOK aggregates stay demo. No EUR/NOK FX exists. Do not compute `amount / today's close` |
+| Curated V1 ETF quantity | REAL (member-reported) | Investment Day v2 stores actual purchased units. Never inferred from Marketstack |
+| Curated V1 ETF current value | REAL (EUR, position-level) | `total_quantity × latest fresh Marketstack close` when quantity is complete. Instrument currency only |
 
 ## Verified instruments
 
@@ -245,21 +247,45 @@ Daily NAV is delayed. Weekends and a short holiday gap are not treated as provid
 
 ## Quantity and valuation
 
-Investment Day V1 stores a NOK contribution amount. `quantity` and `unit_price_minor` stay null. Mutual-fund orders typically execute at a future unknown NAV, so Vesty must not derive quantity from today's NAV.
+Quantity is **member-reported**, never broker-verified, and never inferred from a later Marketstack close. `amount / latest price` is forbidden.
 
-Chosen V1 product rule: **D — current market value stays unavailable** until a later quantity-capture or broker-sync flow exists.
+`quantity` is `numeric(28, 8)` and nullable. Legacy amount-only rows (`confirm_investment_day_v1`) keep `quantity = null`. Curated V1 ETF confirmation uses `confirm_investment_day_v2` and requires a positive quantity for every allocated ETF.
 
-Valuation states for a later UI pass:
+`unit_price_minor` stays unused on the ETF path. EUR execution prints such as IS3N `47.534` cannot be stored in integer øre without losing precision. Optional execution price uses `execution_unit_price numeric(20, 8)` plus server-set `execution_unit_price_currency` from the target (EUR).
 
-- `REAL_VALUE_AVAILABLE` — real quantity and a validated latest NAV
-- `COST_BASIS_ONLY` — reported invested amount only; no fake gain %
-- `NO_PRICE_DATA` — no usable NAV
+Current value is computed only in `member_position_valuations_v1`:
 
-Club currently shows labeled demo market value plus real own cost basis. Home stays on the demo adapter.
+```text
+current_value = total_quantity × latest_marketstack_close
+```
 
-Historical Value charts need real quantities, real transaction dates, and historical NAVs applied in purchase order. Do not project today's quantity backward.
+Rules:
+
+- Active Marketstack mapping only
+- Latest `price_type = close`
+- Freshness must be `fresh`
+- Quantity coverage must be `complete`
+- Result currency is the instrument currency (EUR)
+- Missing quantity, partial quantity, missing price, or stale price → current value unavailable
+- No demo prices
+- No guessed FX
+
+**EUR/NOK FX is not implemented.** Club base currency is NOK. Contribution `amount_minor` is NOK. ETF market value is EUR. Do not multiply EUR value and label it NOK. Do not hardcode a rate. Club/Home aggregate market value and gain/loss stay demo/unavailable until an authoritative FX source exists.
+
+Cost basis remains the reported NOK invested amount. If both quantity and execution unit price are present, `quantity × execution_unit_price` is an optional instrument-currency execution cost, not a replacement for contribution cost basis.
+
+Valuation states:
+
+- `available` — complete quantity and a fresh allowlisted Marketstack close
+- `quantity_incomplete` — null or partial quantity; show invested amount only
+- `no_mapping` / `no_price` / `price_not_fresh` / `currency_mismatch` — quantity may exist; current value stays hidden
+
+Club shows labeled demo NOK market value plus real own NOK cost basis and, when available, real EUR position value. Home stays on the labeled demo adapter.
+
+Historical Value charts still need chronological holdings and historical closes. Do not project today's quantity backward.
 
 ## Tests
 
 - `supabase/tests/market_data_v1.test.sql`
+- `supabase/tests/quantity_valuation_v1.test.sql`
 - `pnpm test:market-data` — Marketstack, Twelve Data, and Yahoo parser/adapter fixtures, no live provider network
