@@ -112,6 +112,13 @@ test('maps unauthorized and rate-limit errors', () => {
   assert.equal(limited.code, 'rate_limited');
 });
 
+test('maps a plan-gated mutual-fund 404 as unavailable', () => {
+  const error = mapTwelveDataHttpError(404, {
+    message: 'This symbol is available starting with the Grow or Venture plan. Consider upgrading now at https://twelvedata.com/pricing',
+  });
+  assert.equal(error.code, 'unavailable');
+});
+
 test('rejects an obviously stale latest NAV', () => {
   assert.throws(
     () => assertLatestNotObviouslyStale('2026-01-01', new Date('2026-09-05T12:00:00Z')),

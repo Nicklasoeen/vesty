@@ -7,9 +7,9 @@
 | Official names, share classes, ISINs, NOK currency | REAL | Verified from KLP/DNB documents and pages; ISIN check digits valid; OpenFIGI confirms the same share classes |
 | Latest NAV via unofficial Yahoo HTTP | REAL (probe only) | Live chart responses for all four funds, currency `NOK`. Not a production license |
 | Historical daily NAV via unofficial Yahoo HTTP | PARTIAL | Proven ~234 daily bars from 2022-03-07 through 2026-08-30. Not full inception history |
-| Twelve Data catalog identity | PARTIAL | `/funds?isin=` identified all four (`0P000*` + NOK) with a demo/unauthenticated request. Catalog names are slightly wrong |
-| Twelve Data latest + historical NAV | BLOCKED | No real `TWELVE_DATA_API_KEY` in server-side environment. Demo key returns 401. Mappings stay inactive |
-| Licensed production ingest | NOT ACTIVATED | Adapter, validation, and Edge Function default to `twelve_data`. Active mappings are not flipped until all four funds pass with a real key |
+| Twelve Data catalog identity | PARTIAL | Authenticated `/funds?symbol=` returns all four candidate ids in NOK. `/funds?isin=` is empty without the ISIN add-on. Catalog names are slightly wrong for the KLP classes |
+| Twelve Data latest + historical NAV | BLOCKED | Real key loads. `/quote`, `/time_series`, `/eod`, and `/price` return 404: these mutual-fund symbols require a Grow or Venture plan. Mappings stay inactive |
+| Licensed production ingest | NOT ACTIVATED | All-four NAV gate failed. Do not activate Twelve Data. Do not use Yahoo as production ingest |
 | Club/Home current value, gain %, charts | DEMO | Quantity is still null on Investment Day transactions. Do not compute `amount / today's NAV` |
 
 ## Verified instruments
@@ -27,24 +27,23 @@ These are Norwegian UCITS equity funds with daily NAV. Tickers and exchanges sta
 
 ## Licensed-provider coverage gate (2026-09-05)
 
-Twelve Data is the first preferred licensed/API candidate. A real key was **not** available in process env, `supabase/functions/.env`, mobile env, or 1Password CLI. Do not activate mappings from this table.
+A real `TWELVE_DATA_API_KEY` was loaded from untracked `supabase/functions/.env`. The key authenticates (a US equity quote succeeds). It does **not** unlock NAV for the four TestFlight funds. Do not activate mappings from this table.
 
-| Instrument | Provider id | Identity match | Currency | Latest NAV | As-of | History available | Result |
+| Instrument | Twelve Data ID | Identity | Currency | Latest NAV | As-of | History | Result |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| KLP AksjeGlobal Indeks P | `0P00018V9L` | Catalog only (demo `/funds?isin=NO0010776040`) | NOK in catalog | unproven | unproven | unproven | FAIL |
-| DNB Teknologi A | `0P00000MVB` | Catalog only (demo `/funds?isin=NO0010337678`) | NOK in catalog | unproven | unproven | unproven | FAIL |
-| KLP AksjeNorge Indeks P | `0P0000HNUP` | Catalog only (demo `/funds?isin=NO0010455694`) | NOK in catalog | unproven | unproven | unproven | FAIL |
-| KLP AksjeFremvoksende Markeder Indeks P | `0P0000TJ5D` | Catalog only (demo `/funds?isin=NO0010611809`) | NOK in catalog | unproven | unproven | unproven | FAIL |
+| KLP AksjeGlobal Indeks P | `0P00018V9L` | `/funds?symbol=` name `KLP AksjeGlobal Indeks V`; ISIN not echoed; `/funds?isin=` empty | NOK in catalog | 404 Grow/Venture | n/a | 404 Grow/Venture | FAIL |
+| DNB Teknologi A | `0P00000MVB` | `/funds?symbol=` name matches `DNB Teknologi A`; ISIN not echoed; `/funds?isin=` empty | NOK in catalog | 404 Grow/Venture | n/a | 404 Grow/Venture | FAIL |
+| KLP AksjeNorge Indeks P | `0P0000HNUP` | `/funds?symbol=` name `KLP AksjeNorge Indeks II`; ISIN not echoed; `/funds?isin=` empty | NOK in catalog | 404 Grow/Venture | n/a | 404 Grow/Venture | FAIL |
+| KLP AksjeFremvoksende Markeder Indeks P | `0P0000TJ5D` | `/funds?symbol=` name `KLP Aksje Fremvoksende Markeder Indeks II`; ISIN not echoed; `/funds?isin=` empty | NOK in catalog | 404 Grow/Venture | n/a | 404 Grow/Venture | FAIL |
 
-Catalog names from Twelve Data are slightly wrong (`Indeks V`, `Indeks II`). Do not require those names to match the official KLP/DNB share-class names. Strongest available identity without a paid add-on:
+Identity is not strong enough to ingest even if quotes later work without an ISIN add-on:
 
-1. Query `/funds?isin=<verified ISIN>`
-2. Require the expected `0P000*` symbol
-3. Require currency `NOK`
-4. If the payload echoes a real ISIN, require an exact match
-5. Treat `isin: "request_access_via_add_ons"` as "ISIN not echoed", not as a match
+1. `/funds?isin=<verified ISIN>` currently returns an empty list (ISIN add-on not enabled)
+2. `/funds?symbol=` confirms the candidate `0P000*` and `NOK`
+3. Echoed `isin` is `request_access_via_add_ons`, not the official ISIN
+4. KLP catalog names use `Indeks V` / `Indeks II` rather than official share class P
 
-Do not blindly trust the `0P000*` identifiers until a paid key proves quote + history for every fund.
+Quote, history, EOD, and price for these symbols all return HTTP 404: available starting with the Grow or Venture plan. That is the coverage gap. Do not activate. Do not fall back to Yahoo for production.
 
 Yahoo unofficial identifiers remain `0P00018V9L.IR`, `0P00000MVB.IR`, `0P0000HNUP.IR`, `0P0000TJ5D.IR`. That coverage is **dev/probe only**. Production ingest must not use Yahoo.
 
@@ -106,9 +105,9 @@ A failed instrument does not delete or overwrite other instruments' valid rows. 
 
 `{"backfill":true}` uses `/time_series?interval=1day&outputsize=1500` and stores returned bars only. No interpolation. No inception crawl.
 
-Until a real key exists, the earliest/latest Twelve Data dates and observation counts are unknown. Do not copy Yahoo's 2022-03-07 window onto Twelve Data.
+A real key was tested. `/time_series` for all four `0P000*` symbols is plan-gated (Grow/Venture). No Twelve Data history was persisted. Do not copy Yahoo's 2022-03-07 window onto Twelve Data.
 
-When a key is available, run one conservative backfill and record:
+When a plan that includes these funds is available, run one conservative backfill and record:
 
 - earliest available date
 - latest date

@@ -22,6 +22,12 @@ export function mapTwelveDataHttpError(status: number, payload: unknown): Provid
   }
 
   if (status === 404) {
+    if (/grow or venture plan/i.test(message)) {
+      return new ProviderSyncError(
+        'unavailable',
+        'Twelve Data plan does not include this mutual-fund symbol',
+      );
+    }
     return new ProviderSyncError('unknown_instrument', message);
   }
 
