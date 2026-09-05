@@ -65,11 +65,50 @@ No cheap licensed provider covers the four TestFlight funds. Do not activate Yah
 
 A real `MARKETSTACK_API_KEY` was tested from untracked `supabase/functions/.env` on 2026-09-05. Free-tier: 108 HTTP / 122 billed, then `usage_limit_reached`. Basic retest: 12 HTTP / 29 billed. US common stocks pass. `EQNR.XOSL` still returns the NYSE ADR 42.09 labeled `NOK` (Yahoo Oslo close 393.60 NOK on 2026-09-04). `EQNR.OL`, `DNB.OL`, `KOG.OL`, and `MOWI.OL` are real NOK. `ASML.XAMS` latest matches Amsterdam, but history mixes NASDAQ USD bars. Full table: [market-data-marketstack-spike.md](./market-data-marketstack-spike.md). Recommendation **B — US / limited secondary** for a broad Europe/Oslo/guessed-symbol universe.
 
-A later curated-package shortlist (`VWCE.DE`, `SXR8.DE`, `EUNK.DE`, `IS3N.DE`, `SXRV.DE`) verified as Xetra EUR listings. For that allowlist only, Marketstack Basic is a viable V1 EOD source. Product design: [vesty-v1-investment-packages.md](./vesty-v1-investment-packages.md). Do not build the adapter now. Do not activate Marketstack mappings. Do not write Marketstack values into `market_prices`.
+A later curated-package shortlist (`VWCE.DE`, `SXR8.DE`, `EUNK.DE`, `IS3N.DE`, `SXRV.DE`) verified as Xetra EUR listings. Marketstack is now accepted **only** for those five CORE V1 ETFs. It is still not a generic resolver. Product design: [vesty-v1-investment-packages.md](./vesty-v1-investment-packages.md). The earlier B rating for a broad Europe/Oslo/guessed-symbol universe still stands.
+
+## Marketstack V1 allowlist (activated)
+
+Authoritative EOD ingest for the five curated Create Club ETFs uses `provider = marketstack` and these exact mappings:
+
+| Target | Ticker | Mapping id | Provider symbol | Exchange stored |
+| --- | --- | --- | --- | --- |
+| `…000011` | VWCE | `41000000-0000-4000-8000-000000000021` | `VWCE.DE` | XETR |
+| `…000012` | EUNK | `41000000-0000-4000-8000-000000000022` | `EUNK.DE` | XETR |
+| `…000013` | IS3N | `41000000-0000-4000-8000-000000000023` | `IS3N.DE` | XETR |
+| `…000014` | SXR8 | `41000000-0000-4000-8000-000000000024` | `SXR8.DE` | XETR |
+| `…000015` | SXRV | `41000000-0000-4000-8000-000000000025` | `SXRV.DE` | XETR |
+
+Policy:
+
+- Never search, guess a MIC suffix, or derive a symbol from the ticker.
+- Request the mapped symbol exactly.
+- Target currency `EUR` is authoritative. Null `price_currency` is accepted for these five. Any explicit non-EUR currency is rejected.
+- If `exchange` is present, it must be Xetra (`XETR` / `XETRA`).
+- Wide per-symbol magnitude bands reject ADR-scale collisions. They are not price targets.
+- History backfill is about one UTC year of daily EOD bars. Missing sessions are not invented. Null or `0` closes in an otherwise valid Xetra series are skipped, not stored.
+- Stored `price_type` is `close`.
+- KLP/DNB funds have no Marketstack mapping.
+
+```sh
+# Latest EOD for the five allowlisted ETFs
+curl -sS -X POST "$SUPABASE_URL/functions/v1/sync-market-data" \
+  --header "apikey: $SUPABASE_SECRET_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{"provider":"marketstack"}'
+
+# Bounded ~1-year backfill
+curl -sS -X POST "$SUPABASE_URL/functions/v1/sync-market-data" \
+  --header "apikey: $SUPABASE_SECRET_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{"provider":"marketstack","backfill":true}'
+```
+
+`MARKETSTACK_API_KEY` stays in the Edge Function environment. Never `EXPO_PUBLIC_*`.
 
 ## Provider selection
 
-Production default is `MARKET_DATA_PROVIDER=twelve_data`.
+Production default for the fund path remains `MARKET_DATA_PROVIDER=twelve_data`. Curated V1 ETF ingest selects Marketstack with `{"provider":"marketstack"}` or `MARKET_DATA_PROVIDER=marketstack`.
 
 Yahoo unofficial HTTP stays in the codebase only as:
 
@@ -87,21 +126,22 @@ This is **not** a redistribution license for either provider. Vesty currently ha
 ## Architecture
 
 ```text
-InvestmentTarget (ISIN, NOK, official name)
+InvestmentTarget (official name, ISIN, currency)
         ↓
 market_data_instrument_mappings (exactly one active mapping per target)
         ↓
-provider dispatch → twelve_data adapter (production)
+provider dispatch → marketstack adapter (five V1 ETFs only)
+                 → twelve_data adapter (funds; inactive until NAV proof)
                  → yahoo_unofficial adapter (explicit probe only)
         ↓
-validate identity / currency / positive finite NAV / date / obvious staleness
+validate symbol / currency / positive finite price / date / magnitude / staleness
         ↓
-market_prices upsert (numeric NAV, price_type = nav)
+market_prices upsert (numeric; ETF close or fund NAV)
 ```
 
-Provider-specific URLs, query parameters, response parsing, and error mapping stay in the adapter. Generic sync does not know Twelve Data JSON.
+Provider-specific URLs, query parameters, response parsing, and error mapping stay in the adapter. Generic sync does not know Marketstack or Twelve Data JSON.
 
-Secrets stay in Edge Function environment (`TWELVE_DATA_API_KEY`). Never `EXPO_PUBLIC_*`. The mobile app has no provider client and no price write path.
+Secrets stay in Edge Function environment (`MARKETSTACK_API_KEY`, `TWELVE_DATA_API_KEY`). Never `EXPO_PUBLIC_*`. The mobile app has no provider client and no price write path.
 
 ## Precision
 
@@ -112,18 +152,22 @@ Secrets stay in Edge Function environment (`TWELVE_DATA_API_KEY`). Never `EXPO_P
 The Edge Function refuses to upsert when:
 
 - the mapping is missing or inactive
-- `/funds?isin=` returns a different `0P000*` than the mapping
+- the provider symbol is not the exact approved mapping (Marketstack: allowlist only; no bare ticker)
+- `/funds?isin=` returns a different `0P000*` than the mapping (Twelve Data only; Marketstack never resolves)
 - quote/history symbol does not match the mapping
-- currency is not the target currency (`NOK`)
+- an explicit provider currency is not the target currency (`EUR` for the five ETFs, `NOK` for the funds)
 - price is missing, non-positive, or non-finite
-- the date is malformed
-- the latest NAV is older than 30 days (obviously stale / malformed)
+- the date is malformed or in the future
+- Marketstack close is outside the wide approved magnitude band
+- the latest observation is older than 30 days (obviously stale / malformed)
 
 A failed instrument does not delete or overwrite other instruments' valid rows. Bad payloads never become null prices.
 
 ## Historical backfill
 
-`{"backfill":true}` uses `/time_series?interval=1day&outputsize=1500` and stores returned bars only. No interpolation. No inception crawl.
+`{"backfill":true}` stores returned daily bars only. No interpolation. No inception crawl.
+
+Marketstack backfill requests `/v2/eod` for the last 365 UTC days, `limit=1000`. Twelve Data still uses `/time_series?interval=1day&outputsize=1500` when that path is later activated.
 
 A real key was tested. `/time_series` for all four `0P000*` symbols is plan-gated (Grow/Venture). No Twelve Data history was persisted. Do not copy Yahoo's 2022-03-07 window onto Twelve Data.
 
@@ -152,7 +196,7 @@ curl -sS -X POST "$SUPABASE_URL/functions/v1/sync-market-data" \
   --data '{"backfill":true}'
 ```
 
-Without `TWELVE_DATA_API_KEY`, the function returns `503 missing_provider_key` and writes nothing.
+Without the selected provider key (`TWELVE_DATA_API_KEY` or `MARKETSTACK_API_KEY`), the function returns `503 missing_provider_key` and writes nothing.
 
 Local secrets belong in untracked `supabase/functions/.env`. See `supabase/functions/.env.example`. Hosted secrets:
 
@@ -194,7 +238,7 @@ Daily NAV is delayed. Weekends and a short holiday gap are not treated as provid
 | `currency` | must match the target |
 | `price_date` | as-of date |
 | `fetched_at` | when Vesty stored the row |
-| `provider` | `twelve_data` or `yahoo_unofficial` |
+| `provider` | `marketstack`, `twelve_data`, or `yahoo_unofficial` |
 | `freshness` | `fresh`, `stale`, or `unavailable` |
 
 `fresh` means the as-of date is on or after the previous weekday minus a 3-day holiday buffer. Missing or future dates are `unavailable`. This metadata is not wired into Home/Club UI in this pass.
@@ -218,4 +262,4 @@ Historical Value charts need real quantities, real transaction dates, and histor
 ## Tests
 
 - `supabase/tests/market_data_v1.test.sql`
-- `pnpm test:market-data` — Twelve Data and Yahoo parser/adapter fixtures, no live provider network
+- `pnpm test:market-data` — Marketstack, Twelve Data, and Yahoo parser/adapter fixtures, no live provider network

@@ -18,8 +18,8 @@ interface MappingRow {
   provider_instrument_id: string;
   active: boolean;
   investment_targets:
-    | { currency: string; isin: string | null; name: string }
-    | { currency: string; isin: string | null; name: string }[]
+    | { currency: string; isin: string | null; name: string; ticker: string | null }
+    | { currency: string; isin: string | null; name: string; ticker: string | null }[]
     | null;
 }
 
@@ -27,11 +27,13 @@ interface SyncRequest {
   backfill?: boolean;
   investment_target_id?: string;
   probe?: string;
+  provider?: string;
 }
 
 interface InstrumentReport {
   investment_target_id: string;
   name: string;
+  ticker: string | null;
   isin: string | null;
   provider: MarketDataProvider;
   provider_instrument_id: string;
@@ -68,6 +70,10 @@ function selectedProvider(body: SyncRequest): MarketDataProvider {
     return probe;
   }
 
+  if (body.provider) {
+    return assertKnownProvider(body.provider);
+  }
+
   return assertKnownProvider(Deno.env.get('MARKET_DATA_PROVIDER') ?? 'twelve_data');
 }
 
@@ -76,7 +82,35 @@ function providerOptions(provider: MarketDataProvider) {
     return { apiKey: Deno.env.get('TWELVE_DATA_API_KEY') ?? '' };
   }
 
+  if (provider === 'marketstack') {
+    return { apiKey: Deno.env.get('MARKETSTACK_API_KEY') ?? '' };
+  }
+
   return {};
+}
+
+function hasProviderKey(provider: MarketDataProvider): boolean {
+  if (provider === 'twelve_data') {
+    return Boolean((Deno.env.get('TWELVE_DATA_API_KEY') ?? '').trim());
+  }
+
+  if (provider === 'marketstack') {
+    return Boolean((Deno.env.get('MARKETSTACK_API_KEY') ?? '').trim());
+  }
+
+  return true;
+}
+
+function licenseNote(provider: MarketDataProvider): string {
+  if (provider === 'twelve_data') {
+    return 'twelve_data_api_subscriber_access';
+  }
+
+  if (provider === 'marketstack') {
+    return 'marketstack_api_subscriber_access';
+  }
+
+  return 'unofficial_http_probe_only';
 }
 
 async function pauseBetweenRequests() {
@@ -109,10 +143,13 @@ export default {
       });
     }
 
-    if (provider === 'twelve_data' && !(Deno.env.get('TWELVE_DATA_API_KEY') ?? '').trim()) {
+    if (!hasProviderKey(provider)) {
       return json(503, {
         error: 'missing_provider_key',
-        message: 'TWELVE_DATA_API_KEY must be set in the Edge Function environment',
+        message:
+          provider === 'marketstack'
+            ? 'MARKETSTACK_API_KEY must be set in the Edge Function environment'
+            : 'TWELVE_DATA_API_KEY must be set in the Edge Function environment',
       });
     }
 
@@ -120,7 +157,7 @@ export default {
     let query = ctx.supabaseAdmin
       .from('market_data_instrument_mappings')
       .select(
-        'id, investment_target_id, provider, provider_instrument_id, active, investment_targets(currency, isin, name)',
+        'id, investment_target_id, provider, provider_instrument_id, active, investment_targets(currency, isin, name, ticker)',
       )
       .eq('provider', provider)
       .eq('active', true);
@@ -146,6 +183,7 @@ export default {
       const baseReport: InstrumentReport = {
         investment_target_id: mapping.investment_target_id,
         name: target?.name ?? '',
+        ticker: target?.ticker ?? null,
         isin: target?.isin ?? null,
         provider,
         provider_instrument_id: mapping.provider_instrument_id,
@@ -170,7 +208,7 @@ export default {
       }
 
       try {
-        if (target.isin) {
+        if (target.isin && provider !== 'marketstack') {
           const resolved = await resolveInstrument(provider, target.isin, {
             ...options,
             expectedCurrency: target.currency,
@@ -220,7 +258,7 @@ export default {
           price_date: observation.priceDate,
           price: observation.price,
           currency: observation.currency,
-          price_type: 'nav' as const,
+          price_type: observation.priceType,
           fetched_at: new Date().toISOString(),
           provider_timestamp: observation.providerTimestamp,
         }));
@@ -261,15 +299,14 @@ export default {
     return json(200, {
       provider,
       backfill,
-      license:
-        provider === 'twelve_data'
-          ? 'twelve_data_api_subscriber_access'
-          : 'unofficial_http_probe_only',
+      license: licenseNote(provider),
       mapping_count: mappings.length,
       note:
         provider === 'twelve_data' && mappings.length === 0
           ? 'No active twelve_data mappings. Do not activate until live NAV coverage is proven for all four funds.'
-          : undefined,
+          : provider === 'marketstack' && mappings.length === 0
+            ? 'No active marketstack mappings. Only the five curated V1 ETFs may be mapped.'
+            : undefined,
       instruments: reports,
     });
   }),

@@ -5,6 +5,7 @@ import type {
   ResolveInstrumentResult,
 } from './types.ts';
 import { ProviderSyncError } from './types.ts';
+import * as marketstack from './marketstack.ts';
 import * as twelveData from './twelveData.ts';
 import * as yahooUnofficial from './yahooUnofficial.ts';
 
@@ -16,7 +17,7 @@ export interface ProviderRequestOptions {
 }
 
 export function assertKnownProvider(value: string): MarketDataProvider {
-  if (value === 'twelve_data' || value === 'yahoo_unofficial') {
+  if (value === 'twelve_data' || value === 'yahoo_unofficial' || value === 'marketstack') {
     return value;
   }
 
@@ -28,9 +29,12 @@ export async function fetchLatest(
   symbol: string,
   options: ProviderRequestOptions = {},
 ): Promise<ProviderLatestResult> {
-  // twelve_data is the production adapter. yahoo_unofficial is probe-only.
   if (provider === 'twelve_data') {
     return twelveData.fetchLatest(symbol, options);
+  }
+
+  if (provider === 'marketstack') {
+    return marketstack.fetchLatest(symbol, options);
   }
 
   return yahooUnofficial.fetchLatest(symbol, options);
@@ -43,6 +47,10 @@ export async function fetchHistory(
 ): Promise<ProviderHistoryResult> {
   if (provider === 'twelve_data') {
     return twelveData.fetchHistory(symbol, options);
+  }
+
+  if (provider === 'marketstack') {
+    return marketstack.fetchHistory(symbol, options);
   }
 
   return yahooUnofficial.fetchHistory(symbol, options);

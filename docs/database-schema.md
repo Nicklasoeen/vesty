@@ -15,6 +15,8 @@ The schema is created by:
 - `supabase/migrations/20260905084718_add_market_data_v1.sql`
 - `supabase/migrations/20260905090042_add_market_data_twelve_data_v1.sql`
 - `supabase/migrations/20260905121758_curated_investment_packages_v1.sql`
+- `supabase/migrations/20260905123104_add_marketstack_provider.sql`
+- `supabase/migrations/20260905123105_seed_marketstack_v1_allowlist.sql`
 
 It uses the Supabase-managed `auth.users` table only as the authentication identity boundary. It does not duplicate credentials, sessions, or authentication state.
 
@@ -60,7 +62,7 @@ Lifecycle and closed-choice values use tightly scoped PostgreSQL enums:
 - `investment_transaction_type`: `buy` (`sell` is reserved for a later migration)
 - `investment_transaction_source`: `manual`, `broker_sync`
 - `investment_transaction_verification`: `member_reported`, `broker_verified`
-- `market_data_provider`: `yahoo_unofficial`, `twelve_data`
+- `market_data_provider`: `yahoo_unofficial`, `twelve_data`, `marketstack`
 - `market_price_type`: `nav`, `close`, `delayed`
 
 Currency uses constrained `text`, not a reference table. Stored currency values must be three uppercase letters. Validation against the full ISO 4217 code list is deferred.

@@ -184,3 +184,9 @@ Independent checks: Yahoo Finance quote pages (2026-09-05) plus EODData Oslo his
 ## Architecture left unchanged
 
 `InvestmentTarget` → `market_data_instrument_mappings` → `twelve_data` / `yahoo_unofficial` dispatch → validate → `market_prices` is untouched. Temporary local probes were deleted after this report.
+
+## Adapter activation (2026-09-05)
+
+Marketstack is now accepted **only** for the curated five-ETF V1 allowlist: `VWCE.DE`, `EUNK.DE`, `IS3N.DE`, `SXR8.DE`, `SXRV.DE`.
+
+The earlier **B** rating for a generic Europe/Oslo/guessed-symbol provider still stands. Shipping this adapter is not approval for arbitrary symbols, `tickerslist` search, MIC suffix guessing, or Oslo `*.XOSL` mappings. The EQNR ADR clone, ASML mixed history, and untrusted `price_currency` findings above remain in force.

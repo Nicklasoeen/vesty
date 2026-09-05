@@ -1,4 +1,4 @@
-export type MarketDataProvider = 'yahoo_unofficial' | 'twelve_data';
+export type MarketDataProvider = 'yahoo_unofficial' | 'twelve_data' | 'marketstack';
 
 export type MarketPriceType = 'nav' | 'close' | 'delayed';
 

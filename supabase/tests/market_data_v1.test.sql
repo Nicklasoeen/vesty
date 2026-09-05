@@ -179,6 +179,63 @@ select extensions.is(
   (
     select count(*)
     from public.market_data_instrument_mappings
+    where provider = 'marketstack'
+      and active
+  ),
+  5::bigint,
+  'Exactly five active Marketstack V1 mappings are seeded'
+);
+
+select extensions.is(
+  (
+    select string_agg(provider_instrument_id, ',' order by provider_instrument_id)
+    from public.market_data_instrument_mappings
+    where provider = 'marketstack'
+      and active
+  ),
+  'EUNK.DE,IS3N.DE,SXR8.DE,SXRV.DE,VWCE.DE',
+  'Marketstack provider symbols are the exact approved Xetra listings'
+);
+
+select extensions.is(
+  (
+    select count(*)
+    from public.market_data_instrument_mappings
+    where provider = 'marketstack'
+      and active
+      and (
+        (investment_target_id = '31000000-0000-4000-8000-000000000011' and provider_instrument_id = 'VWCE.DE')
+        or (investment_target_id = '31000000-0000-4000-8000-000000000012' and provider_instrument_id = 'EUNK.DE')
+        or (investment_target_id = '31000000-0000-4000-8000-000000000013' and provider_instrument_id = 'IS3N.DE')
+        or (investment_target_id = '31000000-0000-4000-8000-000000000014' and provider_instrument_id = 'SXR8.DE')
+        or (investment_target_id = '31000000-0000-4000-8000-000000000015' and provider_instrument_id = 'SXRV.DE')
+      )
+  ),
+  5::bigint,
+  'Marketstack mappings point at the five CORE V1 ETF targets'
+);
+
+select extensions.is(
+  (
+    select count(*)
+    from public.market_data_instrument_mappings
+    where provider = 'marketstack'
+      and active
+      and investment_target_id in (
+        '31000000-0000-4000-8000-000000000001',
+        '31000000-0000-4000-8000-000000000002',
+        '31000000-0000-4000-8000-000000000003',
+        '31000000-0000-4000-8000-000000000004'
+      )
+  ),
+  0::bigint,
+  'Legacy KLP/DNB targets have no active Marketstack mapping'
+);
+
+select extensions.is(
+  (
+    select count(*)
+    from public.market_data_instrument_mappings
     where investment_target_id in (
       '31000000-0000-4000-8000-000000000001',
       '31000000-0000-4000-8000-000000000002',
@@ -340,6 +397,98 @@ select extensions.is(
   'Prices cannot be stored against an inactive or missing mapping'
 );
 
+insert into public.market_prices (
+  investment_target_id,
+  provider,
+  price_date,
+  price,
+  currency,
+  price_type
+)
+values (
+  '31000000-0000-4000-8000-000000000011',
+  'marketstack',
+  date '2026-09-03',
+  168.06000000,
+  'EUR',
+  'close'
+);
+
+insert into public.market_prices (
+  investment_target_id,
+  provider,
+  price_date,
+  price,
+  currency,
+  price_type
+)
+values (
+  '31000000-0000-4000-8000-000000000011',
+  'marketstack',
+  date '2026-09-03',
+  168.06000000,
+  'EUR',
+  'close'
+)
+on conflict on constraint market_prices_observation_key
+do update
+set
+  price = excluded.price,
+  fetched_at = now();
+
+select extensions.is(
+  (
+    select count(*)
+    from public.market_prices
+    where investment_target_id = '31000000-0000-4000-8000-000000000011'
+      and provider = 'marketstack'
+      and price_date = date '2026-09-03'
+      and price_type = 'close'
+  ),
+  1::bigint,
+  'Duplicate Marketstack EOD rows upsert instead of inserting a second row'
+);
+
+select extensions.is(
+  tests.statement_sqlstate($sql$
+    insert into public.market_prices (
+      investment_target_id,
+      provider,
+      price_date,
+      price,
+      currency,
+      price_type
+    )
+    values (
+      '31000000-0000-4000-8000-000000000011',
+      'marketstack',
+      date '2026-09-02',
+      12,
+      'USD',
+      'close'
+    );
+  $sql$),
+  'P0001',
+  'A later invalid Marketstack row does not write and leaves existing EUR closes intact'
+);
+
+select extensions.is(
+  (
+    select count(*)
+    from public.market_prices
+    where investment_target_id = '31000000-0000-4000-8000-000000000011'
+      and provider = 'marketstack'
+  ),
+  1::bigint,
+  'Existing good Marketstack data survives a later validation failure'
+);
+
+select extensions.is(
+  public.market_nav_freshness_v1(date '2026-09-03', timestamptz '2026-09-05 12:00:00+00'),
+  'fresh',
+  'A recent ETF EOD date stays fresh over the weekend'
+);
+
 set local role authenticated;
 select tests.authenticate_as('00000000-0000-4000-8000-000000000041');
 
@@ -375,6 +524,29 @@ select extensions.is(
   $sql$),
   '42501',
   'Authenticated mobile users cannot insert market prices'
+);
+
+select extensions.is(
+  tests.statement_sqlstate($sql$
+    insert into public.market_prices (
+      investment_target_id,
+      provider,
+      price_date,
+      price,
+      currency,
+      price_type
+    )
+    values (
+      '31000000-0000-4000-8000-000000000012',
+      'marketstack',
+      date '2026-09-03',
+      105.5,
+      'EUR',
+      'close'
+    );
+  $sql$),
+  '42501',
+  'Authenticated mobile users cannot insert Marketstack prices'
 );
 
 select extensions.is(

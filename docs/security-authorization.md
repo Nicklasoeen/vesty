@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document describes the direct-client authorization boundary implemented by `supabase/migrations/20260903202501_add_rls_authorization_v1.sql`, the Create / Join Club trusted RPCs in `supabase/migrations/20260904110626_add_club_create_join_v1.sql` and `supabase/migrations/20260905121758_curated_investment_packages_v1.sql`, the Investment Day transaction RPCs in `supabase/migrations/20260905075952_add_instruments_transactions_v1.sql`, and the market-data tables in `supabase/migrations/20260905084718_add_market_data_v1.sql` and `supabase/migrations/20260905090042_add_market_data_twelve_data_v1.sql`. Product and relational invariants remain authoritative in `docs/domain-model.md` and `docs/database-schema.md`.
+This document describes the direct-client authorization boundary implemented by `supabase/migrations/20260903202501_add_rls_authorization_v1.sql`, the Create / Join Club trusted RPCs in `supabase/migrations/20260904110626_add_club_create_join_v1.sql` and `supabase/migrations/20260905121758_curated_investment_packages_v1.sql`, the Investment Day transaction RPCs in `supabase/migrations/20260905075952_add_instruments_transactions_v1.sql`, and the market-data tables in `supabase/migrations/20260905084718_add_market_data_v1.sql`, `supabase/migrations/20260905090042_add_market_data_twelve_data_v1.sql`, `supabase/migrations/20260905123104_add_marketstack_provider.sql`, and `supabase/migrations/20260905123105_seed_marketstack_v1_allowlist.sql`. Product and relational invariants remain authoritative in `docs/domain-model.md` and `docs/database-schema.md`.
 
 ## Authorization Principles
 
