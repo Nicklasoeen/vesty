@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document describes the direct-client authorization boundary implemented by `supabase/migrations/20260903202501_add_rls_authorization_v1.sql`, the Create / Join Club trusted RPCs in `supabase/migrations/20260904110626_add_club_create_join_v1.sql`, the Investment Day transaction RPCs in `supabase/migrations/20260905075952_add_instruments_transactions_v1.sql`, and the market-data tables in `supabase/migrations/20260905084718_add_market_data_v1.sql` and `supabase/migrations/20260905090042_add_market_data_twelve_data_v1.sql`. Product and relational invariants remain authoritative in `docs/domain-model.md` and `docs/database-schema.md`.
+This document describes the direct-client authorization boundary implemented by `supabase/migrations/20260903202501_add_rls_authorization_v1.sql`, the Create / Join Club trusted RPCs in `supabase/migrations/20260904110626_add_club_create_join_v1.sql` and `supabase/migrations/20260905121758_curated_investment_packages_v1.sql`, the Investment Day transaction RPCs in `supabase/migrations/20260905075952_add_instruments_transactions_v1.sql`, and the market-data tables in `supabase/migrations/20260905084718_add_market_data_v1.sql` and `supabase/migrations/20260905090042_add_market_data_twelve_data_v1.sql`. Product and relational invariants remain authoritative in `docs/domain-model.md` and `docs/database-schema.md`.
 
 ## Authorization Principles
 
@@ -94,7 +94,7 @@ Direct clients cannot perform operations that require atomic cross-table validat
 - market price ingest (use `sync-market-data`)
 - broker verification
 
-Club creation, genesis strategy creation, owner invitation issuance, invitation acceptance, opening the current Investment Day, and confirming member-reported buys are implemented as private `SECURITY DEFINER` functions with public invoker wrappers. Callers cannot supply `owner_user_id` or another member's identity; `auth.uid()` is authoritative.
+Club creation, genesis strategy creation, owner invitation issuance, invitation acceptance, opening the current Investment Day, and confirming member-reported buys are implemented as private `SECURITY DEFINER` functions with public invoker wrappers. Callers cannot supply `owner_user_id`, another member's identity, or raw genesis allocations; `auth.uid()` is authoritative and `create_club` accepts only an allowlisted package id.
 
 `ensure_open_investment_day_v1` may create a TestFlight schedule, an open cycle, a default 2000.00 NOK saving plan, and the caller's participation. It does not write transactions. `confirm_investment_day_v1` allocates the participation amount in integer minor units, inserts missing `buy` rows, and marks that participation confirmed. Retry is idempotent via the unique membership/cycle/target/type constraint. Opening a broker in the app is not a database write.
 

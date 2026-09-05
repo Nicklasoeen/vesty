@@ -264,6 +264,28 @@ select extensions.is(
 
 select extensions.is(
   (
+    select count(*)
+    from public.investment_targets
+    where id in (
+      '31000000-0000-4000-8000-000000000011',
+      '31000000-0000-4000-8000-000000000012',
+      '31000000-0000-4000-8000-000000000013',
+      '31000000-0000-4000-8000-000000000014',
+      '31000000-0000-4000-8000-000000000015'
+    )
+      and kind = 'etf'
+      and status = 'active'
+      and currency = 'EUR'
+      and ticker in ('VWCE', 'EUNK', 'IS3N', 'SXR8', 'SXRV')
+      and exchange = 'Xetra'
+      and provider_symbol is null
+  ),
+  5::bigint,
+  'Core V1 ETF targets are active EUR listings without provider symbols'
+);
+
+select extensions.is(
+  (
     select kind::text
     from public.investment_targets
     where id = '32000000-0000-4000-8000-000000000001'
@@ -329,7 +351,7 @@ select *
 from public.create_club(
   'Instruments Club',
   'simple_majority',
-  tests.genesis_allocations(),
+  'world_mix',
   'NOK'
 );
 
@@ -340,8 +362,8 @@ select extensions.is(
     where strategy_version_id = (select strategy_version_id from alice_club)
       and position = 2
   ),
-  'DNB Teknologi A',
-  'Genesis strategy snapshots real instrument names'
+  'iShares Core MSCI Europe UCITS ETF EUR (Acc)',
+  'World Mix snapshots official ETF names'
 );
 
 create temporary table alice_day as
@@ -422,8 +444,8 @@ select extensions.is(
       and amount_minor > 0
       and currency = 'NOK'
   ),
-  4::bigint,
-  'Confirm writes four member-reported buy transactions'
+  3::bigint,
+  'Confirm writes one member-reported buy per World Mix holding'
 );
 
 select extensions.is(
@@ -431,10 +453,10 @@ select extensions.is(
     select amount_minor
     from public.member_investment_transactions
     where membership_id = (select membership_id from alice_club)
-      and investment_target_id = '31000000-0000-4000-8000-000000000001'
+      and investment_target_id = '31000000-0000-4000-8000-000000000011'
   ),
-  80000::bigint,
-  '40% of 200000 minor units is 80000'
+  120000::bigint,
+  '60% of 200000 minor units is 120000'
 );
 
 select extensions.is(
@@ -460,7 +482,7 @@ select extensions.is(
     from public.member_investment_transactions
     where membership_id = (select membership_id from alice_club)
   ),
-  4::bigint,
+  3::bigint,
   'Retry confirm does not duplicate transactions'
 );
 
@@ -477,7 +499,7 @@ select extensions.is(
     where membership_id = (select membership_id from alice_club)
       and total_invested_minor > 0
   ),
-  4::bigint,
+  3::bigint,
   'Caller can read own derived positions'
 );
 
@@ -519,8 +541,18 @@ select *
 from public.create_club(
   'Second Instruments Club',
   'simple_majority',
-  tests.genesis_allocations(),
+  'world_america',
   'NOK'
+);
+
+select extensions.is(
+  (
+    select string_agg(investment_target_id::text || ':' || allocation_bps::text, ',' order by position)
+    from public.strategy_allocations
+    where strategy_version_id = (select strategy_version_id from alice_second_club)
+  ),
+  '31000000-0000-4000-8000-000000000011:5000,31000000-0000-4000-8000-000000000014:3000,31000000-0000-4000-8000-000000000012:1000,31000000-0000-4000-8000-000000000013:1000',
+  'World + America resolves to the canonical ETF allocations'
 );
 
 create temporary table alice_second_day as
@@ -608,7 +640,7 @@ select extensions.is(
     from public.member_investment_transactions
     where membership_id = (select membership_id from bob_join)
   ),
-  4::bigint,
+  3::bigint,
   'Second member can confirm their own transactions'
 );
 
@@ -758,7 +790,7 @@ select extensions.is(
         (select club_id from alice_club),
         (select membership_id from alice_club),
         (select cycle_id from alice_day),
-        '31000000-0000-4000-8000-000000000002',
+        '31000000-0000-4000-8000-000000000011',
         'buy',
         0,
         'NOK',
@@ -791,7 +823,7 @@ select extensions.is(
         (select club_id from alice_club),
         (select membership_id from alice_club),
         (select cycle_id from alice_day),
-        '31000000-0000-4000-8000-000000000003',
+        '31000000-0000-4000-8000-000000000011',
         'buy',
         100,
         'nok',
@@ -814,7 +846,7 @@ select *
 from public.create_club(
   'Remainder Club',
   'simple_majority',
-  tests.genesis_allocations(),
+  'world_mix',
   'NOK'
 );
 
@@ -859,9 +891,9 @@ select extensions.is(
     select amount_minor
     from public.member_investment_transactions
     where membership_id = (select membership_id from alice_remainder_club)
-      and investment_target_id = '31000000-0000-4000-8000-000000000001'
+      and investment_target_id = '31000000-0000-4000-8000-000000000011'
   ),
-  80001::bigint,
+  120001::bigint,
   'Remainder unit is applied to the highest remainder, then position'
 );
 
@@ -918,7 +950,7 @@ select extensions.is(
     from public.member_investment_transactions
     where membership_id = (select membership_id from alice_club)
   ),
-  4::bigint,
+  3::bigint,
   'Active member still reads own transactions after another member leaves'
 );
 

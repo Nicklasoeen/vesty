@@ -1,30 +1,9 @@
-import { instrumentSecondaryLabel } from '@/lib/instrumentLabels';
-import type { AllocationSlice } from '@/ui';
-
 /**
- * Default genesis mix shown in Create Club review. 10000 bps total.
- * Names must match the curated TestFlight catalog fixtures.
+ * Shared Create Club constants. New clubs use curated packages, not a
+ * hardcoded genesis mix. Existing clubs may still hold the previous
+ * KLP/DNB fixture names in StrategyVersion snapshots.
  */
-export const GENESIS_STRATEGY_SPEC = [
-  { name: 'KLP AksjeGlobal Indeks P', allocationBps: 4000, position: 1, kind: 'fund', currency: 'NOK' },
-  { name: 'DNB Teknologi A', allocationBps: 3000, position: 2, kind: 'fund', currency: 'NOK' },
-  { name: 'KLP AksjeNorge Indeks P', allocationBps: 1500, position: 3, kind: 'fund', currency: 'NOK' },
-  { name: 'KLP AksjeFremvoksende Markeder Indeks P', allocationBps: 1500, position: 4, kind: 'fund', currency: 'NOK' },
-] as const;
-
-export const GENESIS_STRATEGY_SLICES: AllocationSlice[] = GENESIS_STRATEGY_SPEC.map((item) => ({
-  id: item.name,
-  label: item.name,
-  secondaryLabel: instrumentSecondaryLabel(item.kind, item.currency),
-  percentage: item.allocationBps / 100,
-}));
 
 export const CLUB_NAME_MAX_LENGTH = 80;
 
 export const V1_BASE_CURRENCY = 'NOK';
-
-export interface GenesisAllocationInput {
-  investment_target_id: string;
-  allocation_bps: number;
-  position: number;
-}

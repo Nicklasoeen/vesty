@@ -113,6 +113,30 @@ grant execute on function tests.genesis_allocations() to authenticated;
 
 select extensions.no_plan();
 
+select extensions.is(
+  (
+    select count(*)
+    from private.curated_strategy_packages
+    where status = 'active'
+  ),
+  3::bigint,
+  'Exactly three active V1 packages are seeded'
+);
+
+select extensions.is(
+  (
+    select count(*) = 3
+      and bool_and(allocation_sum = 10000)
+    from (
+      select sum(allocation_bps) as allocation_sum
+      from private.curated_strategy_package_allocations
+      group by package_id
+    ) as package_totals
+  ),
+  true,
+  'Every curated package totals exactly 10000 bps'
+);
+
 insert into auth.users (
   id,
   aud,
@@ -193,11 +217,10 @@ select extensions.is(
         select public.create_club(
           'Should Fail Unauthenticated',
           'simple_majority',
-          %L::jsonb,
+          'world_mix',
           'NOK'
         )
-      $statement$,
-      tests.genesis_allocations()::text
+      $statement$
     )
   ),
   'vesty.unauthenticated',
@@ -219,10 +242,20 @@ select extensions.is(
 select extensions.ok(
   not has_function_privilege(
     'anon',
-    'public.create_club(text, public.governance_threshold_kind, jsonb, text)',
+    'public.create_club(text, public.governance_threshold_kind, text, text)',
     'execute'
   ),
   'Anonymous role cannot execute create_club'
+);
+
+select extensions.ok(
+  not has_table_privilege('authenticated', 'private.curated_strategy_packages', 'select'),
+  'Authenticated role cannot read the private package catalog'
+);
+
+select extensions.ok(
+  not has_table_privilege('authenticated', 'private.curated_strategy_package_allocations', 'select'),
+  'Authenticated role cannot read private package allocations'
 );
 
 select extensions.ok(
@@ -307,23 +340,36 @@ select extensions.is(
     format(
       $statement$
         select public.create_club(
-          'Bad Sum Club',
+          'Bad Package Club',
           'simple_majority',
-          %L::jsonb,
+          'spotlight',
           'NOK'
         )
-      $statement$,
-      $json$[
-        {
-          "investment_target_id": "31000000-0000-4000-8000-000000000001",
-          "allocation_bps": 4000,
-          "position": 1
-        }
-      ]$json$
+      $statement$
     )
   ),
-  'vesty.invalid_allocation_sum',
-  'Invalid allocation sum is rejected'
+  'vesty.invalid_package',
+  'Unknown package id is rejected'
+);
+
+select extensions.is(
+  tests.statement_message(
+    $statement$
+      select public.create_club(
+        'World Mix Named Club',
+        'simple_majority',
+        'World Mix',
+        'NOK'
+      )
+    $statement$
+  ),
+  'vesty.invalid_package',
+  'Display names are not accepted as package ids'
+);
+
+select extensions.ok(
+  to_regprocedure('public.create_club(text, public.governance_threshold_kind, jsonb, text)') is null,
+  'Public create_club no longer accepts client allocation payloads'
 );
 
 reset role;
@@ -332,7 +378,7 @@ select extensions.is(
   (
     select count(*)
     from public.clubs
-    where name = 'Bad Sum Club'
+    where name in ('Bad Package Club', 'World Mix Named Club')
   ),
   0::bigint,
   'Invalid create leaves no partial club'
@@ -371,7 +417,7 @@ select *
 from public.create_club(
   '  Eve Club  ',
   'supermajority',
-  tests.genesis_allocations(),
+  'world_mix',
   'NOK'
 );
 
@@ -472,12 +518,22 @@ select extensions.is(
   'Genesis allocation sum is 10000 bps'
 );
 
+select extensions.is(
+  (
+    select string_agg(investment_target_id::text || ':' || allocation_bps::text, ',' order by position)
+    from public.strategy_allocations
+    where strategy_version_id = (select strategy_version_id from eve_first_club)
+  ),
+  '31000000-0000-4000-8000-000000000011:6000,31000000-0000-4000-8000-000000000012:2500,31000000-0000-4000-8000-000000000013:1500',
+  'World Mix resolves to the canonical ETF allocations'
+);
+
 create temporary table eve_second_club as
 select *
 from public.create_club(
   'Eve Second',
   'unanimous',
-  tests.genesis_allocations(),
+  'tech_forward',
   'NOK'
 );
 
@@ -492,6 +548,16 @@ select extensions.is(
   ),
   2::bigint,
   'A user can belong to multiple clubs they created'
+);
+
+select extensions.is(
+  (
+    select string_agg(investment_target_id::text || ':' || allocation_bps::text, ',' order by position)
+    from public.strategy_allocations
+    where strategy_version_id = (select strategy_version_id from eve_second_club)
+  ),
+  '31000000-0000-4000-8000-000000000011:4000,31000000-0000-4000-8000-000000000015:3500,31000000-0000-4000-8000-000000000014:1500,31000000-0000-4000-8000-000000000013:1000',
+  'Tech Forward resolves independently of the first club snapshot'
 );
 
 select tests.authenticate_as('00000000-0000-4000-8000-000000000012');

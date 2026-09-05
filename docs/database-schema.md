@@ -14,6 +14,7 @@ The schema is created by:
 - `supabase/migrations/20260905075952_add_instruments_transactions_v1.sql`
 - `supabase/migrations/20260905084718_add_market_data_v1.sql`
 - `supabase/migrations/20260905090042_add_market_data_twelve_data_v1.sql`
+- `supabase/migrations/20260905121758_curated_investment_packages_v1.sql`
 
 It uses the Supabase-managed `auth.users` table only as the authentication identity boundary. It does not duplicate credentials, sessions, or authentication state.
 
@@ -113,7 +114,8 @@ Money uses signed PostgreSQL `bigint` columns with positive-value checks. Alloca
   - Optional broker-neutral ISIN, ticker, exchange, and `provider_symbol`
   - Identifier fields stay null unless a verified value exists in project data
   - Contains no live prices. Provider symbols live on `market_data_instrument_mappings`, not on `provider_symbol`
-  - Four TestFlight fixture IDs (`31000000-0000-4000-8000-00000000000{1-4}`) are verified NOK mutual-fund share classes: KLP AksjeGlobal Indeks P (`NO0010776040`), DNB Teknologi A (`NO0010337678`), KLP AksjeNorge Indeks P (`NO0010455694`), KLP AksjeFremvoksende Markeder Indeks P (`NO0010611809`). Ticker/exchange/`provider_symbol` stay null. See `docs/market-data.md`.
+  - Four legacy fixture IDs (`31000000-0000-4000-8000-00000000000{1-4}`) are verified NOK mutual-fund share classes: KLP AksjeGlobal Indeks P (`NO0010776040`), DNB Teknologi A (`NO0010337678`), KLP AksjeNorge Indeks P (`NO0010455694`), KLP AksjeFremvoksende Markeder Indeks P (`NO0010611809`). Ticker/exchange/`provider_symbol` stay null. Existing clubs may still snapshot these names.
+  - Five CORE V1 ETF IDs (`31000000-0000-4000-8000-00000000001{1-5}`) are Xetra accumulating UCITS listings (VWCE, EUNK, IS3N, SXR8, SXRV), currency EUR, official ISINs stored, `provider_symbol` null. New clubs resolve genesis allocations from curated packages, not from the KLP/DNB mix. See `docs/vesty-v1-investment-packages.md`.
 
 - `strategy_versions`
   - Primary key: `id`
@@ -126,6 +128,11 @@ Money uses signed PostgreSQL `bigint` columns with positive-value checks. Alloca
   - References one strategy version and one global investment target
   - Snapshots target name, kind, and canonical descriptor fields
   - Enforces unique target and display position within each version
+
+- `private.curated_strategy_packages` / `private.curated_strategy_package_allocations`
+  - Server-owned V1 package catalog. Not on the Data API. RLS enabled and forced, with no client grants
+  - Three active packages: `world_mix`, `world_america`, `tech_forward`. Allocations are integer basis points totaling `10000`
+  - `public.create_club` resolves `p_package_id` through `private.resolve_curated_package_allocations`
 
 - `strategy_proposals`
   - Primary key: `id`
@@ -372,9 +379,9 @@ The following require trusted transaction functions, later authorization policy,
 
 ## Trusted write paths
 
-`supabase/migrations/20260904110626_add_club_create_join_v1.sql` and `supabase/migrations/20260905075952_add_instruments_transactions_v1.sql` add public invoker wrappers over private `SECURITY DEFINER` functions:
+`supabase/migrations/20260904110626_add_club_create_join_v1.sql`, `supabase/migrations/20260905075952_add_instruments_transactions_v1.sql`, and `supabase/migrations/20260905121758_curated_investment_packages_v1.sql` add public invoker wrappers over private `SECURITY DEFINER` functions:
 
-- `create_club` — authenticates via `auth.uid()`, creates the club, owner membership, owner pointer, genesis StrategyVersion 1, and a complete allocation snapshot totaling 10000 bps
+- `create_club` — authenticates via `auth.uid()`, resolves an allowlisted `p_package_id` to canonical allocations, then creates the club, owner membership, owner pointer, genesis StrategyVersion 1, and a complete 10000-bps snapshot. Callers cannot supply allocation rows. Unknown package ids raise `vesty.invalid_package`. Canonical packages are private tables, not Data API resources.
 - `create_club_invitation` — current owner only, after StrategyVersion 1 exists; returns a one-time plaintext token and stores only `token_hash`
 - `accept_club_invitation` — authenticates via `auth.uid()`, validates token/expiry/recipient, creates one active membership, and marks the invitation accepted without changing ownership
 - `ensure_open_investment_day_v1` — authenticates via `auth.uid()`, opens or reuses the caller's current TestFlight cycle/participation, and never writes transactions

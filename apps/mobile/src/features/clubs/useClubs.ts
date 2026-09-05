@@ -1,4 +1,5 @@
 import * as clubsApi from './api';
+import type { CuratedPackageId } from './curatedInvestmentPackages';
 import type { ClubSummary, CreatedInvitationResult } from './types';
 
 export { ClubsProvider, useClubs } from './ClubsProvider';
@@ -6,6 +7,7 @@ export { ClubsProvider, useClubs } from './ClubsProvider';
 export async function createClub(input: {
   name: string;
   governanceThresholdKind: ClubSummary['governanceThresholdKind'];
+  packageId: CuratedPackageId;
 }) {
   return clubsApi.createClub(input);
 }

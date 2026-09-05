@@ -10,6 +10,7 @@ const PRODUCT_MESSAGES: Record<string, string> = {
   'vesty.base_currency_unsupported': 'Unable to create club right now',
   'vesty.invalid_allocations': 'Unable to create club right now',
   'vesty.invalid_allocation_sum': 'Unable to create club right now',
+  'vesty.invalid_package': 'Unable to create club right now',
   'vesty.invalid_target': 'Unable to create club right now',
   'vesty.invite_forbidden': "You don't have permission to invite members",
   'vesty.invite_invalid': 'Invite is invalid or expired',

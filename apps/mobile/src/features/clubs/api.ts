@@ -2,7 +2,8 @@ import { signAvatarUrls } from '@/features/profile/api';
 import { supabase } from '@/lib/supabase/client';
 
 import { mapClubError } from './clubErrors';
-import { GENESIS_STRATEGY_SPEC, V1_BASE_CURRENCY, type GenesisAllocationInput } from './genesisStrategy';
+import { isCuratedPackageId, type CuratedPackageId } from './curatedInvestmentPackages';
+import { V1_BASE_CURRENCY } from './genesisStrategy';
 import type { GovernanceThresholdKind } from './governance';
 import { initialsFromIdentity } from './initials';
 import {
@@ -16,12 +17,6 @@ import {
   type CreatedClubResult,
   type CreatedInvitationResult,
 } from './types';
-
-interface TargetRow {
-  id: string;
-  name: string;
-  status: string;
-}
 
 interface MembershipClubRow {
   id: string;
@@ -222,45 +217,19 @@ export async function fetchClubStrategySlices(clubId: string) {
   );
 }
 
-export async function resolveGenesisAllocations(): Promise<GenesisAllocationInput[]> {
-  const names = GENESIS_STRATEGY_SPEC.map((item) => item.name);
-  const result = await supabase.from('investment_targets').select('id, name, status').eq('status', 'active').in('name', names);
-
-  if (result.error) {
-    throw result.error;
-  }
-
-  const targets = (result.data ?? []) as TargetRow[];
-  const byName = new Map(targets.map((target) => [target.name, target.id]));
-
-  return GENESIS_STRATEGY_SPEC.map((item) => {
-    const targetId = byName.get(item.name);
-    if (!targetId) {
-      throw new Error('Missing genesis target');
-    }
-    return {
-      investment_target_id: targetId,
-      allocation_bps: item.allocationBps,
-      position: item.position,
-    };
-  });
-}
-
 export async function createClub(input: {
   name: string;
   governanceThresholdKind: GovernanceThresholdKind;
+  packageId: CuratedPackageId;
 }): Promise<CreatedClubResult> {
-  let allocations: GenesisAllocationInput[];
-  try {
-    allocations = await resolveGenesisAllocations();
-  } catch (error) {
-    throw new Error(mapClubError(error, 'Unable to create club right now', 'resolve genesis targets'));
+  if (!isCuratedPackageId(input.packageId)) {
+    throw new Error('Unable to create club right now');
   }
 
   const result = await supabase.rpc('create_club', {
     p_name: input.name,
     p_governance_threshold_kind: input.governanceThresholdKind,
-    p_allocations: allocations,
+    p_package_id: input.packageId,
     p_base_currency: V1_BASE_CURRENCY,
   });
 

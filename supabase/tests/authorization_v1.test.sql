@@ -1494,7 +1494,7 @@ select extensions.is(
     from public.investment_targets
     where status = 'active'
   ),
-  5::bigint,
+  10::bigint,
   '46. Authenticated users can read supported targets'
 );
 

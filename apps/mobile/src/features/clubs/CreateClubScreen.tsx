@@ -6,36 +6,52 @@ import { StatusBar } from 'expo-status-bar';
 
 import { useTheme } from '@/theme';
 import { AllocationBar, AppText, Button, Screen, TextField } from '@/ui';
-import { CLUB_NAME_MAX_LENGTH, GENESIS_STRATEGY_SLICES, V1_BASE_CURRENCY } from './genesisStrategy';
-import { GOVERNANCE_OPTIONS, type GovernanceThresholdKind } from './governance';
-import { attachClub, createClub, useClubs } from './useClubs';
 
-type CreateStep = 'name' | 'governance' | 'strategy';
+import { InvestmentStylePicker } from './InvestmentStylePicker';
+import {
+  CURATED_INVESTMENT_PACKAGES,
+  getCuratedPackage,
+  packageExposureSlices,
+  packageHoldingLines,
+  type CuratedPackageId,
+} from './curatedInvestmentPackages';
+import {
+  advanceCreateClubStep,
+  canContinueCreateClub,
+  canSubmitCreateClub,
+  createClubRequest,
+  previousCreateClubStep,
+  reviewPackageSummary,
+  trimmedClubName,
+  type CreateClubStep,
+} from './createClubWizard';
+import { CLUB_NAME_MAX_LENGTH } from './genesisStrategy';
+import { GOVERNANCE_OPTIONS, governanceLabel, type GovernanceThresholdKind } from './governance';
+import { attachClub, createClub, useClubs } from './useClubs';
 
 export function CreateClubScreen() {
   const { colorScheme, colors, spacing } = useTheme();
   const router = useRouter();
   const { refresh, selectClub } = useClubs();
-  const [step, setStep] = useState<CreateStep>('name');
+  const [step, setStep] = useState<CreateClubStep>('name');
   const [name, setName] = useState('');
   const [governance, setGovernance] = useState<GovernanceThresholdKind>('simple_majority');
+  const [packageId, setPackageId] = useState<CuratedPackageId | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const createdClubIdRef = useRef<string | null>(null);
 
-  const trimmedName = name.trim();
-  const nameValid = trimmedName.length > 0 && trimmedName.length <= CLUB_NAME_MAX_LENGTH;
+  const draft = { step, name, governance, packageId };
+  const selectedPackage = packageId ? getCuratedPackage(packageId) : null;
+  const review = packageId ? reviewPackageSummary(packageId) : null;
 
   const goBack = () => {
     if (isSubmitting) {
       return;
     }
-    if (step === 'governance') {
-      setStep('name');
-      return;
-    }
-    if (step === 'strategy') {
-      setStep('governance');
+    const previous = previousCreateClubStep(step);
+    if (previous) {
+      setStep(previous);
       return;
     }
     if (router.canGoBack()) {
@@ -46,7 +62,7 @@ export function CreateClubScreen() {
   };
 
   const onCreate = async () => {
-    if (isSubmitting || !nameValid) {
+    if (isSubmitting || !canSubmitCreateClub(draft)) {
       return;
     }
 
@@ -55,10 +71,7 @@ export function CreateClubScreen() {
 
     try {
       if (!createdClubIdRef.current) {
-        const created = await createClub({
-          name: trimmedName,
-          governanceThresholdKind: governance,
-        });
+        const created = await createClub(createClubRequest(draft));
         createdClubIdRef.current = created.clubId;
       }
       await attachClub(refresh, selectClub, createdClubIdRef.current);
@@ -112,10 +125,10 @@ export function CreateClubScreen() {
                   label="Continue"
                   variant="primary"
                   block
-                  disabled={!nameValid}
+                  disabled={!canContinueCreateClub(draft)}
                   onPress={() => {
                     setError(null);
-                    setStep('governance');
+                    setStep(advanceCreateClubStep('name'));
                   }}
                 />
               </View>
@@ -153,22 +166,103 @@ export function CreateClubScreen() {
                 })}
               </View>
               <View style={{ marginTop: spacing.xl }}>
-                <Button label="Continue" variant="primary" block onPress={() => setStep('strategy')} />
+                <Button
+                  label="Continue"
+                  variant="primary"
+                  block
+                  onPress={() => {
+                    setError(null);
+                    setStep(advanceCreateClubStep('governance'));
+                  }}
+                />
               </View>
             </View>
           ) : null}
 
-          {step === 'strategy' ? (
+          {step === 'style' ? (
             <View style={{ marginTop: spacing.xl }}>
               <AppText variant="title" accessibilityRole="header">
-                Initial strategy
+                Investment style
               </AppText>
               <AppText variant="body" color="secondary" style={{ marginTop: spacing.sm }}>
-                {trimmedName} · {V1_BASE_CURRENCY}
+                Choose how the group wants to spread its investments. These are all stock-market mixes.
               </AppText>
               <View style={{ marginTop: spacing.xl }}>
-                <AllocationBar allocations={GENESIS_STRATEGY_SLICES} />
+                <InvestmentStylePicker
+                  packages={CURATED_INVESTMENT_PACKAGES}
+                  selectedId={packageId}
+                  onSelect={(id) => {
+                    setError(null);
+                    setPackageId(id);
+                  }}
+                  disabled={isSubmitting}
+                />
               </View>
+              <View style={{ marginTop: spacing.xl }}>
+                <Button
+                  label="Continue"
+                  variant="primary"
+                  block
+                  disabled={!canContinueCreateClub(draft)}
+                  onPress={() => {
+                    setError(null);
+                    setStep(advanceCreateClubStep('style'));
+                  }}
+                />
+              </View>
+            </View>
+          ) : null}
+
+          {step === 'review' && selectedPackage && review ? (
+            <View style={{ marginTop: spacing.xl }}>
+              <AppText variant="title" accessibilityRole="header">
+                Review
+              </AppText>
+              <AppText variant="body" color="secondary" style={{ marginTop: spacing.sm }}>
+                {trimmedClubName(name)} · {review.baseCurrency}
+              </AppText>
+
+              <View style={{ marginTop: spacing.xl }}>
+                <AppText variant="sectionTitle">Governance</AppText>
+                <AppText variant="body" style={{ marginTop: spacing.sm }}>
+                  {governanceLabel(governance)}
+                </AppText>
+              </View>
+
+              <View style={{ marginTop: spacing.xl }}>
+                <AppText variant="sectionTitle">Investment style</AppText>
+                <AppText variant="bodyStrong" style={{ marginTop: spacing.sm }}>
+                  {selectedPackage.displayName}
+                </AppText>
+                <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
+                  {selectedPackage.shortDescription}
+                </AppText>
+                <AppText variant="meta" color="secondary" style={{ marginTop: spacing.sm }}>
+                  {review.preview}
+                </AppText>
+              </View>
+
+              <View style={{ marginTop: spacing.xl }}>
+                <AppText variant="sectionTitle">How the money is spread</AppText>
+                <View style={{ marginTop: spacing.md }}>
+                  <AllocationBar allocations={packageExposureSlices(selectedPackage)} />
+                </View>
+              </View>
+
+              <View style={{ marginTop: spacing.xl }}>
+                <AppText variant="sectionTitle">What you invest in</AppText>
+                <View style={{ marginTop: spacing.md }}>
+                  {packageHoldingLines(selectedPackage).map((holding) => (
+                    <View key={holding.id} style={{ marginBottom: spacing.sm }}>
+                      <AppText variant="body">{holding.name}</AppText>
+                      <AppText variant="meta" color="secondary">
+                        {holding.ticker}
+                      </AppText>
+                    </View>
+                  ))}
+                </View>
+              </View>
+
               {error ? (
                 <AppText variant="meta" color="negative" style={{ marginTop: spacing.md }} accessibilityLiveRegion="polite">
                   {error}

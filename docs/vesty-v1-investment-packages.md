@@ -1,14 +1,34 @@
 # Vesty V1 curated investment packages
 
-Research and product-design gate only. This is **not** personal investment advice, a suitability assessment, or a promise of returns or capital protection. Packages are example model portfolios for a beginner-oriented product.
+This is **not** personal investment advice, a suitability assessment, or a promise of returns or capital protection. Packages are curated model portfolios for a beginner-oriented product.
 
-No migrations, schema, Create Club UI, fixtures, Marketstack adapter, or mappings were changed. Marketstack was probed for the shortlist only. The API key stayed in untracked `supabase/functions/.env` and was never printed.
+## Implementation status (TestFlight V1)
+
+Approved first-TestFlight direction: ship exactly **World Mix**, **World + America**, and **Tech Forward**. **Spotlight is FUTURE** and is not in the catalog, UI, or RPC allowlist.
+
+Implemented in this milestone (catalog + package selection only):
+
+- Five CORE UCITS ETFs are seeded as active `investment_targets` (`31000000-0000-4000-8000-000000000011`–`015`). Official names, ISINs, Xetra tickers, and EUR currency match the confirmed table in §4. `provider_symbol` stays null.
+- Canonical packages live in `private.curated_strategy_packages` / `private.curated_strategy_package_allocations`. Clients cannot read those tables.
+- `public.create_club(p_name, p_governance_threshold_kind, p_package_id, p_base_currency)` resolves an allowlisted package id server-side. Callers cannot supply allocations.
+- Create Club is **Name → Governance → Investment style → Review → Create**. The client sends the stable id (`world_mix`, `world_america`, `tech_forward`), never a display name.
+- UI copy uses relative language (broadest mix / more US / more tech). No Low/Medium/High risk, Recommended, Safe, or projected returns.
+- Legacy KLP/DNB fixture targets (`…000001`–`004`) stay active. Existing StrategyVersion snapshots are not rewritten.
+
+Not in this milestone:
+
+- Marketstack adapter, mappings, or `market_prices` writes. `market_data_provider` still has no `marketstack` value; mappings wait for adapter activation.
+- Spotlight, sliders, instrument search, broker APIs, portfolio value, or price graphs.
+
+Mobile display copy and target ids also live in `apps/mobile/src/features/clubs/curatedInvestmentPackages.ts`. Database rows remain authoritative for genesis allocations.
+
+Deviations from the research draft: default Create Club highlight is **none** — the owner must choose a style. Marketstack symbols were verified earlier but are not stored on targets or seeded as mappings.
 
 ## 1. V1 product rationale
 
 Vesty is a private club coordination layer, not a trading terminal. The primary user wants to start saving with friends and should not have to choose from thousands of securities.
 
-The current Create Club path already follows that idea in one respect: it does **not** let the owner pick instruments. It reviews a single hardcoded genesis mix (`apps/mobile/src/features/clubs/genesisStrategy.ts`) and writes StrategyVersion 1 through `create_club`. That mix is four Norwegian UCITS **funds**:
+Create Club no longer reviews a single hardcoded mix. The owner chooses one curated package. StrategyVersion 1 is the server-resolved snapshot for that package. Legacy clubs may still hold the previous four Norwegian UCITS **funds**:
 
 | Allocation | Current genesis target |
 | ---: | --- |
@@ -55,7 +75,7 @@ Avoid Low / Medium / High Risk. Avoid Recommended / Best / Safe.
 
 UI should present A–C as the V1 choice set. D stays in this document so the allowlist and later proposal flow are designed, not improvised.
 
-Default highlight in Create Club: **World Mix**. Frame it as “broadest mix,” not “the right one for you.”
+Create Club does not pre-select a package. Relative label for World Mix is “broadest mix,” not “the right one for you.”
 
 ## 3. Package allocations
 
@@ -252,7 +272,7 @@ Also FUTURE, not researched as CORE:
 | Candidate | Reason |
 | --- | --- |
 | Generic labels `Global`, `Technology`, `Norway`, `Emerging Markets` | Not tradable instruments. Already rejected by domain rule 7. |
-| KLP AksjeGlobal / Norge / Fremvoksende P, DNB Teknologi A | Real products and still fine as *funds*, but they fail the licensed NAV gate. Do not block TestFlight on Twelve Data Grow. Keep current genesis until cutover; do not carry them into the new package catalog. |
+| KLP AksjeGlobal / Norge / Fremvoksende P, DNB Teknologi A | Real products and still fine as *funds*, but they fail the licensed NAV gate. Keep them for existing clubs; do not carry them into new package genesis. |
 | `CSPX.L` | Same S&P 500 Acc share class as SXR8, worse Marketstack currency. |
 | `EQQQ.L` | Pence labeled as GBP. SXRV Xetra is the Nasdaq sleeve instead. |
 | `EQNR.XOSL` / Oslo MIC-suffixed guesses | Proven ADR/NOK collision. Norwegian stocks are not required. |
@@ -270,32 +290,27 @@ See the REJECTED table above. The important product cut is:
 - **Do not expand** into Oslo or London listings just because the ticker exists in Marketstack.
 - **Do not** put Spotlight stocks in the first TestFlight unless the team explicitly wants that education burden.
 
-## 9. Proposed Create Club UX
+## 9. Create Club UX
 
-Current flow:
-
-```text
-Name → Governance → Review single hardcoded mix → create_club
-```
-
-The strategy step is a preview, not a choice. Allocations are resolved by name from `investment_targets` and sent as a 10000-bps snapshot.
-
-Proposed V1 flow:
+Shipped flow:
 
 ```text
 Name
   → Governance (unchanged, still locked)
-  → Choose investment style (World Mix / World + America / Tech Forward)
-  → Allocation preview
-       - consumer concept (World, Europe, …)
-       - official security name
-       - exact percentage
-       - one-line “what this is”
-  → Honest risk copy for that package
+  → Investment style (World Mix / World + America / Tech Forward)
+  → Review
+       - club name and currency
+       - governance
+       - package name and short description
+       - beginner exposure labels and percentages
+       - official ETF names and tickers
   → Create club
-       - StrategyVersion 1 genesis
+       - client sends package id
+       - server writes StrategyVersion 1
        - allocations locked
 ```
+
+Selecting a style expands the same exposure and holdings detail on the picker. There is no free-form allocation editor.
 
 ### Customization
 
@@ -326,27 +341,24 @@ Invitation preview can show the **current effective package name** and the offic
 
 ## 10. Data-model implications
 
-Do **not** implement these now. Implications only.
-
 Keep as-is:
 
 - `InvestmentTarget` = one purchasable product (ISIN + official name + kind + currency).
 - `strategy_allocations` / `strategy_proposal_allocations` = complete 10000-bps snapshots.
 - `market_data_instrument_mappings` = provider symbol, not target identity.
 - Multi-provider dispatch in `provider.ts`.
-- Genesis RPC shape: `create_club(..., p_allocations, p_base_currency)`.
 - Club base currency stays NOK. Instrument currency is metadata, not an FX engine.
 
-Add later (smallest coherent change):
+Implemented:
 
-1. New curated targets for the five CORE ETFs (new UUIDs). Do not reuse the four KLP/DNB rows or change their identity — they are already referenced by history/tests.
-2. Optional `strategy_packages` + `strategy_package_allocations` tables, server-owned. Columns for consumer name, short explanation, relative-risk rank, time-horizon copy, and an `exposure_label` that is **not** an instrument.
-3. `create_club` accepts `p_package_id` (or the client resolves package → allocation array from a server view). Client must not invent targets.
-4. Snapshot `target_name` / `target_kind` at allocation time (already present) so later catalog edits cannot rewrite history.
-5. Mappings for Marketstack only after the allowlist rows exist. One active mapping per target. Symbols exactly `VWCE.DE`, `EUNK.DE`, `IS3N.DE`, `SXR8.DE`, `SXRV.DE`.
-6. FX: members will buy EUR-traded ETFs while the club plans in NOK. V1 can show **weights and cost basis in NOK** without pretending Marketstack EUR closes are NOK NAVs. Do not compute club market value from `amount_nok / eur_price`.
+1. Five CORE ETF targets with new UUIDs. The four KLP/DNB rows are unchanged and remain active for existing clubs.
+2. Private package tables (`private.curated_strategy_packages`, `private.curated_strategy_package_allocations`). Display copy and exposure labels live in the mobile catalog, not as tradable entities.
+3. `public.create_club` accepts `p_package_id` only. `private.resolve_curated_package_allocations` builds the allocation JSON. Unknown or inactive ids raise `vesty.invalid_package`.
+4. Snapshot `target_name` / `target_kind` at allocation time (already present).
+5. Marketstack mappings are **not** seeded. The enum still has no `marketstack` value. Approved symbols remain `VWCE.DE`, `EUNK.DE`, `IS3N.DE`, `SXR8.DE`, `SXRV.DE` for a later adapter milestone.
+6. FX is still deferred. V1 shows weights and NOK cost basis only.
 
-Inactive KLP/DNB targets can remain in the catalog for existing clubs. New genesis should stop resolving `GENESIS_STRATEGY_SPEC` after cutover.
+KLP/DNB targets stay in the catalog. New genesis no longer uses those four funds.
 
 ## 11. Regulatory / wording considerations
 
@@ -372,19 +384,18 @@ PRIIPs SRI numbers from issuer documents (Nordnet showed SXR8 as 4/7, SXRV as 5/
 
 ## 12. Clear recommendation for V1
 
-1. **Ship 3 packages:** World Mix, World + America, Tech Forward.
+1. **Ship 3 packages:** World Mix, World + America, Tech Forward. This is the approved TestFlight set.
 2. **Use 5 unique UCITS ETFs**, all Xetra accumulating share classes, all Nordnet-listed, all Marketstack `*.DE` VERIFIED.
 3. **Lock allocations** at create time. No sliders.
 4. **Keep Spotlight and the three Nasdaq stocks as FUTURE.**
-5. **Treat Marketstack Basic as sufficient for this allowlist only.** Still do not activate mappings or ingest into `market_prices` until the catalog and adapter exist.
-6. **Next implementation milestone:** curated catalog + Create Club package picker writing genesis StrategyVersion 1. Not the Marketstack adapter, and not a fixture rewrite of existing clubs.
-7. **Leave** current KLP/DNB genesis in place until that cutover. Do not silently change live clubs.
+5. **Treat Marketstack Basic as sufficient for this allowlist only.** Do not activate mappings or ingest into `market_prices` until the adapter exists.
+6. **Catalog + package picker is implemented.** Next market-data milestone is the Marketstack adapter and inactive-then-active mappings, not a rewrite of existing clubs.
+7. **Leave** KLP/DNB targets and historical strategies in place. Do not silently change live clubs.
 
-## Appendix — inspection notes (Phase 1)
+## Appendix — inspection notes
 
-- Git branch at research time: `design/club-dashboard-spike`.
 - `InvestmentTarget` kinds: fund / etf / stock. Currency is ISO-3 metadata. Provider symbols do not belong on the target.
-- Strategy is an immutable 10000-bps snapshot. Version 1 is genesis; later versions require a proposal.
-- Create Club strategy step only **displays** `GENESIS_STRATEGY_SLICES`. It does not choose among packages.
+- Strategy is an immutable 10000-bps snapshot. Version 1 is genesis from a curated package; later versions require a proposal.
+- Create Club investment-style step chooses among the three packages. Exposure labels are presentation only.
 - Preferred brokers already include Nordnet, DNB, Kron, SpareBank 1, Other — availability research should stay honest per instrument.
 - Market-data docs: [market-data.md](./market-data.md), [market-data-marketstack-spike.md](./market-data-marketstack-spike.md).

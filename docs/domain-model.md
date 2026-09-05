@@ -26,7 +26,7 @@ Entity and attribute names below are domain terminology, not a finalized physica
 6. A strategy is a complete allocation snapshot whose integer basis points total exactly `10000`.
 7. Vesty curates the V1 InvestmentTarget catalog. Targets represent concrete purchasable products (funds, ETFs, stocks) without coupling their core identity to a broker. Generic exposure categories are not instruments.
 8. Planned amounts, member reports, and future broker verification are different facts and must never be conflated.
-9. The owner creates immutable StrategyVersion 1 through a genesis bootstrap path. Every later strategy change requires a proposal and vote, and approval creates a new immutable version.
+9. The owner chooses an allowlisted curated investment package at club creation. The server resolves that package into immutable StrategyVersion 1. Every later strategy change requires a proposal and vote, and approval creates a new immutable version. Clients cannot invent targets or percentages.
 10. Proposal rules, electorate, votes, results, strategy history, ownership transfers, and membership tenures must remain auditable.
 11. Each active club has exactly one active owner. The only V1 membership roles are `OWNER` and `MEMBER`.
 12. A club's voting mode is selected at creation and remains locked for V1.
@@ -1027,7 +1027,7 @@ This section defines intended authority, not RLS implementation.
 
 ### Governance
 
-- During club setup, only the owner may finalize StrategyVersion 1 through the genesis path.
+- During club setup, only the owner may finalize StrategyVersion 1 through the genesis path, by selecting an allowlisted curated package. The server writes the allocations.
 - After StrategyVersion 1 exists, every strategy change requires the proposal and voting flow.
 - The owner selects `SIMPLE_MAJORITY`, `SUPERMAJORITY`, or `UNANIMOUS` when creating the club.
 - Governance configuration is locked after club creation in V1.
