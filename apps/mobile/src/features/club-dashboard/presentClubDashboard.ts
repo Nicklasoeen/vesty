@@ -325,6 +325,7 @@ export function presentClubSettingsItems(input: { isOwner: boolean }) {
   return {
     details: true,
     members: true,
+    contributions: true,
     governance: true,
     invite: input.isOwner,
     leave: false,

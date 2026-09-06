@@ -1,4 +1,5 @@
 import * as clubsApi from './api';
+import type { ContributionPolicyMode } from './contributionPolicy';
 import type { CuratedPackageId } from './curatedInvestmentPackages';
 import type { ClubSummary, CreatedInvitationResult, UpdatedClubNameResult } from './types';
 
@@ -8,12 +9,27 @@ export async function createClub(input: {
   name: string;
   governanceThresholdKind: ClubSummary['governanceThresholdKind'];
   packageId: CuratedPackageId;
+  contributionMode: ContributionPolicyMode;
+  equalAmountMinor?: number | null;
+  creatorFlexibleAmountMinor?: number | null;
 }) {
   return clubsApi.createClub(input);
 }
 
 export async function joinClub(token: string) {
   return clubsApi.joinClub(token);
+}
+
+export async function getClubContributionPolicy(clubId: string) {
+  return clubsApi.getClubContributionPolicy(clubId);
+}
+
+export async function getMyContributionCommitment(clubId: string) {
+  return clubsApi.getMyContributionCommitment(clubId);
+}
+
+export async function setMyFlexibleContribution(clubId: string, amountMinor: number) {
+  return clubsApi.setMyFlexibleContribution(clubId, amountMinor);
 }
 
 export async function attachClub(

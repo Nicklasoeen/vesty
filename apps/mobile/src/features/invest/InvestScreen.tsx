@@ -3,6 +3,8 @@ import { ActivityIndicator, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { FlexibleContributionForm } from '@/features/clubs/FlexibleContributionForm';
+import { useClubContribution } from '@/features/clubs/useClubContribution';
 import { useClubs } from '@/features/clubs/useClubs';
 import { BrokerPickerSheet } from '@/features/profile/BrokerPickerSheet';
 import { openBrokerActionLabel, type PreferredBroker } from '@/features/profile/brokers';
@@ -54,9 +56,11 @@ export function InvestScreen() {
   const { profile } = useProfile();
   const { selectedClub, isLoading: clubsLoading } = useClubs();
   const preferredBroker = profile?.preferredBroker ?? null;
-  const { plan, isLoading, error, isConfirming, refresh, confirm } = useInvestmentDay(
-    selectedClub?.clubId ?? null,
+  const selectedClubId = selectedClub?.clubId ?? null;
+  const { plan, isLoading, error, setupRequired, isConfirming, refresh, confirm } = useInvestmentDay(
+    selectedClubId,
   );
+  const contribution = useClubContribution(selectedClubId);
   const participation = useInvestmentDayParticipation(
     selectedClub?.clubId ?? null,
     plan?.cycleId ?? null,
@@ -218,6 +222,21 @@ export function InvestScreen() {
           <AppText variant="body" color="secondary">
             Create or join a club to record an Investment Day.
           </AppText>
+        ) : selectedClub && setupRequired && !plan ? (
+          <View>
+            <AppText variant="title" accessibilityRole="header">
+              Set your contribution
+            </AppText>
+            <View style={{ marginTop: spacing.lg }}>
+              <FlexibleContributionForm
+                submitLabel="Set amount"
+                onSubmit={async (amountMinor) => {
+                  await contribution.saveFlexibleAmount(amountMinor);
+                  await refresh();
+                }}
+              />
+            </View>
+          </View>
         ) : error && !plan ? (
           <View>
             <AppText variant="body" color="secondary">

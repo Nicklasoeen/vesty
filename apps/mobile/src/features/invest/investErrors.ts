@@ -15,6 +15,8 @@ const PRODUCT_MESSAGES: Record<string, string> = {
   'vesty.execution_targets_incomplete': 'Enter the number of units you purchased for each investment',
   'vesty.confirmation_mode_invalid': 'Unable to confirm investments right now',
   'vesty.execution_already_reported': 'These units were already reported. They cannot be changed here.',
+  'vesty.contribution_commitment_required': 'Set your contribution to continue',
+  'vesty.contribution_commitment_invalid': 'Enter how much you want to contribute',
 };
 
 function logInvestIssue(context: string, error: { code?: string } | unknown): void {
@@ -26,7 +28,7 @@ function logInvestIssue(context: string, error: { code?: string } | unknown): vo
   console.warn(`[invest] ${context}`);
 }
 
-function extractErrorCode(error: { message?: string } | unknown): string | null {
+export function extractInvestErrorCode(error: { message?: string } | unknown): string | null {
   if (!error || typeof error !== 'object' || !('message' in error)) {
     return null;
   }
@@ -42,7 +44,7 @@ export function mapInvestError(
   context: string,
 ): string {
   logInvestIssue(context, error);
-  const code = extractErrorCode(error);
+  const code = extractInvestErrorCode(error);
   if (code && PRODUCT_MESSAGES[code]) {
     return PRODUCT_MESSAGES[code];
   }

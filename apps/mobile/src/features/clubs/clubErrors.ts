@@ -18,6 +18,12 @@ const PRODUCT_MESSAGES: Record<string, string> = {
   'vesty.invite_expired': 'Invite is invalid or expired',
   'vesty.invite_not_recipient': 'Invite is invalid or expired',
   'vesty.already_member': "You're already a member of this club",
+  'vesty.contribution_policy_invalid': 'Enter a contribution amount',
+  'vesty.contribution_commitment_invalid': 'Enter how much you want to contribute',
+  'vesty.contribution_commitment_required': 'Set your contribution to continue',
+  'vesty.contribution_commitment_not_applicable': 'This club uses the same amount for everyone',
+  'vesty.contribution_policy_missing': 'Unable to load contribution settings',
+  'vesty.not_club_member': "You don't have permission to view this club",
 };
 
 function logClubIssue(context: string, error: { code?: string; message?: string } | unknown): void {
@@ -30,7 +36,7 @@ function logClubIssue(context: string, error: { code?: string; message?: string 
   console.warn(`[clubs] ${context}`);
 }
 
-function extractErrorCode(error: { message?: string } | unknown): string | null {
+export function extractClubErrorCode(error: { message?: string } | unknown): string | null {
   if (!error || typeof error !== 'object' || !('message' in error)) {
     return null;
   }
@@ -46,7 +52,7 @@ export function mapClubError(
   context: string,
 ): string {
   logClubIssue(context, error);
-  const code = extractErrorCode(error);
+  const code = extractClubErrorCode(error);
   if (code && PRODUCT_MESSAGES[code]) {
     return PRODUCT_MESSAGES[code];
   }

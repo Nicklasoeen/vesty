@@ -18,6 +18,8 @@ The schema is created by:
 - `supabase/migrations/20260905123104_add_marketstack_provider.sql`
 - `supabase/migrations/20260905123105_seed_marketstack_v1_allowlist.sql`
 - `supabase/migrations/20260906150144_rename_club_v1.sql`
+- `supabase/migrations/20260906194634_contribution_policy_v1.sql`
+- `supabase/migrations/20260906215200_contribution_policy_product_v1.sql`
 
 It uses the Supabase-managed `auth.users` table only as the authentication identity boundary. It does not duplicate credentials, sessions, or authentication state.
 
@@ -179,6 +181,7 @@ Money uses signed PostgreSQL `bigint` columns with positive-value checks. Alloca
   - Primary key: `id`
   - References one membership and optionally the prior plan it replaces
   - Stores positive `bigint` contribution intent, explicit currency, lifecycle, and effective interval
+  - Legacy compatibility only: future flexible amounts are resolved from `member_contribution_commitment_versions`
   - Does not represent a deposit or transaction
 
 - `member_cycle_participations`
@@ -413,13 +416,18 @@ The following require trusted transaction functions, later authorization policy,
 
 ## Trusted write paths
 
-`supabase/migrations/20260904110626_add_club_create_join_v1.sql`, `supabase/migrations/20260905075952_add_instruments_transactions_v1.sql`, `supabase/migrations/20260905121758_curated_investment_packages_v1.sql`, and `supabase/migrations/20260906150144_rename_club_v1.sql` add public invoker wrappers over private `SECURITY DEFINER` functions:
+`supabase/migrations/20260904110626_add_club_create_join_v1.sql`, `supabase/migrations/20260905075952_add_instruments_transactions_v1.sql`, `supabase/migrations/20260905121758_curated_investment_packages_v1.sql`, `supabase/migrations/20260906150144_rename_club_v1.sql`, `supabase/migrations/20260906194634_contribution_policy_v1.sql`, `supabase/migrations/20260906215200_contribution_policy_product_v1.sql`, and `supabase/migrations/20260906221000_contribution_policy_hardening_v1.sql` add public invoker wrappers over private `SECURITY DEFINER` functions:
 
-- `create_club` — authenticates via `auth.uid()`, resolves an allowlisted `p_package_id` to canonical allocations, then creates the club, owner membership, owner pointer, genesis StrategyVersion 1, and a complete 10000-bps snapshot. Callers cannot supply allocation rows. Unknown package ids raise `vesty.invalid_package`. Canonical packages are private tables, not Data API resources.
+- `create_club` — legacy path. Authenticates via `auth.uid()`, resolves an allowlisted `p_package_id` to canonical allocations, then creates the club, owner membership, owner pointer, genesis StrategyVersion 1, a complete 10000-bps snapshot, and Flexible ContributionPolicyVersion 1. It does not invent a creator amount. New mobile clients use `create_club_v2`.
+- `create_club_v2` — same club/strategy creation plus an explicit Equal or Flexible genesis policy. Equal requires `p_equal_amount_minor` and forbids a creator private amount. Flexible requires `p_creator_flexible_amount_minor` and forbids a shared amount. The transaction is atomic.
 - `create_club_invitation` — current owner only, after StrategyVersion 1 exists; returns a one-time plaintext token and stores only `token_hash`
 - `update_club_name` — current owner only, active club; trims the name and rejects empty or over-80-character values with `vesty.club_name_invalid`
+- There is no public `create_contribution_policy_version_v1` RPC. After club creation, authenticated owners and members cannot append policy versions. `private.create_contribution_policy_version_v1` remains as trusted/internal append for future proposal approval (`service_role` / superuser). `create_club` / `create_club_v2` still write policy version 1 in the same club-creation transaction.
+- `create_member_contribution_commitment_v1` — caller only; appends a private flexible commitment version. Rejected when the latest club policy is equal. Also writes a legacy saving-plan row when none exists so cycle FKs remain satisfied.
+- `club_contribution_policy_v1` — active members; returns latest mode/currency and a shared equal amount only when the mode is equal
+- `my_contribution_commitment_v1` — caller only; latest private commitment, never another member's amount
 - `accept_club_invitation` — authenticates via `auth.uid()`, validates token/expiry/recipient, creates one active membership, and marks the invitation accepted without changing ownership
-- `ensure_open_investment_day_v1` — authenticates via `auth.uid()`, opens or reuses the caller's current TestFlight cycle/participation, and never writes transactions
+- `ensure_open_investment_day_v1` — authenticates via `auth.uid()`, opens or reuses the caller's current TestFlight cycle/participation. A **new** cycle may select the latest ContributionPolicyVersion. An **existing** cycle always uses `investment_cycles.contribution_policy_version_id` and never re-resolves "latest". An existing participation is returned as stored and is never recalculated. Flexible members without a commitment receive `vesty.contribution_commitment_required`. Never writes transactions
 - `confirm_investment_day_v1` — authenticates via `auth.uid()`, inserts missing member-reported amount-only buys for the caller only, and is idempotent on retry
 - `confirm_investment_day_v2` — same membership/cycle checks, requires the exact allocated CORE V1 ETF set, stores member-reported quantity and optional execution price, fills null quantity on retry, and rejects a different quantity once stored
 

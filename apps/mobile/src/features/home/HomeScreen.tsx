@@ -108,13 +108,16 @@ export function HomeScreen() {
           <View style={{ marginBottom: spacing.md }}>
             <HomeNextInvestmentDay
               dateLabel={
-                investmentDay.plan
-                  ? formatHomeInvestmentDayDate(investmentDay.plan.investmentDayAt)
-                  : investmentDay.error
-                    ? 'Date unavailable'
-                    : 'Loading…'
+                investmentDay.setupRequired
+                  ? 'Set your contribution'
+                  : investmentDay.plan
+                    ? formatHomeInvestmentDayDate(investmentDay.plan.investmentDayAt)
+                    : investmentDay.error
+                      ? 'Date unavailable'
+                      : 'Loading…'
               }
-              plannedMinor={investmentDay.plan?.expectedAmountMinor ?? null}
+              plannedMinor={investmentDay.setupRequired ? null : investmentDay.plan?.expectedAmountMinor ?? null}
+              setupRequired={investmentDay.setupRequired}
               onPress={() => onSelectTab('invest')}
             />
           </View>

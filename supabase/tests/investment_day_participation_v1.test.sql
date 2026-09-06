@@ -206,6 +206,12 @@ from public.create_club(
   'NOK'
 );
 
+select *
+from public.create_member_contribution_commitment_v1(
+  (select club_id from alice_club),
+  200000
+);
+
 create temporary table alice_day as
 select *
 from public.ensure_open_investment_day_v1((select club_id from alice_club));
@@ -219,6 +225,12 @@ select tests.authenticate_as('00000000-0000-4000-8000-000000000082');
 create temporary table bob_join as
 select *
 from public.accept_club_invitation((select invite_token from alice_invite));
+
+select *
+from public.create_member_contribution_commitment_v1(
+  (select club_id from alice_club),
+  200000
+);
 
 create temporary table bob_day as
 select *
@@ -237,6 +249,7 @@ insert into public.investment_cycles (
   club_id,
   investment_schedule_id,
   strategy_version_id,
+  contribution_policy_version_id,
   occurrence_key,
   investment_day_at,
   configuration_deadline_at,
@@ -251,6 +264,7 @@ select
   cycle.club_id,
   cycle.investment_schedule_id,
   cycle.strategy_version_id,
+  cycle.contribution_policy_version_id,
   hist.occurrence_key,
   hist.investment_day_at,
   hist.investment_day_at - interval '1 day',
@@ -273,6 +287,7 @@ insert into public.investment_cycles (
   club_id,
   investment_schedule_id,
   strategy_version_id,
+  contribution_policy_version_id,
   occurrence_key,
   investment_day_at,
   configuration_deadline_at,
@@ -285,6 +300,7 @@ select
   cycle.club_id,
   cycle.investment_schedule_id,
   cycle.strategy_version_id,
+  cycle.contribution_policy_version_id,
   'future-1',
   now() + interval '40 days',
   now() + interval '39 days',
@@ -503,6 +519,12 @@ create temporary table cara_join as
 select *
 from public.accept_club_invitation((select invite_token from alice_late_invite));
 
+select *
+from public.create_member_contribution_commitment_v1(
+  (select club_id from alice_club),
+  200000
+);
+
 select extensions.is(
   (
     select current_streak
@@ -598,6 +620,12 @@ from public.create_club(
   'simple_majority',
   'world_mix',
   'NOK'
+);
+
+select *
+from public.create_member_contribution_commitment_v1(
+  (select club_id from dana_club),
+  200000
 );
 
 create temporary table dana_day as

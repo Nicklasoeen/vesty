@@ -6,7 +6,9 @@ import { StatusBar } from 'expo-status-bar';
 
 import { useTheme } from '@/theme';
 import { AppText, Button, Screen, TextField } from '@/ui';
+import { getClubContributionPolicy, getMyContributionCommitment } from './api';
 import { normalizeInviteTokenInput } from './inviteToken';
+import { needsFlexibleContributionSetup } from './presentContribution';
 import { attachClub, joinClub, useClubs } from './useClubs';
 
 export function JoinClubScreen() {
@@ -53,7 +55,19 @@ export function JoinClubScreen() {
         const joined = await joinClub(normalized);
         joinedClubIdRef.current = joined.clubId;
       }
-      await attachClub(refresh, selectClub, joinedClubIdRef.current);
+      const joinedClubId = joinedClubIdRef.current;
+      await attachClub(refresh, selectClub, joinedClubId);
+      const [policy, commitment] = await Promise.all([
+        getClubContributionPolicy(joinedClubId),
+        getMyContributionCommitment(joinedClubId),
+      ]);
+      if (needsFlexibleContributionSetup(policy, commitment)) {
+        router.replace({
+          pathname: '/clubs/contribution-setup',
+          params: { clubId: joinedClubId },
+        });
+        return;
+      }
       router.replace('/club');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Invite is invalid or expired');

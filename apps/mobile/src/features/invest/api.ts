@@ -1,7 +1,8 @@
+import { ContributionSetupRequiredError } from '@/features/clubs/contributionPolicy';
 import { firstRpcRow, requireString } from '@/features/clubs/types';
 import { supabase } from '@/lib/supabase/client';
 
-import { mapInvestError } from './investErrors';
+import { extractInvestErrorCode, mapInvestError } from './investErrors';
 import type {
   InvestmentDayAllocation,
   InvestmentDayPlan,
@@ -140,6 +141,9 @@ export async function ensureOpenInvestmentDay(clubId: string): Promise<Investmen
   });
 
   if (result.error) {
+    if (extractInvestErrorCode(result.error) === 'vesty.contribution_commitment_required') {
+      throw new ContributionSetupRequiredError();
+    }
     throw new Error(mapInvestError(result.error, 'Unable to load this Investment Day', 'ensure_open_investment_day_v1'));
   }
 

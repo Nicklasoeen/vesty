@@ -291,6 +291,7 @@ describe('unimplemented club capabilities', () => {
     assert.deepEqual(presentClubSettingsItems({ isOwner: true }), {
       details: true,
       members: true,
+      contributions: true,
       governance: true,
       invite: true,
       leave: false,

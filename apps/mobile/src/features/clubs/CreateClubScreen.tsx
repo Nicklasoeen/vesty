@@ -15,6 +15,7 @@ import {
   packageHoldingLines,
   type CuratedPackageId,
 } from './curatedInvestmentPackages';
+import type { ContributionPolicyMode } from './contributionPolicy';
 import {
   advanceCreateClubStep,
   canContinueCreateClub,
@@ -27,6 +28,7 @@ import {
 } from './createClubWizard';
 import { CLUB_NAME_MAX_LENGTH } from './genesisStrategy';
 import { GOVERNANCE_OPTIONS, governanceLabel, type GovernanceThresholdKind } from './governance';
+import { CONTRIBUTION_STYLE_OPTIONS, contributionStyleLabel } from './presentContribution';
 import { attachClub, createClub, useClubs } from './useClubs';
 
 export function CreateClubScreen() {
@@ -37,11 +39,22 @@ export function CreateClubScreen() {
   const [name, setName] = useState('');
   const [governance, setGovernance] = useState<GovernanceThresholdKind>('simple_majority');
   const [packageId, setPackageId] = useState<CuratedPackageId | null>(null);
+  const [contributionMode, setContributionMode] = useState<ContributionPolicyMode | null>(null);
+  const [equalAmountInput, setEqualAmountInput] = useState('');
+  const [creatorFlexibleAmountInput, setCreatorFlexibleAmountInput] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const createdClubIdRef = useRef<string | null>(null);
 
-  const draft = { step, name, governance, packageId };
+  const draft = {
+    step,
+    name,
+    governance,
+    packageId,
+    contributionMode,
+    equalAmountInput,
+    creatorFlexibleAmountInput,
+  };
   const selectedPackage = packageId ? getCuratedPackage(packageId) : null;
   const review = packageId ? reviewPackageSummary(packageId) : null;
 
@@ -213,6 +226,104 @@ export function CreateClubScreen() {
             </View>
           ) : null}
 
+          {step === 'contribution' ? (
+            <View style={{ marginTop: spacing.xl }}>
+              <AppText variant="title" accessibilityRole="header">
+                Contribution style
+              </AppText>
+              <AppText variant="body" color="secondary" style={{ marginTop: spacing.sm }}>
+                Choose how members contribute on each Investment Day.
+              </AppText>
+              <View style={{ marginTop: spacing.lg }}>
+                {CONTRIBUTION_STYLE_OPTIONS.map((option) => {
+                  const selected = option.value === contributionMode;
+                  return (
+                    <Pressable
+                      key={option.value}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected }}
+                      accessibilityLabel={option.label}
+                      onPress={() => {
+                        setError(null);
+                        setContributionMode(option.value);
+                      }}
+                      style={({ pressed }) => ({
+                        paddingVertical: spacing.md,
+                        opacity: pressed ? 0.7 : 1,
+                      })}
+                    >
+                      <AppText variant="bodyStrong" color={selected ? 'primary' : 'secondary'}>
+                        {option.label}
+                      </AppText>
+                      <AppText variant="meta" color="secondary" style={{ marginTop: 4 }}>
+                        {option.description}
+                      </AppText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {contributionMode === 'equal' ? (
+                <View style={{ marginTop: spacing.lg }}>
+                  <TextField
+                    label="Amount"
+                    value={equalAmountInput}
+                    onChangeText={setEqualAmountInput}
+                    keyboardType="number-pad"
+                    inputMode="numeric"
+                    autoCorrect={false}
+                    editable={!isSubmitting}
+                    error={Boolean(error)}
+                    accessibilityLabel="Shared amount in kroner"
+                    placeholder="2000"
+                  />
+                  <AppText variant="meta" color="secondary" style={{ marginTop: spacing.xs }}>
+                    kroner per Investment Day
+                  </AppText>
+                </View>
+              ) : null}
+
+              {contributionMode === 'flexible' ? (
+                <View style={{ marginTop: spacing.lg }}>
+                  <TextField
+                    label="Your amount"
+                    value={creatorFlexibleAmountInput}
+                    onChangeText={setCreatorFlexibleAmountInput}
+                    keyboardType="number-pad"
+                    inputMode="numeric"
+                    autoCorrect={false}
+                    editable={!isSubmitting}
+                    error={Boolean(error)}
+                    accessibilityLabel="Your amount in kroner"
+                    placeholder="2000"
+                  />
+                  <AppText variant="meta" color="secondary" style={{ marginTop: spacing.xs }}>
+                    Only you can see your amount.
+                  </AppText>
+                </View>
+              ) : null}
+
+              {error ? (
+                <AppText variant="meta" color="negative" style={{ marginTop: spacing.sm }}>
+                  {error}
+                </AppText>
+              ) : null}
+
+              <View style={{ marginTop: spacing.xl }}>
+                <Button
+                  label="Continue"
+                  variant="primary"
+                  block
+                  disabled={!canContinueCreateClub(draft)}
+                  onPress={() => {
+                    setError(null);
+                    setStep(advanceCreateClubStep('contribution'));
+                  }}
+                />
+              </View>
+            </View>
+          ) : null}
+
           {step === 'review' && selectedPackage && review ? (
             <View style={{ marginTop: spacing.xl }}>
               <AppText variant="title" accessibilityRole="header">
@@ -227,6 +338,22 @@ export function CreateClubScreen() {
                 <AppText variant="body" style={{ marginTop: spacing.sm }}>
                   {governanceLabel(governance)}
                 </AppText>
+              </View>
+
+              <View style={{ marginTop: spacing.xl }}>
+                <AppText variant="sectionTitle">Contribution style</AppText>
+                <AppText variant="bodyStrong" style={{ marginTop: spacing.sm }}>
+                  {contributionMode ? contributionStyleLabel(contributionMode) : ''}
+                </AppText>
+                {contributionMode === 'equal' ? (
+                  <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
+                    {`${equalAmountInput} kr per Investment Day`}
+                  </AppText>
+                ) : (
+                  <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
+                    Your amount: {creatorFlexibleAmountInput} kr. Only you can see this amount.
+                  </AppText>
+                )}
               </View>
 
               <View style={{ marginTop: spacing.xl }}>

@@ -2,6 +2,13 @@ import { signAvatarUrls } from '@/features/profile/api';
 import { supabase } from '@/lib/supabase/client';
 
 import { mapClubError } from './clubErrors';
+import {
+  isContributionPolicyMode,
+  presentClubContributionPolicy,
+  type ClubContributionPolicy,
+  type ContributionPolicyMode,
+  type MyContributionCommitment,
+} from './contributionPolicy';
 import { isCuratedPackageId, type CuratedPackageId } from './curatedInvestmentPackages';
 import { V1_BASE_CURRENCY } from './genesisStrategy';
 import type { GovernanceThresholdKind } from './governance';
@@ -221,24 +228,41 @@ export async function fetchClubStrategySlices(clubId: string) {
   );
 }
 
+function requireInteger(row: Record<string, unknown>, key: string): number {
+  const value = row[key];
+  if (typeof value === 'number' && Number.isInteger(value)) {
+    return value;
+  }
+  if (typeof value === 'string' && /^-?\d+$/.test(value)) {
+    return Number.parseInt(value, 10);
+  }
+  throw new Error(`Missing ${key}`);
+}
+
 export async function createClub(input: {
   name: string;
   governanceThresholdKind: GovernanceThresholdKind;
   packageId: CuratedPackageId;
+  contributionMode: ContributionPolicyMode;
+  equalAmountMinor?: number | null;
+  creatorFlexibleAmountMinor?: number | null;
 }): Promise<CreatedClubResult> {
   if (!isCuratedPackageId(input.packageId)) {
     throw new Error('Unable to create club right now');
   }
 
-  const result = await supabase.rpc('create_club', {
+  const result = await supabase.rpc('create_club_v2', {
     p_name: input.name,
     p_governance_threshold_kind: input.governanceThresholdKind,
     p_package_id: input.packageId,
+    p_contribution_mode: input.contributionMode,
+    p_equal_amount_minor: input.equalAmountMinor ?? null,
+    p_creator_flexible_amount_minor: input.creatorFlexibleAmountMinor ?? null,
     p_base_currency: V1_BASE_CURRENCY,
   });
 
   if (result.error) {
-    throw new Error(mapClubError(result.error, 'Unable to create club right now', 'create_club'));
+    throw new Error(mapClubError(result.error, 'Unable to create club right now', 'create_club_v2'));
   }
 
   const row = firstRpcRow(result.data);
@@ -255,6 +279,93 @@ export async function createClub(input: {
   } catch {
     throw new Error('Unable to create club right now');
   }
+}
+
+export async function getClubContributionPolicy(clubId: string): Promise<ClubContributionPolicy> {
+  const result = await supabase.rpc('club_contribution_policy_v1', { p_club_id: clubId });
+
+  if (result.error) {
+    throw new Error(mapClubError(result.error, 'Unable to load contribution settings', 'club_contribution_policy_v1'));
+  }
+
+  const row = firstRpcRow(result.data);
+  if (!row) {
+    throw new Error('Unable to load contribution settings');
+  }
+
+  try {
+    const mode = row.mode;
+    if (!isContributionPolicyMode(mode)) {
+      throw new Error('Unable to load contribution settings');
+    }
+
+    const equalAmount = row.equal_amount_minor;
+    return presentClubContributionPolicy({
+      clubId: requireString(row, 'club_id'),
+      policyVersionId: requireString(row, 'policy_version_id'),
+      mode,
+      currency: requireString(row, 'currency'),
+      equalAmountMinor:
+        equalAmount == null ? null : requireInteger({ equal_amount_minor: equalAmount }, 'equal_amount_minor'),
+    });
+  } catch {
+    throw new Error('Unable to load contribution settings');
+  }
+}
+
+export async function getMyContributionCommitment(clubId: string): Promise<MyContributionCommitment | null> {
+  const result = await supabase.rpc('my_contribution_commitment_v1', { p_club_id: clubId });
+
+  if (result.error) {
+    throw new Error(mapClubError(result.error, 'Unable to load your contribution', 'my_contribution_commitment_v1'));
+  }
+
+  const row = firstRpcRow(result.data);
+  if (!row) {
+    return null;
+  }
+
+  try {
+    return {
+      clubId: requireString(row, 'club_id'),
+      membershipId: requireString(row, 'membership_id'),
+      commitmentVersionId: requireString(row, 'commitment_version_id'),
+      versionNumber: requireInteger(row, 'version_number'),
+      amountMinor: requireInteger(row, 'amount_minor'),
+      currency: requireString(row, 'currency'),
+      createdAt: requireString(row, 'created_at'),
+    };
+  } catch {
+    throw new Error('Unable to load your contribution');
+  }
+}
+
+export async function setMyFlexibleContribution(
+  clubId: string,
+  amountMinor: number,
+): Promise<MyContributionCommitment> {
+  const result = await supabase.rpc('create_member_contribution_commitment_v1', {
+    p_club_id: clubId,
+    p_amount_minor: amountMinor,
+  });
+
+  if (result.error) {
+    throw new Error(
+      mapClubError(result.error, 'Unable to save your contribution', 'create_member_contribution_commitment_v1'),
+    );
+  }
+
+  const row = firstRpcRow(result.data);
+  if (!row) {
+    throw new Error('Unable to save your contribution');
+  }
+
+  const saved = await getMyContributionCommitment(clubId);
+  if (!saved) {
+    throw new Error('Unable to save your contribution');
+  }
+
+  return saved;
 }
 
 export async function joinClub(token: string): Promise<AcceptedInvitationResult> {

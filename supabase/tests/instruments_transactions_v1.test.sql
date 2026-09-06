@@ -355,6 +355,12 @@ from public.create_club(
   'NOK'
 );
 
+select *
+from public.create_member_contribution_commitment_v1(
+  (select club_id from alice_club),
+  200000
+);
+
 select extensions.is(
   (
     select target_name
@@ -545,6 +551,12 @@ from public.create_club(
   'NOK'
 );
 
+select *
+from public.create_member_contribution_commitment_v1(
+  (select club_id from alice_second_club),
+  200000
+);
+
 select extensions.is(
   (
     select string_agg(investment_target_id::text || ':' || allocation_bps::text, ',' order by position)
@@ -582,6 +594,12 @@ select tests.authenticate_as('00000000-0000-4000-8000-000000000022');
 create temporary table bob_join as
 select *
 from public.accept_club_invitation((select invite_token from alice_invite));
+
+select *
+from public.create_member_contribution_commitment_v1(
+  (select club_id from alice_club),
+  200000
+);
 
 select extensions.is(
   (
@@ -692,6 +710,7 @@ insert into public.investment_cycles (
   club_id,
   investment_schedule_id,
   strategy_version_id,
+  contribution_policy_version_id,
   occurrence_key,
   investment_day_at,
   configuration_deadline_at,
@@ -705,6 +724,7 @@ select
   club.id,
   schedule.id,
   version.id,
+  policy.id,
   'v1-upcoming-test',
   now() + interval '14 days',
   now() + interval '13 days',
@@ -717,6 +737,8 @@ join public.investment_schedules as schedule
   on schedule.club_id = club.id
 join public.strategy_versions as version
   on version.club_id = club.id
+join public.contribution_policy_versions as policy
+  on policy.club_id = club.id
 where club.id = (select club_id from alice_club)
 limit 1;
 
@@ -864,6 +886,12 @@ select
   'NOK',
   now()
 from alice_remainder_club;
+
+select *
+from public.create_member_contribution_commitment_v1(
+  (select club_id from alice_remainder_club),
+  200001
+);
 
 create temporary table alice_remainder_day as
 select *

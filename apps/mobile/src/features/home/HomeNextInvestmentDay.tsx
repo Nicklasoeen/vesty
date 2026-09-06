@@ -18,6 +18,7 @@ interface HomeNextInvestmentDayProps {
   onPress?: () => void;
   participationLabel?: string | null;
   participants?: readonly InvestmentDayParticipantPreview[];
+  setupRequired?: boolean;
 }
 
 export function HomeNextInvestmentDay({
@@ -26,6 +27,7 @@ export function HomeNextInvestmentDay({
   onPress,
   participationLabel,
   participants,
+  setupRequired = false,
 }: HomeNextInvestmentDayProps) {
   const { colors, radius, spacing } = useTheme();
 
@@ -60,11 +62,15 @@ export function HomeNextInvestmentDay({
           <Feather name="calendar" size={20} color={colors.accent} />
         </View>
         <View style={{ flex: 1, marginHorizontal: spacing.md, minWidth: 0 }}>
-          <AppText variant="label">Next Investment Day</AppText>
+          <AppText variant="label">{setupRequired ? 'Your contribution' : 'Next Investment Day'}</AppText>
           <AppText variant="subtitle" numberOfLines={1} style={{ marginTop: 1 }}>
             {dateLabel}
           </AppText>
-          {plannedMinor != null ? (
+          {setupRequired ? (
+            <AppText variant="supporting" style={{ marginTop: 2 }}>
+              Choose how much you want to contribute
+            </AppText>
+          ) : plannedMinor != null ? (
             <AppText variant="supporting" style={{ marginTop: 2 }}>
               {formatNokFromMinor(plannedMinor)} planned
             </AppText>

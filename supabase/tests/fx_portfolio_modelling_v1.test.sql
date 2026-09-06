@@ -133,6 +133,12 @@ create temporary table alice_club as
 select *
 from public.create_club('FX Model Club', 'simple_majority', 'world_mix', 'NOK');
 
+select *
+from public.create_member_contribution_commitment_v1(
+  (select club_id from alice_club),
+  200000
+);
+
 create temporary table alice_day as
 select *
 from public.ensure_open_investment_day_v1((select club_id from alice_club));
@@ -510,6 +516,29 @@ from (
 ) as allocation(investment_target_id, allocation_bps, position)
 join public.investment_targets as target
   on target.id = allocation.investment_target_id;
+
+insert into public.contribution_policy_versions (
+  club_id, version_number, mode, currency, equal_amount_minor, created_by_membership_id
+)
+values (
+  '21000000-0000-4000-8000-000000000081',
+  1,
+  'flexible',
+  'NOK',
+  null,
+  '22000000-0000-4000-8000-000000000081'
+);
+
+insert into public.member_contribution_commitment_versions (
+  club_id, membership_id, version_number, amount_minor, currency
+)
+values (
+  '21000000-0000-4000-8000-000000000081',
+  '22000000-0000-4000-8000-000000000081',
+  1,
+  200000,
+  'NOK'
+);
 
 set local role authenticated;
 select tests.authenticate_as('00000000-0000-4000-8000-000000000081');

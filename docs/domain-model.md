@@ -20,7 +20,7 @@ Entity and attribute names below are domain terminology, not a finalized physica
 
 1. A user may belong to multiple private clubs, and each club may have multiple members.
 2. Every member of a club follows the same target strategy using money held at their own broker.
-3. Member contribution intentions may differ in amount, but they do not change the club's percentage allocation.
+3. Member contribution intentions may differ in amount, but they do not change the club's percentage allocation. Contribution Policy is a separate versioned layer from Club Strategy; see `docs/investment-architecture-v2.md`.
 4. Exact per-member contribution amounts are private. Monetary aggregates may be shown only when they include at least three distinct contributing members.
 5. Each club has exactly one base currency. Every authoritative contribution amount in that club uses that currency in V1.
 6. A strategy is a complete allocation snapshot whose integer basis points total exactly `10000`.

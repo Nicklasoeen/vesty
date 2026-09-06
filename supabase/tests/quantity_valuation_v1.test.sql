@@ -223,6 +223,12 @@ from public.create_club(
   'NOK'
 );
 
+select *
+from public.create_member_contribution_commitment_v1(
+  (select club_id from alice_club),
+  200000
+);
+
 create temporary table alice_day as
 select *
 from public.ensure_open_investment_day_v1((select club_id from alice_club));
@@ -644,6 +650,12 @@ create temporary table bob_join as
 select *
 from public.accept_club_invitation((select invite_token from alice_invite));
 
+select *
+from public.create_member_contribution_commitment_v1(
+  (select club_id from alice_club),
+  200000
+);
+
 select extensions.is(
   (
     select count(*)
@@ -697,6 +709,12 @@ from public.create_club(
   'simple_majority',
   'world_mix',
   'NOK'
+);
+
+select *
+from public.create_member_contribution_commitment_v1(
+  (select club_id from alice_legacy_amount_club),
+  200000
 );
 
 create temporary table alice_legacy_amount_day as
@@ -778,6 +796,7 @@ insert into public.investment_cycles (
   club_id,
   investment_schedule_id,
   strategy_version_id,
+  contribution_policy_version_id,
   occurrence_key,
   investment_day_at,
   configuration_deadline_at,
@@ -792,6 +811,7 @@ select
   cycle.club_id,
   cycle.investment_schedule_id,
   cycle.strategy_version_id,
+  cycle.contribution_policy_version_id,
   cycle.occurrence_key || '-partial',
   cycle.investment_day_at + interval '32 days',
   cycle.configuration_deadline_at + interval '32 days',
@@ -954,6 +974,38 @@ from (
 ) as allocation(investment_target_id, allocation_bps, position)
 join public.investment_targets as target
   on target.id = allocation.investment_target_id;
+
+insert into public.contribution_policy_versions (
+  club_id,
+  version_number,
+  mode,
+  currency,
+  equal_amount_minor,
+  created_by_membership_id
+)
+values (
+  '21000000-0000-4000-8000-000000000071',
+  1,
+  'flexible',
+  'NOK',
+  null,
+  '22000000-0000-4000-8000-000000000071'
+);
+
+insert into public.member_contribution_commitment_versions (
+  club_id,
+  membership_id,
+  version_number,
+  amount_minor,
+  currency
+)
+values (
+  '21000000-0000-4000-8000-000000000071',
+  '22000000-0000-4000-8000-000000000071',
+  1,
+  200000,
+  'NOK'
+);
 
 set local role authenticated;
 select tests.authenticate_as('00000000-0000-4000-8000-000000000071');

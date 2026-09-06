@@ -280,6 +280,35 @@ values
     'NOK'
   );
 
+insert into public.contribution_policy_versions (
+  id,
+  club_id,
+  version_number,
+  mode,
+  currency,
+  equal_amount_minor,
+  created_by_membership_id
+)
+values
+  (
+    'e1000000-0000-4000-8000-000000000001',
+    '10000000-0000-4000-8000-000000000001',
+    1,
+    'flexible',
+    'NOK',
+    null,
+    '20000000-0000-4000-8000-000000000001'
+  ),
+  (
+    'e1000000-0000-4000-8000-000000000002',
+    '10000000-0000-4000-8000-000000000002',
+    1,
+    'flexible',
+    'NOK',
+    null,
+    '20000000-0000-4000-8000-000000000003'
+  );
+
 insert into public.strategy_versions (
   id,
   club_id,
@@ -623,6 +652,7 @@ insert into public.investment_cycles (
   club_id,
   investment_schedule_id,
   strategy_version_id,
+  contribution_policy_version_id,
   occurrence_key,
   investment_day_at,
   configuration_deadline_at,
@@ -640,6 +670,7 @@ values
     '10000000-0000-4000-8000-000000000001',
     '60000000-0000-4000-8000-000000000001',
     '40000000-0000-4000-8000-000000000001',
+    'e1000000-0000-4000-8000-000000000001',
     'club-a-open',
     now() + interval '1 day',
     now() - interval '3 days',
@@ -656,6 +687,7 @@ values
     '10000000-0000-4000-8000-000000000001',
     '60000000-0000-4000-8000-000000000001',
     '40000000-0000-4000-8000-000000000001',
+    'e1000000-0000-4000-8000-000000000001',
     'club-a-completed',
     now() - interval '1 month',
     now() - interval '1 month 3 days',
@@ -672,6 +704,7 @@ values
     '10000000-0000-4000-8000-000000000002',
     '60000000-0000-4000-8000-000000000002',
     '40000000-0000-4000-8000-000000000002',
+    'e1000000-0000-4000-8000-000000000002',
     'club-b-open',
     now() + interval '2 days',
     now() - interval '2 days',

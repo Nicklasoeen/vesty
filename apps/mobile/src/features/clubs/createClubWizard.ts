@@ -5,22 +5,30 @@ import {
   packageHoldingLines,
   type CuratedPackageId,
 } from './curatedInvestmentPackages.ts';
+import { isValidContributionAmountMinor, parseContributionKronerInput } from './contributionAmount.ts';
+import type { ContributionPolicyMode } from './contributionPolicy.ts';
 import { CLUB_NAME_MAX_LENGTH, V1_BASE_CURRENCY } from './genesisStrategy.ts';
 import type { GovernanceThresholdKind } from './governance.ts';
 
-export type CreateClubStep = 'name' | 'governance' | 'style' | 'review';
+export type CreateClubStep = 'name' | 'governance' | 'style' | 'contribution' | 'review';
 
 export interface CreateClubDraft {
   step: CreateClubStep;
   name: string;
   governance: GovernanceThresholdKind;
   packageId: CuratedPackageId | null;
+  contributionMode: ContributionPolicyMode | null;
+  equalAmountInput: string;
+  creatorFlexibleAmountInput: string;
 }
 
 export interface CreateClubRequest {
   name: string;
   governanceThresholdKind: GovernanceThresholdKind;
   packageId: CuratedPackageId;
+  contributionMode: ContributionPolicyMode;
+  equalAmountMinor: number | null;
+  creatorFlexibleAmountMinor: number | null;
 }
 
 export const INITIAL_CREATE_CLUB_DRAFT: CreateClubDraft = {
@@ -28,6 +36,9 @@ export const INITIAL_CREATE_CLUB_DRAFT: CreateClubDraft = {
   name: '',
   governance: 'simple_majority',
   packageId: null,
+  contributionMode: null,
+  equalAmountInput: '',
+  creatorFlexibleAmountInput: '',
 };
 
 export function trimmedClubName(name: string): string {
@@ -47,8 +58,30 @@ export function canContinueFromStyle(packageId: CuratedPackageId | null): boolea
   return isCuratedPackageId(packageId);
 }
 
-export function canSubmitCreateClub(draft: Pick<CreateClubDraft, 'name' | 'packageId'>): boolean {
-  return isClubNameValid(draft.name) && canContinueFromStyle(draft.packageId);
+export function parsedEqualAmountMinor(draft: Pick<CreateClubDraft, 'equalAmountInput'>): number | null {
+  return parseContributionKronerInput(draft.equalAmountInput);
+}
+
+export function parsedCreatorFlexibleAmountMinor(
+  draft: Pick<CreateClubDraft, 'creatorFlexibleAmountInput'>,
+): number | null {
+  return parseContributionKronerInput(draft.creatorFlexibleAmountInput);
+}
+
+export function canContinueFromContribution(draft: Pick<CreateClubDraft, 'contributionMode' | 'equalAmountInput' | 'creatorFlexibleAmountInput'>): boolean {
+  if (draft.contributionMode === 'equal') {
+    return isValidContributionAmountMinor(parsedEqualAmountMinor(draft));
+  }
+  if (draft.contributionMode === 'flexible') {
+    return isValidContributionAmountMinor(parsedCreatorFlexibleAmountMinor(draft));
+  }
+  return false;
+}
+
+export function canSubmitCreateClub(draft: Pick<CreateClubDraft, 'name' | 'packageId' | 'contributionMode' | 'equalAmountInput' | 'creatorFlexibleAmountInput'>): boolean {
+  return isClubNameValid(draft.name)
+    && canContinueFromStyle(draft.packageId)
+    && canContinueFromContribution(draft);
 }
 
 export function canContinueCreateClub(draft: CreateClubDraft): boolean {
@@ -57,6 +90,9 @@ export function canContinueCreateClub(draft: CreateClubDraft): boolean {
   }
   if (draft.step === 'style') {
     return canContinueFromStyle(draft.packageId);
+  }
+  if (draft.step === 'contribution') {
+    return canContinueFromContribution(draft);
   }
   return draft.step === 'governance' || draft.step === 'review';
 }
@@ -69,6 +105,9 @@ export function advanceCreateClubStep(step: CreateClubStep): CreateClubStep {
     return 'style';
   }
   if (step === 'style') {
+    return 'contribution';
+  }
+  if (step === 'contribution') {
     return 'review';
   }
   return 'review';
@@ -81,21 +120,28 @@ export function previousCreateClubStep(step: CreateClubStep): CreateClubStep | n
   if (step === 'style') {
     return 'governance';
   }
-  if (step === 'review') {
+  if (step === 'contribution') {
     return 'style';
+  }
+  if (step === 'review') {
+    return 'contribution';
   }
   return null;
 }
 
 export function createClubRequest(draft: CreateClubDraft): CreateClubRequest {
-  if (!canSubmitCreateClub(draft) || !draft.packageId) {
-    throw new Error('Choose an investment style to continue');
+  if (!canSubmitCreateClub(draft) || !draft.packageId || !draft.contributionMode) {
+    throw new Error('Choose a contribution style to continue');
   }
 
   return {
     name: trimmedClubName(draft.name),
     governanceThresholdKind: draft.governance,
     packageId: draft.packageId,
+    contributionMode: draft.contributionMode,
+    equalAmountMinor: draft.contributionMode === 'equal' ? parsedEqualAmountMinor(draft) : null,
+    creatorFlexibleAmountMinor:
+      draft.contributionMode === 'flexible' ? parsedCreatorFlexibleAmountMinor(draft) : null,
   };
 }
 

@@ -3,6 +3,8 @@ import { Alert, Pressable, ScrollView, View } from 'react-native';
 import { HomeNextInvestmentDay } from '@/features/home/HomeNextInvestmentDay';
 import { HomePerformanceChart } from '@/features/home/HomePerformanceChart';
 import { formatHomeInvestmentDayDate } from '@/features/home/presentHomePortfolio';
+import { presentClubContributionSummary } from '@/features/clubs/presentContribution';
+import { useClubContribution } from '@/features/clubs/useClubContribution';
 import { useClubStrategy } from '@/features/clubs/useClubStrategy';
 import { canAddExactHoldings } from '@/features/invest/holdingConfidence';
 import { supportsExactHoldings } from '@/features/invest/investmentDayReporting';
@@ -38,6 +40,10 @@ interface ClubOverviewProps {
 export function ClubOverview({ clubId, summary, history, positions, onOpenInvest }: ClubOverviewProps) {
   const { radius, spacing } = useTheme();
   const { allocations } = useClubStrategy(clubId);
+  const contribution = useClubContribution(clubId);
+  const contributionSummary = contribution.policy
+    ? presentClubContributionSummary(contribution.policy)
+    : null;
   const investmentDay = useInvestmentDay(clubId);
   const participation = useInvestmentDayParticipation(clubId, investmentDay.plan?.cycleId ?? null);
   const compactParticipation = participation.participation
@@ -109,13 +115,16 @@ export function ClubOverview({ clubId, summary, history, positions, onOpenInvest
       <View style={{ marginBottom: spacing.lg }}>
         <HomeNextInvestmentDay
           dateLabel={
-            investmentDay.plan
-              ? formatHomeInvestmentDayDate(investmentDay.plan.investmentDayAt)
-              : investmentDay.error
-                ? 'Date unavailable'
-                : 'Loading…'
+            investmentDay.setupRequired
+              ? 'Set your contribution'
+              : investmentDay.plan
+                ? formatHomeInvestmentDayDate(investmentDay.plan.investmentDayAt)
+                : investmentDay.error
+                  ? 'Date unavailable'
+                  : 'Loading…'
           }
-          plannedMinor={investmentDay.plan?.expectedAmountMinor ?? null}
+          plannedMinor={investmentDay.setupRequired ? null : investmentDay.plan?.expectedAmountMinor ?? null}
+          setupRequired={investmentDay.setupRequired}
           participationLabel={compactParticipation?.allCompletedLabel ?? compactParticipation?.countLabel}
           participants={participation.participation?.members.map((member) => ({
             id: member.membershipId,
@@ -126,6 +135,16 @@ export function ClubOverview({ clubId, summary, history, positions, onOpenInvest
           onPress={onOpenInvest}
         />
       </View>
+
+      {contributionSummary ? (
+        <View style={{ marginBottom: spacing.lg }}>
+          <SectionHeader title={contributionSummary.title} />
+          <AppText variant="subtitle">{contributionSummary.styleLabel}</AppText>
+          <AppText variant="supporting" style={{ marginTop: 2 }}>
+            {contributionSummary.detail}
+          </AppText>
+        </View>
+      ) : null}
 
       {allocations.length > 0 ? (
         <View style={{ marginBottom: spacing.lg }}>
