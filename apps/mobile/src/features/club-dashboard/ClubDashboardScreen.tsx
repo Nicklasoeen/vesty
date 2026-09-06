@@ -12,6 +12,9 @@ import { createInvitationForClub, useClubs } from '@/features/clubs/useClubs';
 import type { ClubSummary } from '@/features/clubs/types';
 import { homeScrollBottomPadding } from '@/features/home/presentHomeMoney';
 import { useMemberPortfolio } from '@/features/portfolio/useMemberPortfolio';
+import { ClubProposalDetail } from '@/features/proposals/ClubProposalDetail';
+import { ClubProposalsList } from '@/features/proposals/ClubProposalsList';
+import { useClubProposals } from '@/features/proposals/useClubProposals';
 import { BOTTOM_NAVIGATION_HEIGHT, BottomNavigation } from '@/navigation/BottomNavigation';
 import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { useTheme } from '@/theme';
@@ -153,6 +156,9 @@ function ClubDashboard({
   const { colors, radius, spacing } = useTheme();
   const insets = useSafeAreaInsets();
   const [clubTab, setClubTab] = useState<ClubTabKey>('overview');
+  const [selectedProposalId, setSelectedProposalId] = useState<string | null>(null);
+  const proposalsState = useClubProposals(club.clubId);
+  const selectedProposal = proposalsState.proposals.find((proposal) => proposal.id === selectedProposalId) ?? null;
   const { summary, history, positions } = useMemberPortfolio(club.clubId);
   const finance = presentClubViewerFinance(summary);
   const stats = presentClubHeroStats({
@@ -163,6 +169,29 @@ function ClubDashboard({
   });
   const actions = presentClubPrimaryActions({ isOwner: club.isOwner });
   const tabs = visibleClubTabs();
+  const sessionVote = selectedProposal ? proposalsState.sessionVotes[selectedProposal.id] : undefined;
+
+  if (selectedProposal) {
+    return (
+      <Screen
+        contentContainerStyle={{
+          paddingHorizontal: spacing.lg,
+          paddingBottom: homeScrollBottomPadding(BOTTOM_NAVIGATION_HEIGHT, insets.bottom),
+        }}
+      >
+        <ClubProposalDetail
+          clubId={club.clubId}
+          proposal={selectedProposal}
+          members={club.members}
+          viewerMembershipId={club.membershipId}
+          sessionChoice={sessionVote?.choice}
+          alreadyVotedUnknownChoice={sessionVote != null && sessionVote.choice == null}
+          onBack={() => setSelectedProposalId(null)}
+          onCastVote={(choice) => proposalsState.castVote(selectedProposal.id, club.membershipId, choice)}
+        />
+      </Screen>
+    );
+  }
 
   return (
     <Screen
@@ -285,6 +314,17 @@ function ClubDashboard({
           history={history}
           positions={positions}
           onOpenInvest={onOpenInvest}
+        />
+      ) : clubTab === 'proposals' ? (
+        <ClubProposalsList
+          members={club.members}
+          proposals={proposalsState.proposals}
+          isLoading={proposalsState.isLoading}
+          error={proposalsState.error}
+          onOpen={setSelectedProposalId}
+          onRetry={() => {
+            void proposalsState.refresh();
+          }}
         />
       ) : (
         <ClubSettingsPanel club={club} onInvite={onInvite} />

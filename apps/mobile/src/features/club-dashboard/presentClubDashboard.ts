@@ -11,8 +11,8 @@ import type { PortfolioValuationConfidence } from '../portfolio/valuationLabels.
 export const CLUB_TAB_KEYS = ['overview', 'proposals', 'chat', 'settings'] as const;
 export type ClubTabKey = (typeof CLUB_TAB_KEYS)[number];
 
-export const CLUB_IMPLEMENTED_TABS = ['overview', 'settings'] as const satisfies readonly ClubTabKey[];
-export const CLUB_FUTURE_TABS = ['proposals', 'chat'] as const satisfies readonly ClubTabKey[];
+export const CLUB_IMPLEMENTED_TABS = ['overview', 'proposals', 'settings'] as const satisfies readonly ClubTabKey[];
+export const CLUB_FUTURE_TABS = ['chat'] as const satisfies readonly ClubTabKey[];
 
 export const CLUB_TAB_LABELS: Record<ClubTabKey, string> = {
   overview: 'Overview',
@@ -295,9 +295,13 @@ export function clubOverviewCopyContainsTechnicalClutter(text: string): boolean 
 
 export function presentClubProposalCapability() {
   return {
-    available: false as const,
+    available: true as const,
     usesDemo: false as const,
-    reason: 'mobile_governance_ui_not_shipped' as const,
+    canRead: true as const,
+    canCastVote: true as const,
+    canCreate: false as const,
+    openVoteChoicesHidden: true as const,
+    reason: 'open_vote_choices_hidden_by_rls' as const,
   };
 }
 

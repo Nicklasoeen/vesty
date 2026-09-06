@@ -143,7 +143,9 @@ describe('club internal tabs', () => {
   it('defines the Club destinations without replacing bottom nav', () => {
     assert.deepEqual(CLUB_TAB_KEYS, ['overview', 'proposals', 'chat', 'settings']);
     assert.deepEqual(visibleClubTabs(), [...CLUB_IMPLEMENTED_TABS]);
-    assert.deepEqual(CLUB_FUTURE_TABS, ['proposals', 'chat']);
+    assert.deepEqual(CLUB_IMPLEMENTED_TABS, ['overview', 'proposals', 'settings']);
+    assert.deepEqual(CLUB_FUTURE_TABS, ['chat']);
+    assert.equal(CLUB_FUTURE_TABS.includes('proposals'), false);
     assert.equal(clubBottomNavUnchanged(), true);
     assert.deepEqual(BOTTOM_NAV_TAB_KEYS, ['home', 'club', 'invest', 'activity']);
     assert.deepEqual(BOTTOM_NAV_SLOTS, ['home', 'club', 'action', 'invest', 'activity']);
@@ -266,11 +268,13 @@ describe('club overview copy', () => {
 
 describe('unimplemented club capabilities', () => {
   it('does not fabricate proposal or chat data', () => {
-    assert.deepEqual(presentClubProposalCapability(), {
-      available: false,
-      usesDemo: false,
-      reason: 'mobile_governance_ui_not_shipped',
-    });
+    const proposals = presentClubProposalCapability();
+    assert.equal(proposals.available, true);
+    assert.equal(proposals.usesDemo, false);
+    assert.equal(proposals.canRead, true);
+    assert.equal(proposals.canCastVote, true);
+    assert.equal(proposals.canCreate, false);
+    assert.equal(proposals.openVoteChoicesHidden, true);
     assert.deepEqual(presentClubChatCapability(), {
       available: false,
       usesDemo: false,
