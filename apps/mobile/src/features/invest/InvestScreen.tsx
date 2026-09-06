@@ -13,6 +13,7 @@ import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { useTheme } from '@/theme';
 import { AppText, Button, Screen } from '@/ui';
 
+import { InvestmentDayParticipationSection } from './InvestmentDayParticipation';
 import { ExactHoldingsForm } from './ExactHoldingsForm';
 import { rowsFromPlan } from './investRows';
 import {
@@ -32,6 +33,7 @@ import {
 } from './investmentDayReporting';
 import type { InvestmentDayPlan, InvestTargetRow } from './types';
 import { useInvestmentDay } from './useInvestmentDay';
+import { useInvestmentDayParticipation } from './useInvestmentDayParticipation';
 
 function formatInvestmentDayShortLabel(iso: string): string {
   const date = new Date(iso);
@@ -54,6 +56,10 @@ export function InvestScreen() {
   const preferredBroker = profile?.preferredBroker ?? null;
   const { plan, isLoading, error, isConfirming, refresh, confirm } = useInvestmentDay(
     selectedClub?.clubId ?? null,
+  );
+  const participation = useInvestmentDayParticipation(
+    selectedClub?.clubId ?? null,
+    plan?.cycleId ?? null,
   );
   const [brokerOpened, setBrokerOpened] = useState<string | null>(null);
   const [brokerPickerOpen, setBrokerPickerOpen] = useState(false);
@@ -156,13 +162,14 @@ export function InvestScreen() {
     setConfirmError(null);
     try {
       await confirm();
+      await participation.refresh();
     } catch (caught) {
       setConfirmError({
         cycleId: cycleId ?? '',
         message: caught instanceof Error ? caught.message : 'Unable to confirm investments right now',
       });
     }
-  }, [confirm, cycleId, isConfirming]);
+  }, [confirm, cycleId, isConfirming, participation.refresh]);
 
   const onSaveExactHoldings = useCallback(async () => {
     if (isConfirming) {
@@ -177,6 +184,7 @@ export function InvestScreen() {
           priceStateByTarget,
         ),
       );
+      await participation.refresh();
       setExactHoldingsOpen(false);
     } catch (caught) {
       setConfirmError({
@@ -184,7 +192,7 @@ export function InvestScreen() {
         message: caught instanceof Error ? caught.message : 'Unable to save exact holdings right now',
       });
     }
-  }, [confirm, cycleId, isConfirming, priceStateByTarget, quantityStateByTarget, targets]);
+  }, [confirm, cycleId, isConfirming, participation.refresh, priceStateByTarget, quantityStateByTarget, targets]);
 
   const phase = plan?.isCompleted ? 'completed' : 'today';
 
@@ -227,6 +235,7 @@ export function InvestScreen() {
           </View>
         ) : plan && phase === 'today' ? (
           <TodayBody
+            participation={participation.participation}
             plan={plan}
             targets={targets}
             preferredBroker={preferredBroker}
@@ -242,6 +251,7 @@ export function InvestScreen() {
         ) : plan ? (
           <CompletedBody
             plan={plan}
+            participation={participation.participation}
             targets={targets}
             showExactCta={showExactCta}
             showExactForm={showExactForm}
@@ -271,6 +281,7 @@ export function InvestScreen() {
 function TodayBody({
   plan,
   targets,
+  participation,
   preferredBroker,
   brokerOpened,
   isConfirming,
@@ -281,6 +292,7 @@ function TodayBody({
 }: {
   plan: InvestmentDayPlan;
   targets: InvestTargetRow[];
+  participation: ReturnType<typeof useInvestmentDayParticipation>['participation'];
   preferredBroker: PreferredBroker | null;
   brokerOpened: boolean;
   isConfirming: boolean;
@@ -301,6 +313,17 @@ function TodayBody({
         {'  \u00B7  '}
         {formatInvestmentDayShortLabel(plan.investmentDayAt)}
       </AppText>
+
+      {participation ? (
+        <View style={{ marginTop: spacing.xl }}>
+          <InvestmentDayParticipationSection
+            completedCount={participation.completedCount}
+            totalCount={participation.totalCount}
+            allCompleted={participation.allCompleted}
+            members={participation.members}
+          />
+        </View>
+      ) : null}
 
       <AppText variant="display" style={{ marginTop: spacing.lg }}>
         {formatNokFromMinor(plan.expectedAmountMinor)}
@@ -378,6 +401,7 @@ function TodayBody({
 
 function CompletedBody({
   plan,
+  participation,
   targets,
   showExactCta,
   showExactForm,
@@ -394,6 +418,7 @@ function CompletedBody({
   onViewActivity,
 }: {
   plan: InvestmentDayPlan;
+  participation: ReturnType<typeof useInvestmentDayParticipation>['participation'];
   targets: InvestTargetRow[];
   showExactCta: boolean;
   showExactForm: boolean;
@@ -421,6 +446,17 @@ function CompletedBody({
         {'  \u00B7  '}
         {formatInvestmentDayShortLabel(plan.investmentDayAt)}
       </AppText>
+
+      {participation ? (
+        <View style={{ marginTop: spacing.xl }}>
+          <InvestmentDayParticipationSection
+            completedCount={participation.completedCount}
+            totalCount={participation.totalCount}
+            allCompleted={participation.allCompleted}
+            members={participation.members}
+          />
+        </View>
+      ) : null}
 
       <AppText variant="display" style={{ marginTop: spacing.lg }}>
         {formatNokFromMinor(displayTotal)}

@@ -6,7 +6,9 @@ import { formatHomeInvestmentDayDate } from '@/features/home/presentHomePortfoli
 import { useClubStrategy } from '@/features/clubs/useClubStrategy';
 import { canAddExactHoldings } from '@/features/invest/holdingConfidence';
 import { supportsExactHoldings } from '@/features/invest/investmentDayReporting';
+import { presentClubOverviewParticipation } from '@/features/invest/presentParticipation';
 import { useInvestmentDay } from '@/features/invest/useInvestmentDay';
+import { useInvestmentDayParticipation } from '@/features/invest/useInvestmentDayParticipation';
 import { historyByRange } from '@/features/portfolio/buildPortfolioChartSeries';
 import type { EstimatedPosition, MemberPortfolioSummary, PortfolioHistoryPoint } from '@/features/portfolio/portfolioApi';
 import { ESTIMATED_VALUATION_INFO, portfolioValueCaption } from '@/features/portfolio/valuationLabels';
@@ -37,6 +39,14 @@ export function ClubOverview({ clubId, summary, history, positions, onOpenInvest
   const { radius, spacing } = useTheme();
   const { allocations } = useClubStrategy(clubId);
   const investmentDay = useInvestmentDay(clubId);
+  const participation = useInvestmentDayParticipation(clubId, investmentDay.plan?.cycleId ?? null);
+  const compactParticipation = participation.participation
+    ? presentClubOverviewParticipation({
+        completedCount: participation.participation.completedCount,
+        totalCount: participation.participation.totalCount,
+        allCompleted: participation.participation.allCompleted,
+      })
+    : null;
   const finance = presentClubViewerFinance(summary);
   const strategy = presentClubStrategy(allocations);
   const chartHistory = historyByRange(history);
@@ -106,6 +116,13 @@ export function ClubOverview({ clubId, summary, history, positions, onOpenInvest
                 : 'Loading…'
           }
           plannedMinor={investmentDay.plan?.expectedAmountMinor ?? null}
+          participationLabel={compactParticipation?.allCompletedLabel ?? compactParticipation?.countLabel}
+          participants={participation.participation?.members.map((member) => ({
+            id: member.membershipId,
+            initials: member.initials,
+            imageSource: member.imageSource,
+            completed: member.completed,
+          }))}
           onPress={onOpenInvest}
         />
       </View>
