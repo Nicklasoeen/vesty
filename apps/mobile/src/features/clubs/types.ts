@@ -71,6 +71,7 @@ export function allocationsToSlices(
     id: string;
     target_name: string;
     target_kind?: string | null;
+    target_ticker?: string | null;
     instrument_currency?: string | null;
     allocation_bps: number;
     position: number;
@@ -85,5 +86,6 @@ export function allocationsToSlices(
         ? instrumentSecondaryLabel(row.target_kind, row.instrument_currency)
         : undefined,
       percentage: row.allocation_bps / 100,
+      ticker: row.target_ticker?.trim() ? row.target_ticker.trim() : undefined,
     }));
 }

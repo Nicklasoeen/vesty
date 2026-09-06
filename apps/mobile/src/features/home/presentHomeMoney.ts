@@ -50,6 +50,9 @@ export function formatHomeSignedNokFromMinor(amountMinor: number): string {
 
 export function formatHomeSignedPercentage(value: number): string {
   const abs = Math.abs(value);
+  if (abs === 0) {
+    return '0%';
+  }
   if (abs >= 1_000_000) {
     return `${signPrefix(value)}${formatCompactMagnitude(abs / 1_000_000)} mill. %`;
   }

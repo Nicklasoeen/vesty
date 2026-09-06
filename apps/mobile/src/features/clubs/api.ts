@@ -184,6 +184,7 @@ export async function fetchClubStrategySlices(clubId: string) {
           position,
           target_name,
           target_kind,
+          target_ticker,
           investment_targets ( currency )
         )
       `,
@@ -202,6 +203,7 @@ export async function fetchClubStrategySlices(clubId: string) {
     position: number;
     target_name: string;
     target_kind: string;
+    target_ticker: string | null;
     investment_targets: { currency: string } | { currency: string }[] | null;
   }[];
 
@@ -212,6 +214,7 @@ export async function fetchClubStrategySlices(clubId: string) {
       position: allocation.position,
       target_name: allocation.target_name,
       target_kind: allocation.target_kind,
+      target_ticker: allocation.target_ticker,
       instrument_currency: unwrapRelation(allocation.investment_targets)?.currency ?? null,
     })),
   );

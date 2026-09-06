@@ -8,10 +8,13 @@ export interface AllocationSlice {
   label: string;
   secondaryLabel?: string;
   percentage: number;
+  ticker?: string;
 }
 
 interface AllocationBarProps {
   allocations: AllocationSlice[];
+  /** Club Overview replaces the technical legend with friendly rows. */
+  showLegend?: boolean;
 }
 
 /**
@@ -19,7 +22,7 @@ interface AllocationBarProps {
  * rows. Deliberately not a pie chart — a single row reads faster for 3-5
  * categories and avoids the "decorative chart" look.
  */
-export function AllocationBar({ allocations }: AllocationBarProps) {
+export function AllocationBar({ allocations, showLegend = true }: AllocationBarProps) {
   const { colors, spacing, radius } = useTheme();
 
   return (
@@ -37,7 +40,8 @@ export function AllocationBar({ allocations }: AllocationBarProps) {
         ))}
       </View>
 
-      <View style={{ marginTop: spacing.lg }}>
+      {showLegend ? (
+        <View style={{ marginTop: spacing.lg }}>
         {allocations.map((allocation, index) => (
           <View
             key={allocation.id}
@@ -58,6 +62,7 @@ export function AllocationBar({ allocations }: AllocationBarProps) {
           </View>
         ))}
       </View>
+      ) : null}
     </View>
   );
 }

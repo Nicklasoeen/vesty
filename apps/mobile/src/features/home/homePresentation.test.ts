@@ -204,6 +204,8 @@ describe('home money display', () => {
   });
 
   it('formats ordinary and extreme percentages without ellipsis', () => {
+    assert.equal(formatHomeSignedPercentage(0), '0%');
+    assert.equal(formatHomeSignedPercentage(-0), '0%');
     assert.equal(formatHomeSignedPercentage(8), '+8.0%');
     assert.equal(formatHomeSignedBps(2400), '+24.0%');
     assert.equal(normalizeSpaces(formatHomeSignedPercentage(146607.4)), '+146 607%');

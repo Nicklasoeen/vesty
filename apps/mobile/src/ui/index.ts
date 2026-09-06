@@ -9,6 +9,7 @@ export { Badge } from './Badge';
 export { Button } from './Button';
 export { Button as VestyButton } from './Button';
 export { IconButton } from './IconButton';
+export { InvestmentIdentity } from './InvestmentIdentity';
 export { TextField } from './TextField';
 export { RangeSelector } from './RangeSelector';
 export { Screen } from './Screen';

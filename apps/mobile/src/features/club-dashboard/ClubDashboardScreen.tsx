@@ -1,40 +1,37 @@
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { clubDashboardDemoData } from '@/demo/clubDemoData';
 import { ClubEmptyState } from '@/features/clubs/ClubEmptyState';
 import { ClubOptionsSheet } from '@/features/clubs/ClubOptionsSheet';
 import { ClubSwitcherSheet } from '@/features/clubs/ClubSwitcherSheet';
-import { createInvitationForClub, useClubs } from '@/features/clubs/useClubs';
-import { governanceLabel } from '@/features/clubs/governance';
 import { InviteMemberSheet } from '@/features/clubs/InviteMemberSheet';
-import { useClubStrategy } from '@/features/clubs/useClubStrategy';
+import { createInvitationForClub, useClubs } from '@/features/clubs/useClubs';
 import type { ClubSummary } from '@/features/clubs/types';
-import { formatNok, formatNokFromMinor, formatSignedBps, formatSignedNok, formatSignedNokFromMinor, formatSignedPercentage } from '@/lib/currency';
-import { clubPositionDisplay } from '@/features/invest/clubPositionDisplay';
-import { canAddExactHoldings } from '@/features/invest/holdingConfidence';
-import { supportsExactHoldings } from '@/features/invest/investmentDayReporting';
-import { HomePerformanceChart } from '@/features/home/HomePerformanceChart';
-import { historyByRange } from '@/features/portfolio/buildPortfolioChartSeries';
+import { homeScrollBottomPadding } from '@/features/home/presentHomeMoney';
 import { useMemberPortfolio } from '@/features/portfolio/useMemberPortfolio';
-import {
-  ESTIMATED_VALUATION_INFO,
-  portfolioValueCaption,
-  portfolioValueChartLabel,
-} from '@/features/portfolio/valuationLabels';
 import { BOTTOM_NAVIGATION_HEIGHT, BottomNavigation } from '@/navigation/BottomNavigation';
 import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { useTheme } from '@/theme';
-import { InvestmentDayCard } from '@/features/investment-day/InvestmentDayCard';
-import { AllocationBar, AppText, Avatar, AvatarStack, Button, Screen, Section } from '@/ui';
-import { PortfolioChart } from './PortfolioChart';
+import { AppText, Button, IconButton, Screen, Stat } from '@/ui';
+
+import { ClubMemberPortraits } from './ClubMemberPortraits';
+import { ClubOverview } from './ClubOverview';
+import { ClubSettingsPanel } from './ClubSettingsPanel';
+import {
+  CLUB_TAB_LABELS,
+  clubMemberCountLabel,
+  presentClubHeroStats,
+  presentClubPrimaryActions,
+  presentClubViewerFinance,
+  visibleClubTabs,
+  type ClubTabKey,
+} from './presentClubDashboard';
 
 export function ClubDashboardScreen() {
   const { colorScheme, colors, spacing } = useTheme();
-  const insets = useSafeAreaInsets();
   const { activeTab, onSelectTab } = useAppNavigation('club');
   const { clubs, selectedClub, isLoading, error, refresh, selectClub } = useClubs();
   const [optionsOpen, setOptionsOpen] = useState(false);
@@ -88,28 +85,17 @@ export function ClubDashboardScreen() {
       ) : !selectedClub ? (
         <ClubEmptyState />
       ) : (
-        <Screen
-          contentContainerStyle={{
-            paddingHorizontal: spacing.lg,
-            paddingBottom: BOTTOM_NAVIGATION_HEIGHT + insets.bottom + spacing.xl,
+        <ClubDashboard
+          key={selectedClub.clubId}
+          club={selectedClub}
+          canSwitch={clubs.length > 1}
+          onOpenOptions={() => setOptionsOpen(true)}
+          onOpenSwitcher={() => setSwitcherOpen(true)}
+          onOpenInvest={() => onSelectTab('invest')}
+          onInvite={() => {
+            void onInvite(selectedClub);
           }}
-        >
-          <DashboardHeader
-            club={selectedClub}
-            canSwitch={clubs.length > 1}
-            onOpenOptions={() => setOptionsOpen(true)}
-            onOpenSwitcher={() => setSwitcherOpen(true)}
-          />
-
-          <PortfolioSummary
-            clubId={selectedClub.clubId}
-            onAddExactHoldings={() => onSelectTab('invest')}
-          />
-
-          <InvestmentDayBanner club={selectedClub} onOpenInvest={() => onSelectTab('invest')} />
-
-          <StrategySection key={selectedClub.clubId} clubId={selectedClub.clubId} />
-        </Screen>
+        />
       )}
 
       <BottomNavigation activeTab={activeTab} onSelectTab={onSelectTab} />
@@ -149,323 +135,160 @@ export function ClubDashboardScreen() {
   );
 }
 
-function DashboardHeader({
+function ClubDashboard({
   club,
   canSwitch,
   onOpenOptions,
   onOpenSwitcher,
+  onOpenInvest,
+  onInvite,
 }: {
   club: ClubSummary;
   canSwitch: boolean;
   onOpenOptions: () => void;
   onOpenSwitcher: () => void;
+  onOpenInvest: () => void;
+  onInvite: () => void;
 }) {
-  const { colors, spacing } = useTheme();
+  const { colors, radius, spacing } = useTheme();
+  const insets = useSafeAreaInsets();
+  const [clubTab, setClubTab] = useState<ClubTabKey>('overview');
+  const { summary, history, positions } = useMemberPortfolio(club.clubId);
+  const finance = presentClubViewerFinance(summary);
+  const stats = presentClubHeroStats({
+    groupAggregateMinor: null,
+    groupAggregatePrivacySafe: false,
+    yourStakeMinor: finance.yourStakeMinor,
+    returnPercentage: finance.returnPercentage,
+  });
+  const actions = presentClubPrimaryActions({ isOwner: club.isOwner });
+  const tabs = visibleClubTabs();
 
   return (
-    <View style={[styles.header, { marginTop: spacing.md, marginBottom: spacing.md }]}>
-      <View style={styles.titleRow}>
+    <Screen
+      contentContainerStyle={{
+        paddingHorizontal: spacing.lg,
+        paddingBottom: homeScrollBottomPadding(BOTTOM_NAVIGATION_HEIGHT, insets.bottom),
+      }}
+    >
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginTop: spacing.sm,
+          marginBottom: spacing.sm,
+        }}
+      >
         <Pressable
           accessibilityRole={canSwitch ? 'button' : undefined}
           accessibilityLabel={canSwitch ? `Switch club, ${club.name}` : undefined}
           onPress={canSwitch ? onOpenSwitcher : undefined}
           disabled={!canSwitch}
-          style={({ pressed }) => [styles.titlePress, { opacity: canSwitch && pressed ? 0.7 : 1 }]}
+          style={({ pressed }) => ({
+            flexDirection: 'row',
+            alignItems: 'center',
+            minHeight: 40,
+            opacity: canSwitch && pressed ? 0.7 : 1,
+          })}
         >
-          <AppText variant="title" accessibilityRole="header" style={styles.title}>
-            {club.name}
-          </AppText>
-          {canSwitch ? <Feather name="chevron-down" size={18} color={colors.textSecondary} /> : null}
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Club options"
-          hitSlop={10}
-          onPress={onOpenOptions}
-          style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
-        >
-          <Feather name="more-horizontal" size={22} color={colors.textSecondary} />
-        </Pressable>
-      </View>
-
-      <AppText variant="meta" color="secondary" style={{ marginTop: spacing.xs }}>
-        {governanceLabel(club.governanceThresholdKind)}
-      </AppText>
-
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${club.members.length} members`}
-        hitSlop={4}
-        style={({ pressed }) => [styles.headerMembersRow, { marginTop: spacing.xs, opacity: pressed ? 0.7 : 1 }]}
-      >
-        <AvatarStack people={club.members} />
-        <AppText variant="meta" color="secondary" style={{ marginLeft: spacing.sm }}>
-          {club.members.length} {club.members.length === 1 ? 'member' : 'members'}
-        </AppText>
-      </Pressable>
-    </View>
-  );
-}
-
-function PortfolioSummary({
-  clubId,
-  onAddExactHoldings,
-}: {
-  clubId: string;
-  onAddExactHoldings: () => void;
-}) {
-  const { spacing } = useTheme();
-  const data = clubDashboardDemoData;
-  const { summary, history, positions } = useMemberPortfolio(clubId);
-  const useEstimated = summary?.modellingScope === 'curated_etf';
-  const ownCostBasisMinor = positions.reduce((sum, position) => sum + position.totalInvestedMinor, 0);
-  const chartHistory = historyByRange(history);
-  const caption = useEstimated && summary ? portfolioValueCaption(summary.valuationConfidence) : null;
-  const gainColor =
-    useEstimated && summary?.gainLossMinor != null && summary.gainLossMinor < 0 ? 'negative' : 'positive';
-
-  return (
-    <View style={{ marginBottom: spacing.xxl }}>
-      <AppText variant="sectionTitle">Portfolio</AppText>
-      <AppText variant="display" style={{ marginTop: spacing.xs }}>
-        {useEstimated && summary?.estimatedCurrentValueMinor != null
-          ? formatNokFromMinor(summary.estimatedCurrentValueMinor)
-          : useEstimated
-            ? formatNokFromMinor(summary?.investedMinor ?? 0)
-            : formatNok(data.portfolioValueNok)}
-      </AppText>
-      {useEstimated && summary?.gainLossMinor != null && summary.gainLossBps != null ? (
-        <AppText variant="value" color={gainColor} style={{ marginTop: spacing.sm }}>
-          {formatSignedNokFromMinor(summary.gainLossMinor)}
-          {' \u00B7 '}
-          {formatSignedBps(summary.gainLossBps)}
-        </AppText>
-      ) : useEstimated ? null : (
-        <AppText variant="value" color="positive" style={{ marginTop: spacing.sm }}>
-          {formatSignedNok(data.estimatedReturnNok)}
-          {' \u00B7 '}
-          {formatSignedPercentage(data.estimatedReturnPercentage)}
-        </AppText>
-      )}
-      {useEstimated ? (
-        caption ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`${caption}. ${ESTIMATED_VALUATION_INFO}`}
-            onPress={() => Alert.alert(caption, ESTIMATED_VALUATION_INFO)}
-          >
-            <AppText variant="meta" color="secondary" style={{ marginTop: spacing.xs }}>
-              {caption}
-            </AppText>
-          </Pressable>
-        ) : null
-      ) : (
-        <AppText variant="meta" color="secondary" style={{ marginTop: spacing.xs }}>
-          Demo market value. Live prices are not available yet.
-        </AppText>
-      )}
-
-      <View style={{ marginTop: spacing.lg }}>
-        {useEstimated && chartHistory.ALL.length >= 2 ? (
-          <HomePerformanceChart
-            historyByRange={chartHistory}
-            defaultRange="3M"
-            valueLegendLabel={
-              summary ? portfolioValueChartLabel(summary.valuationConfidence) : 'Estimated value'
-            }
-          />
-        ) : useEstimated ? null : (
-          <PortfolioChart
-            historyByRange={data.portfolioHistoryByRange}
-            defaultRange={data.defaultPortfolioRange}
-          />
-        )}
-      </View>
-
-      {positions.length > 0 ? (
-        <View style={{ marginTop: spacing.xl }}>
-          <AppText variant="sectionTitle">Your investments</AppText>
-          <AppText variant="bodyStrong" style={{ marginTop: spacing.sm }}>
-            {formatNokFromMinor(ownCostBasisMinor)} invested
-          </AppText>
-          <View style={{ marginTop: spacing.md }}>
-            {positions.map((position) => {
-              const row = clubPositionDisplay({
-                name: position.name,
-                ticker: position.ticker,
-                totalInvestedMinor: position.totalInvestedMinor,
-                totalQuantity: position.exactQuantity,
-                quantityStatus: position.quantityStatus,
-                currentValue: null,
-                currentValueCurrency: null,
-                valuationStatus: position.estimatedCurrentValueMinor != null ? 'available' : 'unavailable',
-                estimatedCurrentValueMinor: position.estimatedCurrentValueMinor,
-                valuationConfidence: position.valuationConfidence,
-              });
-
-              return (
-                <View key={position.investmentTargetId} style={{ marginTop: spacing.md }}>
-                  <AppText variant="bodyStrong">{row.title}</AppText>
-                  {row.quantityLabel ? (
-                    <AppText variant="meta" color="secondary" style={{ marginTop: 2 }}>
-                      {row.quantityLabel}
-                    </AppText>
-                  ) : null}
-                  {row.currentValueLabel ? (
-                    <AppText variant="body" style={{ marginTop: 2 }}>
-                      {row.currentValueLabel}
-                    </AppText>
-                  ) : null}
-                  <AppText variant="meta" color="secondary" style={{ marginTop: 2 }}>
-                    {row.investedLabel}
-                  </AppText>
-                  {row.badge ? (
-                    <AppText variant="meta" color="secondary" style={{ marginTop: 2 }}>
-                      {row.badge}
-                    </AppText>
-                  ) : null}
-                  {row.missingExactLabel ? (
-                    <AppText variant="meta" color="secondary" style={{ marginTop: 2 }}>
-                      {row.missingExactLabel}
-                    </AppText>
-                  ) : null}
-                </View>
-              );
-            })}
-          </View>
-          {canAddExactHoldings({
-            isCompleted: true,
-            supportsExactHoldings: supportsExactHoldings(
-              positions.map((position) => position.investmentTargetId),
-            ),
-            missingQuantity: positions.some((position) => position.quantityStatus !== 'complete'),
-          }) ? (
-            <View style={{ marginTop: spacing.lg }}>
-              <Button
-                label="Add exact holdings"
-                variant="secondary"
-                onPress={onAddExactHoldings}
-                accessibilityHint="Optional. Add the number of units you bought."
-              />
-            </View>
+          <AppText variant="label">Club</AppText>
+          {canSwitch ? (
+            <Feather name="chevron-down" size={16} color={colors.textSecondary} style={{ marginLeft: 4 }} />
           ) : null}
-        </View>
-      ) : null}
-    </View>
-  );
-}
+        </Pressable>
+        <IconButton icon="more-horizontal" accessibilityLabel="Club options" onPress={onOpenOptions} />
+      </View>
 
-function InvestmentDayBanner({
-  club,
-  onOpenInvest,
-}: {
-  club: ClubSummary;
-  onOpenInvest: () => void;
-}) {
-  const { colorScheme, spacing } = useTheme();
-  const data = clubDashboardDemoData;
+      <ClubMemberPortraits members={club.members} />
 
-  return (
-    <Pressable
-      onPress={onOpenInvest}
-      accessibilityRole="button"
-      accessibilityLabel={`Open Invest, ${club.name} Investment Day`}
-      style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
-    >
-      <InvestmentDayCard
+      <View style={{ alignItems: 'center', marginTop: 4 }}>
+        <AppText
+          variant="title"
+          accessibilityRole="header"
+          numberOfLines={2}
+          adjustsFontSizeToFit
+          minimumFontScale={0.75}
+          style={{ textAlign: 'center' }}
+        >
+          {club.name}
+        </AppText>
+        <AppText variant="supporting" style={{ marginTop: 1 }}>
+          {clubMemberCountLabel(club.members.length)}
+        </AppText>
+      </View>
+
+      <View
         style={{
-          paddingHorizontal: spacing.lg,
-          paddingVertical: spacing.md,
-          marginBottom: spacing.xxl,
+          flexDirection: 'row',
+          marginTop: spacing.lg,
+          paddingTop: spacing.sm,
         }}
       >
-        <View style={styles.investmentDayRow}>
-          <View style={{ flex: 1, paddingRight: spacing.md }}>
-            <AppText
-              variant="sectionTitle"
-              style={colorScheme === 'dark' ? styles.investmentDayHeading : undefined}
-            >
-              Next Investment Day
-            </AppText>
-            <AppText variant="subtitle" style={{ marginTop: spacing.xs }}>
-              {data.nextInvestmentDayLabel}
-            </AppText>
-          </View>
-          <View style={{ alignItems: 'flex-end' }}>
-            <AppText variant="bodyStrong">{formatNok(data.expectedContributionNok)} expected</AppText>
-          </View>
-        </View>
+        <Stat value={stats.groupValue} label={stats.labels[0]} />
+        <View style={{ width: 1, backgroundColor: colors.border, marginHorizontal: spacing.sm }} />
+        <Stat value={stats.yourStake} label={stats.labels[1]} />
+        <View style={{ width: 1, backgroundColor: colors.border, marginHorizontal: spacing.sm }} />
+        <Stat value={stats.allTimeReturn} label={stats.labels[2]} valueColor={stats.returnTone} />
+      </View>
 
-        <View style={[styles.readinessRow, { marginTop: spacing.md }]}>
-          {club.members.map((member, index) => (
-            <Avatar
-              key={member.id}
-              initials={member.initials}
-              imageSource={member.imageSource}
-              size="sm"
-              style={index === 0 ? undefined : styles.readinessAvatar}
+      <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg }}>
+        {actions.map((action) => (
+          <View key={action.key} style={{ flex: 1 }}>
+            <Button
+              label={action.label}
+              variant={action.variant}
+              block
+              onPress={action.key === 'investment_day' ? onOpenInvest : onInvite}
             />
-          ))}
-          <AppText variant="meta" color="secondary" style={{ marginLeft: spacing.sm }}>
-            {club.members.length} {club.members.length === 1 ? 'member' : 'members'}
-          </AppText>
-        </View>
-      </InvestmentDayCard>
-    </Pressable>
+          </View>
+        ))}
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={{ marginTop: spacing.lg, marginBottom: spacing.lg }}
+        contentContainerStyle={{ gap: spacing.xs }}
+      >
+        {tabs.map((tab) => {
+          const active = tab === clubTab;
+          return (
+            <Pressable
+              key={tab}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={CLUB_TAB_LABELS[tab]}
+              onPress={() => setClubTab(tab)}
+              style={({ pressed }) => ({
+                paddingHorizontal: spacing.md,
+                paddingVertical: spacing.sm,
+                minHeight: 36,
+                borderRadius: radius.full,
+                backgroundColor: active ? colors.mintSoft : 'transparent',
+                opacity: pressed ? 0.75 : 1,
+              })}
+            >
+              <AppText variant="statLabel" color={active ? 'accent' : 'secondary'}>
+                {CLUB_TAB_LABELS[tab]}
+              </AppText>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      {clubTab === 'overview' ? (
+        <ClubOverview
+          key={club.clubId}
+          clubId={club.clubId}
+          summary={summary}
+          history={history}
+          positions={positions}
+          onOpenInvest={onOpenInvest}
+        />
+      ) : (
+        <ClubSettingsPanel club={club} onInvite={onInvite} />
+      )}
+    </Screen>
   );
 }
-
-function StrategySection({ clubId }: { clubId: string }) {
-  const { allocations } = useClubStrategy(clubId);
-
-  if (allocations.length === 0) {
-    return null;
-  }
-
-  return (
-    <Section title="Strategy" isLast>
-      <AllocationBar allocations={allocations} />
-    </Section>
-  );
-}
-
-const styles = StyleSheet.create({
-  header: {
-    alignItems: 'stretch',
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  titlePress: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingRight: 12,
-    gap: 4,
-  },
-  title: {
-    flexShrink: 1,
-  },
-  headerMembersRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-  },
-  investmentDayRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-  },
-  readinessRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  readinessAvatar: {
-    marginLeft: 8,
-  },
-  investmentDayHeading: {
-    color: '#A6B6BD',
-  },
-});
