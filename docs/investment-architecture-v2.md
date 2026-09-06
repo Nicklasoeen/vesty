@@ -78,7 +78,7 @@ There is no mutable "current policy" row and no `current_policy_id`.
 
 Creating a `ContributionPolicyVersion` means activating it for the **next eligible/unfrozen Investment Cycle**.
 
-Future open proposals must **not** create policy versions while they are merely open. Proposal approval (Prompt 3) will call trusted/internal `private.create_contribution_policy_version_v1` after a vote. That helper is not executable by `authenticated` clients. There is no public owner RPC to append policy versions. UI hiding is not the security boundary.
+Open or draft proposals must **not** create policy versions. Only successful approved application calls trusted/internal `private.create_contribution_policy_version_v1`. That helper is not executable by `authenticated` clients. There is no public owner RPC to append policy versions. UI hiding is not the security boundary.
 
 `create_club` / `create_club_v2` may still write policy version 1 in the same club-creation transaction. That is initial creation, not a post-creation policy change.
 
@@ -213,7 +213,88 @@ Do not imply Vesty collects or holds the money.
 - `confirm_investment_day_v1` / `v2` still confirm from frozen `expected_amount_minor`
 - participation / streak completion remains `outcome = confirmed`
 - existing migrated historical amounts are not recalculated
-- no broker execution, stocks, drift logic, or contribution-policy proposals are introduced
+- no broker execution, stocks, or drift logic are introduced
+- contribution-policy **governance** exists; the creation UI is still Prompt 3B
+
+## Contribution Policy governance
+
+Shared club contribution changes require a proposal and vote. Personal Flexible amount edits do not.
+
+Supported transitions:
+
+- Equal → Equal (shared amount must change)
+- Equal → Flexible
+- Flexible → Equal (new shared amount required)
+
+Flexible → Flexible is rejected. Members change their own private amount without governance.
+
+### Shared identity, typed payload
+
+`club_proposals` is a thin identity row (`id`, `club_id`, `kind`) so `proposal_electorate_members` and `votes` stay one path.
+
+Strategy proposals keep their existing table, columns, RLS draft edits, and mobile reads.
+
+`contribution_policy_proposals` is the typed payload:
+
+- `base_contribution_policy_version_id` (the exact version being changed, never "latest at approval time")
+- `proposed_mode`
+- `proposed_equal_amount_minor` (required for Equal, null for Flexible)
+
+Lifecycle states match strategy proposals: draft, open, approved, rejected, expired, cancelled.
+
+A club may have one open **strategy** proposal and one open **contribution** proposal at the same time.
+
+### Stale-base protection
+
+At create, open, and apply, the proposal base must equal the club's latest policy version.
+
+If another change created a newer version first, the old proposal is stale. It must not create a policy version and must not rebase onto the new version. Finalize closes a reached-threshold stale ballot as `rejected`.
+
+### Approval application
+
+`finalize_contribution_policy_proposal_v1` tallies with the same threshold math as strategy proposals. Approval atomically:
+
+1. Inserts exactly one `ContributionPolicyVersion`
+2. Stores `source_proposal_id`
+3. For Equal → Flexible, writes a new private commitment for every **currently active** membership using the **current Equal** shared amount
+
+Re-finalizing the same approved proposal returns the existing version. It does not create v3/v4.
+
+Rejected, expired, and cancelled proposals create no policy version.
+
+### Equal → Flexible initialization
+
+Electorate = who may vote (frozen at open).
+
+Active memberships at activation = who receive an initial Flexible commitment.
+
+These are different sets. A member who joins after opening does not vote, but if they are active when the proposal is approved they receive the starting commitment.
+
+Left/removed memberships receive no new commitment.
+
+The initialized amount is the Equal amount being left. Historical Flexible commitments are never revived. After Flexible → Equal → Flexible, members start from the latest Equal amount.
+
+Those new commitments are private even though they originated from a shared amount.
+
+### Flexible → Equal
+
+Old private commitments remain stored and private. They are not used while Equal is active. Frozen Flexible cycles keep their original per-member amounts. Future cycles use the new shared amount.
+
+### Frozen cycles
+
+Existing cycles keep `investment_cycles.contribution_policy_version_id` and stored `expected_amount_minor`. A later approved policy never rewrites them.
+
+### Proposer eligibility
+
+Any active member may propose, matching Strategy Proposal draft rules. Contribution proposals are not owner-only.
+
+### Privacy
+
+The contribution payload is club-readable. The read model exposes base/proposed style and a shared Equal amount only.
+
+It never exposes Flexible private amounts, totals, averages, ranges, min, or max.
+
+Open vote choices stay hidden. Terminal votes follow the existing strategy-proposal rule.
 
 ### Existing-club backfill
 

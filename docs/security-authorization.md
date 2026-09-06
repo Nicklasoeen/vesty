@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document describes the direct-client authorization boundary implemented by `supabase/migrations/20260903202501_add_rls_authorization_v1.sql`, the Create / Join Club trusted RPCs in `supabase/migrations/20260904110626_add_club_create_join_v1.sql` and `supabase/migrations/20260905121758_curated_investment_packages_v1.sql`, the owner-only rename RPC in `supabase/migrations/20260906150144_rename_club_v1.sql`, the contribution-policy foundation in `supabase/migrations/20260906194634_contribution_policy_v1.sql`, product flows in `supabase/migrations/20260906215200_contribution_policy_product_v1.sql`, and hardening in `supabase/migrations/20260906221000_contribution_policy_hardening_v1.sql`, the Investment Day transaction RPCs in `supabase/migrations/20260905075952_add_instruments_transactions_v1.sql`, and the market-data tables in `supabase/migrations/20260905084718_add_market_data_v1.sql`, `supabase/migrations/20260905090042_add_market_data_twelve_data_v1.sql`, `supabase/migrations/20260905123104_add_marketstack_provider.sql`, and `supabase/migrations/20260905123105_seed_marketstack_v1_allowlist.sql`. Product and relational invariants remain authoritative in `docs/domain-model.md` and `docs/database-schema.md`.
+This document describes the direct-client authorization boundary implemented by `supabase/migrations/20260903202501_add_rls_authorization_v1.sql`, the Create / Join Club trusted RPCs in `supabase/migrations/20260904110626_add_club_create_join_v1.sql` and `supabase/migrations/20260905121758_curated_investment_packages_v1.sql`, the owner-only rename RPC in `supabase/migrations/20260906150144_rename_club_v1.sql`, the contribution-policy foundation in `supabase/migrations/20260906194634_contribution_policy_v1.sql`, product flows in `supabase/migrations/20260906215200_contribution_policy_product_v1.sql`, hardening in `supabase/migrations/20260906221000_contribution_policy_hardening_v1.sql`, and contribution-policy proposals in `supabase/migrations/20260906223000_contribution_policy_proposals_v1.sql`, the Investment Day transaction RPCs in `supabase/migrations/20260905075952_add_instruments_transactions_v1.sql`, and the market-data tables in `supabase/migrations/20260905084718_add_market_data_v1.sql`, `supabase/migrations/20260905090042_add_market_data_twelve_data_v1.sql`, `supabase/migrations/20260905123104_add_marketstack_provider.sql`, and `supabase/migrations/20260905123105_seed_marketstack_v1_allowlist.sql`. Product and relational invariants remain authoritative in `docs/domain-model.md` and `docs/database-schema.md`.
 
 ## Authorization Principles
 
@@ -43,6 +43,8 @@ Strategies and governance:
 - `investment_targets`: authenticated users may read the curated catalog, including inactive targets required for historical interpretation; all client writes are blocked.
 - `strategy_versions` and `strategy_allocations`: current active club members may read their club's immutable strategy history; all client writes are blocked.
 - `strategy_proposals`: active members may read club proposals and create their own draft. A proposer may edit only the reason or base strategy of their own draft.
+- `club_proposals`: thin shared identity for electorate/votes. Active members and frozen open-electorate members may read through `can_access_proposal`. Clients cannot insert, update, or delete.
+- `contribution_policy_proposals`: active members may read the shared payload. Clients cannot insert, update, or delete. Writes go through trusted create/open/cancel/finalize RPCs.
 - `strategy_proposal_allocations`: authorized proposal readers may read; only the active proposer may insert, update, or delete rows while the proposal remains a draft and the target remains active.
 - `proposal_electorate_members`: active club members may read the electorate. A former member in an open frozen electorate may read only their own electorate entry. Client writes are blocked.
 - `votes`: eligible electorate members may insert one vote while the proposal is open and its deadline has not passed. No client may update or delete votes. Individual rows are readable only for terminal proposals by current active club members.
@@ -88,9 +90,10 @@ Direct clients cannot perform operations that require atomic cross-table validat
 - membership removal, leaving, or ownership changes
 - invitation revocation, decline, or expiry jobs
 - ownership-transfer creation, acceptance, rejection, or expiry
-- proposal opening, cancellation, closing, or approval
-- electorate creation
-- approved proposal to StrategyVersion creation
+- strategy proposal opening, cancellation, closing, or approval
+- strategy electorate creation
+- approved strategy proposal to StrategyVersion creation
+- contribution-policy proposal application still uses only the trusted finalize path (create/open/cancel/finalize RPCs). Authenticated clients cannot append policy versions.
 - strategy and allocation snapshot mutation after genesis
 - schedule mutation and cycle generation
 - participation snapshot creation
@@ -99,7 +102,7 @@ Direct clients cannot perform operations that require atomic cross-table validat
 - FX ingest (use `sync-fx-rates`)
 - broker verification
 
-Club creation, genesis strategy creation, owner invitation issuance, invitation acceptance, owner club rename, genesis contribution-policy version 1, private contribution commitments, opening the current Investment Day, and confirming member-reported buys are implemented as private `SECURITY DEFINER` functions with public invoker wrappers. Callers cannot supply `owner_user_id`, another member's identity, or raw genesis allocations; `auth.uid()` is authoritative and `create_club` / `create_club_v2` accept only an allowlisted package id. `create_club_v2` also requires an explicit contribution style and the matching amount. Later ContributionPolicyVersion rows are not a client-authorized write. Authenticated owners and members cannot execute a public policy-version RPC; `private.create_contribution_policy_version_v1` is reserved for trusted/internal governance (`service_role`) and is testable after `reset role`.
+Club creation, genesis strategy creation, owner invitation issuance, invitation acceptance, owner club rename, genesis contribution-policy version 1, private contribution commitments, opening the current Investment Day, and confirming member-reported buys are implemented as private `SECURITY DEFINER` functions with public invoker wrappers. Callers cannot supply `owner_user_id`, another member's identity, or raw genesis allocations; `auth.uid()` is authoritative and `create_club` / `create_club_v2` accept only an allowlisted package id. `create_club_v2` also requires an explicit contribution style and the matching amount. Later ContributionPolicyVersion rows are not a client-authorized write. Authenticated owners and members cannot execute a public policy-version RPC; `private.create_contribution_policy_version_v1` is reserved for trusted/internal governance (`service_role`) and for approved contribution-proposal application. Contribution proposal create/open/cancel/finalize are public invoker wrappers over private `SECURITY DEFINER` functions. Draft or open proposals never create a policy version.
 
 `ensure_open_investment_day_v1` may create a TestFlight schedule, an open cycle, a legacy saving-plan artifact from an already-resolved amount, and the caller's participation. It never invents a contribution amount. Flexible members without a commitment receive `vesty.contribution_commitment_required` and do not get a fake participation. It does not write transactions. Standard Investment Day uses `confirm_investment_day_v1`: server-derived amounts, `quantity = null`, `source = manual`, `verification_status = member_reported`. Opening a broker never writes. Optional exact holdings use `confirm_investment_day_v2` after confirmation: the client may send only target ids, quantity, and optional execution price. Amounts stay server-derived. Retry is idempotent; a stored quantity is not overwritten by a different value. Quantity remains private to the owning member.
 
@@ -130,9 +133,9 @@ Minimal `SECURITY DEFINER` helpers live in the unexposed `private` schema:
 - `owns_membership`
 - `owns_active_membership`
 - `can_read_profile`
-- `can_access_proposal`
-- `can_edit_draft_proposal`
-- `can_cast_vote`
+- `can_access_proposal` (strategy or contribution-policy identity)
+- `can_edit_draft_proposal` (strategy drafts only)
+- `can_cast_vote` (open strategy or contribution-policy ballots)
 - `can_update_participation`
 
 Each helper derives identity internally from `auth.uid()`, returns only a boolean, and sets `search_path = ''`. Public and anonymous execution is revoked. Only authenticated execution is granted, and the `private` schema is not exposed by the local API configuration.
@@ -149,7 +152,7 @@ A public bucket was rejected for V1 so unauthenticated clients cannot fetch avat
 
 ## Test Coverage
 
-`supabase/tests/authorization_v1.test.sql`, `supabase/tests/club_create_join_v1.test.sql`, `supabase/tests/rename_club_v1.test.sql`, `supabase/tests/contribution_policy_v1.test.sql`, `supabase/tests/contribution_policy_product_v1.test.sql`, `supabase/tests/profile_onboarding_v1.test.sql`, `supabase/tests/preferred_broker_v1.test.sql`, `supabase/tests/instruments_transactions_v1.test.sql`, and `supabase/tests/market_data_v1.test.sql` use pgTAP and the actual `authenticated` Postgres role with JWT claim context. The authorization suite verifies club and profile isolation, immutable history, proposal identity, draft-allocation ownership, vote eligibility and privacy, saving-plan and participation privacy, readiness ownership, target immutability, owner-pointer protection, invitation visibility, former-electorate access, and anonymous denial. The create/join suite verifies atomic club creation, genesis allocations, invitation token issuance, acceptance, duplicate/expired/revoked/wrong-recipient rejection, and unchanged ownership. The rename suite verifies owner-only name updates, trim and length validation, member/outsider/archived rejection, and that direct `UPDATE public.clubs` remains blocked. The contribution-policy suite verifies immutable Equal/Flexible versions, private flexible commitments, cycle freeze, missing-commitment rejection in the resolver, and that public policy reads never leak another member's amount. The profile onboarding suite verifies self-only profile updates, display-name length, club-member identity reads, outsider and former-member denial, and avatar Storage write/read isolation. The preferred-broker suite verifies a nullable default, accepted and rejected broker values, self-only updates, column-level privacy against roster and outsider reads, and that profile completeness still does not require a broker. The instruments/transactions suite verifies real catalog fixtures, own confirm, idempotent retry, wrong club/cycle/target rejection, positive amount and explicit currency, own position reads, and that other members, owners, outsiders, and former members cannot read private monetary rows. The market-data suite verifies verified ISINs, mapping identity, NAV uniqueness, currency/price rejection, authenticated reads, and that mobile users cannot forge prices or gain transaction write grants. Direct SQL `DELETE` on `storage.objects` is blocked by Storage's `protect_delete` trigger; delete authorization is still enforced by `avatars_delete_own` for the Storage API, and tests cover insert/update isolation plus the delete policy predicate.
+`supabase/tests/authorization_v1.test.sql`, `supabase/tests/club_create_join_v1.test.sql`, `supabase/tests/rename_club_v1.test.sql`, `supabase/tests/contribution_policy_v1.test.sql`, `supabase/tests/contribution_policy_product_v1.test.sql`, `supabase/tests/contribution_policy_proposals_v1.test.sql`, `supabase/tests/profile_onboarding_v1.test.sql`, `supabase/tests/preferred_broker_v1.test.sql`, `supabase/tests/instruments_transactions_v1.test.sql`, and `supabase/tests/market_data_v1.test.sql` use pgTAP and the actual `authenticated` Postgres role with JWT claim context. The authorization suite verifies club and profile isolation, immutable history, proposal identity, draft-allocation ownership, vote eligibility and privacy, saving-plan and participation privacy, readiness ownership, target immutability, owner-pointer protection, invitation visibility, former-electorate access, and anonymous denial. The create/join suite verifies atomic club creation, genesis allocations, invitation token issuance, acceptance, duplicate/expired/revoked/wrong-recipient rejection, and unchanged ownership. The rename suite verifies owner-only name updates, trim and length validation, member/outsider/archived rejection, and that direct `UPDATE public.clubs` remains blocked. The contribution-policy suite verifies immutable Equal/Flexible versions, private flexible commitments, cycle freeze, missing-commitment rejection in the resolver, and that public policy reads never leak another member's amount. The profile onboarding suite verifies self-only profile updates, display-name length, club-member identity reads, outsider and former-member denial, and avatar Storage write/read isolation. The preferred-broker suite verifies a nullable default, accepted and rejected broker values, self-only updates, column-level privacy against roster and outsider reads, and that profile completeness still does not require a broker. The instruments/transactions suite verifies real catalog fixtures, own confirm, idempotent retry, wrong club/cycle/target rejection, positive amount and explicit currency, own position reads, and that other members, owners, outsiders, and former members cannot read private monetary rows. The market-data suite verifies verified ISINs, mapping identity, NAV uniqueness, currency/price rejection, authenticated reads, and that mobile users cannot forge prices or gain transaction write grants. Direct SQL `DELETE` on `storage.objects` is blocked by Storage's `protect_delete` trigger; delete authorization is still enforced by `avatars_delete_own` for the Storage API, and tests cover insert/update isolation plus the delete policy predicate.
 
 Run it with:
 
@@ -161,11 +164,11 @@ pnpm test:db
 
 - Safe invitation context for email-only invitees who do not yet have a token
 - Atomic ownership transfer
-- Trusted proposal opening, cancellation, closing, and approval
+- Trusted **strategy** proposal opening, cancellation, closing, and approval
 - Allocation-total validation outside genesis create-club
 - Schedule changes and production cycle generation beyond the TestFlight ensure helper
 - Atomic saving-plan replacement if required by the product flow
-- Safe open-vote turnout/progress projection
+- Safe open-vote turnout/progress projection. Contribution finalize tallies server-side without exposing open choices.
 - Club-level readiness and participation status projections
 - Broker evidence ingestion and verification
 - Licensed production market-data provider and hosted daily NAV scheduling

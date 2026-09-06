@@ -23,6 +23,12 @@ const PRODUCT_MESSAGES: Record<string, string> = {
   'vesty.contribution_commitment_required': 'Set your contribution to continue',
   'vesty.contribution_commitment_not_applicable': 'This club uses the same amount for everyone',
   'vesty.contribution_policy_missing': 'Unable to load contribution settings',
+  'vesty.contribution_proposal_invalid': 'This contribution change is not allowed',
+  'vesty.contribution_proposal_stale': 'This proposal is out of date',
+  'vesty.contribution_proposal_forbidden': "You don't have permission to manage this proposal",
+  'vesty.contribution_proposal_not_draft': 'This proposal cannot be opened',
+  'vesty.contribution_proposal_not_open': 'This proposal is not open',
+  'vesty.contribution_proposal_has_votes': 'This proposal can no longer be cancelled',
   'vesty.not_club_member': "You don't have permission to view this club",
 };
 

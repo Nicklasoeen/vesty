@@ -342,7 +342,33 @@ No separate mutable `Strategy` entity is recommended in V1. The club's strategy 
 
 **Does not own:** Mutable pointers to the club's current allocations, actual broker changes, or proof that members implemented the approved strategy.
 
-V1 should model this specifically as a strategy-change proposal rather than introduce a generic proposal framework.
+V1 modelled strategy change specifically rather than a generic proposal framework. Contribution Policy Change now reuses the same electorate/vote identity through a thin `club_proposals` row. Strategy proposal columns, draft edits, and mobile reads stay on `strategy_proposals`.
+
+### 4.9A ContributionPolicyProposal
+
+**Responsibility:** Govern a proposed replacement for the club's contribution policy.
+
+**Important attributes:** Club, proposing membership, exact base contribution-policy version, proposed mode, proposed equal amount when the proposal is Equal, and the same lifecycle/electorate/threshold snapshot fields as a strategy proposal.
+
+**Relationships:** Belongs to a club; references one base `ContributionPolicyVersion`; shares electorate and votes through `club_proposals`; may create exactly one new contribution-policy version.
+
+**Supported outcomes:** Equal → Equal (amount must change), Equal → Flexible, Flexible → Equal. Flexible → Flexible is forbidden.
+
+**Invariants:**
+
+- Any active member may create a draft, matching Strategy Proposal eligibility.
+- Opening freezes the electorate from then-current active memberships and snapshots the club voting rule.
+- The base version must still be the latest club policy when the draft opens and when it is applied.
+- A stale base never creates a policy version and is never reinterpreted against a later version.
+- Approval creates exactly one new immutable `ContributionPolicyVersion`.
+- Equal → Flexible initializes a new private commitment for every membership that is **active at activation**, using the current Equal amount. That set is not the frozen electorate.
+- Flexible → Equal retains historical private commitments and does not use them while Equal is active.
+- A later return to Flexible initializes from the current Equal amount, not old Flexible history.
+- Already-frozen Investment Cycles keep their stored policy pointer and expected amounts.
+- At most one contribution proposal may be open for a club. An open strategy proposal does not block it.
+- `APPROVED`, `REJECTED`, `EXPIRED`, and `CANCELLED` are terminal.
+
+**Does not own:** Private member amounts as a club-visible aggregate, mutable current-policy pointers, or cycle recalculation.
 
 ### 4.10 ProposalElectorate
 
@@ -350,7 +376,7 @@ V1 should model this specifically as a strategy-change proposal rather than intr
 
 **Important attributes:** Proposal, frozen membership-tenure entries, snapshot time, electorate size, and the resulting required yes count.
 
-**Relationships:** Belongs to one proposal and contains references to eligible membership tenures in the same club.
+**Relationships:** Belongs to one `club_proposals` identity (strategy or contribution-policy) and contains references to eligible membership tenures in the same club.
 
 **Lifecycle:** Created atomically when voting opens and immutable thereafter.
 

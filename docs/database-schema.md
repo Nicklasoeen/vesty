@@ -20,6 +20,10 @@ The schema is created by:
 - `supabase/migrations/20260906150144_rename_club_v1.sql`
 - `supabase/migrations/20260906194634_contribution_policy_v1.sql`
 - `supabase/migrations/20260906215200_contribution_policy_product_v1.sql`
+- `supabase/migrations/20260906221000_contribution_policy_hardening_v1.sql`
+- `supabase/migrations/20260906223000_contribution_policy_proposals_v1.sql`
+- `supabase/migrations/20260906223100_contribution_policy_proposals_rls_fix_v1.sql`
+- `supabase/migrations/20260906223200_contribution_policy_proposals_create_base_v1.sql`
 
 It uses the Supabase-managed `auth.users` table only as the authentication identity boundary. It does not duplicate credentials, sessions, or authentication state.
 
@@ -139,10 +143,24 @@ Money uses signed PostgreSQL `bigint` columns with positive-value checks. Alloca
   - Three active packages: `world_mix`, `world_america`, `tech_forward`. Allocations are integer basis points totaling `10000`
   - `public.create_club` resolves `p_package_id` through `private.resolve_curated_package_allocations`
 
+- `club_proposals`
+  - Primary key: `id`
+  - Unique `(club_id, id)`
+  - Thin shared identity (`kind` = `strategy` | `contribution_policy`) for electorate and votes
+  - Existing `strategy_proposals` rows were backfilled. New strategy and contribution inserts keep this row in sync
+
 - `strategy_proposals`
   - Primary key: `id`
   - References proposer, club, and exact base strategy version
+  - Also references `club_proposals.id`
   - Stores lifecycle timestamps, frozen governance mode, electorate size, required yes count, and intended effective time
+
+- `contribution_policy_proposals`
+  - Primary key: `id`
+  - References proposer, club, exact base contribution-policy version, and `club_proposals.id`
+  - Stores proposed mode, proposed equal amount, and the same lifecycle/threshold snapshot fields as strategy proposals
+  - At most one open contribution proposal per club
+  - Clients have SELECT only. Writes are trusted RPCs
 
 - `strategy_proposal_allocations`
   - Primary key: `id`
@@ -151,8 +169,8 @@ Money uses signed PostgreSQL `bigint` columns with positive-value checks. Alloca
 
 - `proposal_electorate_members`
   - Composite primary key: `(proposal_id, membership_id)`
-  - References a proposal and historical membership in the same club
-  - Represents the frozen electorate membership set
+  - References `club_proposals` and historical membership in the same club
+  - Represents the frozen electorate membership set for strategy or contribution proposals
 
 - `votes`
   - Composite primary key: `(proposal_id, membership_id)`
@@ -416,13 +434,18 @@ The following require trusted transaction functions, later authorization policy,
 
 ## Trusted write paths
 
-`supabase/migrations/20260904110626_add_club_create_join_v1.sql`, `supabase/migrations/20260905075952_add_instruments_transactions_v1.sql`, `supabase/migrations/20260905121758_curated_investment_packages_v1.sql`, `supabase/migrations/20260906150144_rename_club_v1.sql`, `supabase/migrations/20260906194634_contribution_policy_v1.sql`, `supabase/migrations/20260906215200_contribution_policy_product_v1.sql`, and `supabase/migrations/20260906221000_contribution_policy_hardening_v1.sql` add public invoker wrappers over private `SECURITY DEFINER` functions:
+`supabase/migrations/20260904110626_add_club_create_join_v1.sql`, `supabase/migrations/20260905075952_add_instruments_transactions_v1.sql`, `supabase/migrations/20260905121758_curated_investment_packages_v1.sql`, `supabase/migrations/20260906150144_rename_club_v1.sql`, `supabase/migrations/20260906194634_contribution_policy_v1.sql`, `supabase/migrations/20260906215200_contribution_policy_product_v1.sql`, `supabase/migrations/20260906221000_contribution_policy_hardening_v1.sql`, and `supabase/migrations/20260906223000_contribution_policy_proposals_v1.sql` add public invoker wrappers over private `SECURITY DEFINER` functions:
 
 - `create_club` — legacy path. Authenticates via `auth.uid()`, resolves an allowlisted `p_package_id` to canonical allocations, then creates the club, owner membership, owner pointer, genesis StrategyVersion 1, a complete 10000-bps snapshot, and Flexible ContributionPolicyVersion 1. It does not invent a creator amount. New mobile clients use `create_club_v2`.
 - `create_club_v2` — same club/strategy creation plus an explicit Equal or Flexible genesis policy. Equal requires `p_equal_amount_minor` and forbids a creator private amount. Flexible requires `p_creator_flexible_amount_minor` and forbids a shared amount. The transaction is atomic.
 - `create_club_invitation` — current owner only, after StrategyVersion 1 exists; returns a one-time plaintext token and stores only `token_hash`
 - `update_club_name` — current owner only, active club; trims the name and rejects empty or over-80-character values with `vesty.club_name_invalid`
-- There is no public `create_contribution_policy_version_v1` RPC. After club creation, authenticated owners and members cannot append policy versions. `private.create_contribution_policy_version_v1` remains as trusted/internal append for future proposal approval (`service_role` / superuser). `create_club` / `create_club_v2` still write policy version 1 in the same club-creation transaction.
+- There is no public `create_contribution_policy_version_v1` RPC. After club creation, authenticated owners and members cannot append policy versions. `private.create_contribution_policy_version_v1` remains trusted/internal (`service_role` / approved contribution finalize). `create_club` / `create_club_v2` still write policy version 1 in the same club-creation transaction.
+- `create_contribution_policy_proposal_v1` — any active member; draft only; validates supported transitions against the supplied base version
+- `open_contribution_policy_proposal_v1` — proposer; freezes electorate and voting rule; rejects a stale base
+- `cancel_contribution_policy_proposal_v1` — proposer; draft or open with zero votes
+- `finalize_contribution_policy_proposal_v1` — active member or frozen electorate member; tallies and, on approval, creates exactly one policy version. Stale bases close as rejected without a version
+- `club_contribution_policy_proposals_v1` — active members; shared payload plus base/proposed style and Equal amounts only
 - `create_member_contribution_commitment_v1` — caller only; appends a private flexible commitment version. Rejected when the latest club policy is equal. Also writes a legacy saving-plan row when none exists so cycle FKs remain satisfied.
 - `club_contribution_policy_v1` — active members; returns latest mode/currency and a shared equal amount only when the mode is equal
 - `my_contribution_commitment_v1` — caller only; latest private commitment, never another member's amount

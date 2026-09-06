@@ -9,6 +9,12 @@ import {
   type ContributionPolicyMode,
   type MyContributionCommitment,
 } from './contributionPolicy';
+import {
+  isContributionPolicyProposalStatus,
+  presentContributionPolicyProposalChange,
+  type ContributionPolicyProposal,
+} from './contributionPolicyProposal';
+import { isVisibleProposalStatus } from '../proposals/presentProposal';
 import { isCuratedPackageId, type CuratedPackageId } from './curatedInvestmentPackages';
 import { V1_BASE_CURRENCY } from './genesisStrategy';
 import type { GovernanceThresholdKind } from './governance';
@@ -311,6 +317,70 @@ export async function getClubContributionPolicy(clubId: string): Promise<ClubCon
   } catch {
     throw new Error('Unable to load contribution settings');
   }
+}
+
+export async function fetchClubContributionPolicyProposals(
+  clubId: string,
+): Promise<ContributionPolicyProposal[]> {
+  const result = await supabase.rpc('club_contribution_policy_proposals_v1', {
+    p_club_id: clubId,
+  });
+
+  if (result.error) {
+    throw new Error(
+      mapClubError(result.error, 'Unable to load contribution proposals', 'club_contribution_policy_proposals_v1'),
+    );
+  }
+
+  const rows = (result.data ?? []) as Record<string, unknown>[];
+  return rows.flatMap((row) => {
+    const status = row.status;
+    const baseMode = row.base_mode;
+    const proposedMode = row.proposed_mode;
+    if (!isContributionPolicyProposalStatus(status)) {
+      return [];
+    }
+    if (!isContributionPolicyMode(baseMode) || !isContributionPolicyMode(proposedMode)) {
+      return [];
+    }
+    if (!isVisibleProposalStatus(status)) {
+      return [];
+    }
+
+    const change = presentContributionPolicyProposalChange({
+      baseMode,
+      baseEqualAmountMinor:
+        row.base_equal_amount_minor == null
+          ? null
+          : requireInteger({ base_equal_amount_minor: row.base_equal_amount_minor }, 'base_equal_amount_minor'),
+      proposedMode,
+      proposedEqualAmountMinor:
+        row.proposed_equal_amount_minor == null
+          ? null
+          : requireInteger(
+              { proposed_equal_amount_minor: row.proposed_equal_amount_minor },
+              'proposed_equal_amount_minor',
+            ),
+    });
+
+    return [{
+      id: requireString(row, 'proposal_id'),
+      clubId: requireString(row, 'club_id'),
+      proposerMembershipId: requireString(row, 'proposer_membership_id'),
+      status,
+      deadlineAt: typeof row.deadline_at === 'string' ? row.deadline_at : null,
+      openedAt: typeof row.opened_at === 'string' ? row.opened_at : null,
+      closedAt: typeof row.closed_at === 'string' ? row.closed_at : null,
+      approvedAt: typeof row.approved_at === 'string' ? row.approved_at : null,
+      electorateSize: typeof row.electorate_size === 'number' ? row.electorate_size : null,
+      requiredYesCount: typeof row.required_yes_count === 'number' ? row.required_yes_count : null,
+      basePolicyVersionId: requireString(row, 'base_contribution_policy_version_id'),
+      baseMode: change.fromStyle,
+      baseEqualAmountMinor: change.fromEqualAmountMinor,
+      proposedMode: change.toStyle,
+      proposedEqualAmountMinor: change.toEqualAmountMinor,
+    }];
+  });
 }
 
 export async function getMyContributionCommitment(clubId: string): Promise<MyContributionCommitment | null> {

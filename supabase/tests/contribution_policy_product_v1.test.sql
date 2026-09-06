@@ -303,7 +303,7 @@ select extensions.is(
   tests.statement_sqlstate(
     format(
       $statement$
-        select private.create_contribution_policy_version_v1(%L::uuid, 'equal', 350000)
+        select private.create_contribution_policy_version_v1(%L::uuid, 'equal'::public.contribution_policy_mode, 350000::bigint, null, null)
       $statement$,
       (select club_id from equal_club)
     )
@@ -318,7 +318,7 @@ select extensions.is(
   tests.statement_sqlstate(
     format(
       $statement$
-        select private.create_contribution_policy_version_v1(%L::uuid, 'equal', 350000)
+        select private.create_contribution_policy_version_v1(%L::uuid, 'equal'::public.contribution_policy_mode, 350000::bigint, null, null)
       $statement$,
       (select club_id from equal_club)
     )
@@ -333,7 +333,7 @@ select extensions.is(
   tests.statement_sqlstate(
     format(
       $statement$
-        select private.create_contribution_policy_version_v1(%L::uuid, 'equal', 350000)
+        select private.create_contribution_policy_version_v1(%L::uuid, 'equal'::public.contribution_policy_mode, 350000::bigint, null, null)
       $statement$,
       (select club_id from equal_club)
     )

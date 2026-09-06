@@ -598,7 +598,7 @@ select extensions.ok(
 select extensions.ok(
   not has_function_privilege(
     'authenticated',
-    'private.create_contribution_policy_version_v1(uuid, public.contribution_policy_mode, bigint)',
+    'private.create_contribution_policy_version_v1(uuid, public.contribution_policy_mode, bigint, uuid, uuid)',
     'execute'
   ),
   'Authenticated members cannot execute trusted policy-version insert'
