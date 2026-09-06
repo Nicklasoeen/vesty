@@ -4,19 +4,24 @@ const VIEW_BOX_WIDTH = 513;
 const VIEW_BOX_HEIGHT = 164;
 
 /**
- * Geometry copied from apps/mobile/assets/rebrand/vesty-logo-rb.svg.
- * Rendered via react-native-svg so fill can follow the theme without a
- * Metro SVG transformer.
+ * Geometry from apps/mobile/assets/rebrand/vesty-logo-rb.svg.
+ *
+ * The V mark is bold polygons. The “esty” outlines are a light font cut —
+ * at header size (~23px) stems rasterize to ~1.6px. A same-color stroke on
+ * the letter path only is optical weight for small UI, not a new logo.
  */
 const WORDMARK_PATH =
   'M438 0H610L1018 1056H837L612 448C582 367 555 286 527 205C500 286 472 367 442 448L214 1056H30Z M1610 -24C1840 -24 2020 114 2060 316H1890C1858 206 1760 130 1610 130C1410 130 1296 272 1288 479H2078V526C2078 854 1892 1080 1598 1080C1318 1080 1120 847 1120 526C1120 208 1300 -24 1610 -24ZM1290 625C1308 811 1425 928 1598 928C1772 928 1890 811 1908 625Z M2640 -24C2870 -24 3044 92 3044 288C3044 440 2952 533 2750 581L2580 621C2478 645 2416 692 2416 772C2416 862 2499 934 2629 934C2765 934 2852 852 2854 740H3020C3014 950 2849 1080 2629 1080C2403 1080 2246 952 2246 772C2246 618 2348 518 2544 472L2714 432C2808 410 2873 364 2873 284C2873 190 2782 122 2636 122C2488 122 2402 190 2390 316H2222C2236 86 2414 -24 2640 -24Z M3705 1056H3491V1344H3321V1056H3133V910H3321V238C3321 79 3410 0 3591 0H3705V146H3607C3520 146 3491 174 3491 256V910H3705Z M3889 -418H3993C4126 -418 4231 -338 4286 -196L4773 1056H4592L4368 448C4339 369 4310 290 4282 211C4255 290 4227 369 4197 448L3969 1056H3785L4194 9L4136 -141C4102 -229 4058 -268 3993 -268H3889Z';
+
+/** Stroke in the unscaled letter space (~0.067× into the viewBox). */
+const LETTER_OPTICAL_STROKE = 64;
 
 interface VestyWordmarkProps {
   color: string;
   height?: number;
 }
 
-export function VestyWordmark({ color, height = 20 }: VestyWordmarkProps) {
+export function VestyWordmark({ color, height = 24 }: VestyWordmarkProps) {
   const width = height * (VIEW_BOX_WIDTH / VIEW_BOX_HEIGHT);
 
   return (
@@ -24,7 +29,14 @@ export function VestyWordmark({ color, height = 20 }: VestyWordmarkProps) {
       <Polygon points="155,0 89,61 89,119 155,51" fill={color} />
       <Polygon points="0,37 0,94 69,163 130,164" fill={color} />
       <G transform="matrix(0.06683534 0 0 -0.05732123 193.99493991 126.03972758)">
-        <Path d={WORDMARK_PATH} fill={color} />
+        <Path
+          d={WORDMARK_PATH}
+          fill={color}
+          stroke={color}
+          strokeWidth={LETTER_OPTICAL_STROKE}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
       </G>
     </Svg>
   );

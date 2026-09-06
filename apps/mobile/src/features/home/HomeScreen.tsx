@@ -176,7 +176,7 @@ function HomeHeader({
       </Pressable>
 
       <View style={styles.logoCenter} pointerEvents="none">
-        <VestyWordmark color={colors.accent} height={23} />
+        <VestyWordmark color={colors.accent} height={24} />
       </View>
 
       <View
