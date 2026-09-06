@@ -5,6 +5,7 @@ import {
   advanceCreateClubStep,
   canContinueCreateClub,
   canContinueFromStyle,
+  canSubmitClubRename,
   canSubmitCreateClub,
   createClubRequest,
   INITIAL_CREATE_CLUB_DRAFT,
@@ -63,6 +64,13 @@ test('review reflects the exact chosen package', () => {
       true,
     );
   }
+});
+
+test('rename requires a changed, valid club name', () => {
+  assert.equal(canSubmitClubRename('Friday Club', 'Friday Club'), false);
+  assert.equal(canSubmitClubRename('Friday Club', '  Friday Club  '), false);
+  assert.equal(canSubmitClubRename('Friday Club', '   '), false);
+  assert.equal(canSubmitClubRename('Friday Club', 'Saturday Club'), true);
 });
 
 test('create request sends the stable package id, not the display name', () => {

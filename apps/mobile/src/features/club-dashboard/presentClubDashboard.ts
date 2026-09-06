@@ -329,7 +329,7 @@ export function presentClubSettingsItems(input: { isOwner: boolean }) {
     invite: input.isOwner,
     leave: false,
     pinToHome: false,
-    editDetails: false,
+    editDetails: input.isOwner,
   };
 }
 

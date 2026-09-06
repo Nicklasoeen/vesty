@@ -39,6 +39,10 @@ export function isClubNameValid(name: string): boolean {
   return trimmed.length > 0 && trimmed.length <= CLUB_NAME_MAX_LENGTH;
 }
 
+export function canSubmitClubRename(currentName: string, draftName: string): boolean {
+  return isClubNameValid(draftName) && trimmedClubName(draftName) !== trimmedClubName(currentName);
+}
+
 export function canContinueFromStyle(packageId: CuratedPackageId | null): boolean {
   return isCuratedPackageId(packageId);
 }

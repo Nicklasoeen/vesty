@@ -8,6 +8,7 @@ import { ClubEmptyState } from '@/features/clubs/ClubEmptyState';
 import { ClubOptionsSheet } from '@/features/clubs/ClubOptionsSheet';
 import { ClubSwitcherSheet } from '@/features/clubs/ClubSwitcherSheet';
 import { InviteMemberSheet } from '@/features/clubs/InviteMemberSheet';
+import { RenameClubSheet } from '@/features/clubs/RenameClubSheet';
 import { createInvitationForClub, useClubs } from '@/features/clubs/useClubs';
 import type { ClubSummary } from '@/features/clubs/types';
 import { homeScrollBottomPadding } from '@/features/home/presentHomeMoney';
@@ -43,6 +44,7 @@ export function ClubDashboardScreen() {
   const [inviteToken, setInviteToken] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteBusy, setInviteBusy] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
 
   const onInvite = async (club: ClubSummary) => {
     if (inviteBusy) {
@@ -98,6 +100,7 @@ export function ClubDashboardScreen() {
           onInvite={() => {
             void onInvite(selectedClub);
           }}
+          onEditName={() => setRenameOpen(true)}
         />
       )}
 
@@ -132,6 +135,14 @@ export function ClubDashboardScreen() {
               onClose={() => setInviteOpen(false)}
             />
           ) : null}
+          {renameOpen ? (
+            <RenameClubSheet
+              visible
+              clubId={selectedClub.clubId}
+              currentName={selectedClub.name}
+              onClose={() => setRenameOpen(false)}
+            />
+          ) : null}
         </>
       ) : null}
     </View>
@@ -145,6 +156,7 @@ function ClubDashboard({
   onOpenSwitcher,
   onOpenInvest,
   onInvite,
+  onEditName,
 }: {
   club: ClubSummary;
   canSwitch: boolean;
@@ -152,6 +164,7 @@ function ClubDashboard({
   onOpenSwitcher: () => void;
   onOpenInvest: () => void;
   onInvite: () => void;
+  onEditName: () => void;
 }) {
   const { colors, radius, spacing } = useTheme();
   const insets = useSafeAreaInsets();
@@ -327,7 +340,7 @@ function ClubDashboard({
           }}
         />
       ) : (
-        <ClubSettingsPanel club={club} onInvite={onInvite} />
+        <ClubSettingsPanel club={club} onInvite={onInvite} onEditName={onEditName} />
       )}
     </Screen>
   );

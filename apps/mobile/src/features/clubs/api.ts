@@ -16,6 +16,7 @@ import {
   type ClubSummary,
   type CreatedClubResult,
   type CreatedInvitationResult,
+  type UpdatedClubNameResult,
 } from './types';
 
 interface MembershipClubRow {
@@ -275,6 +276,31 @@ export async function joinClub(token: string): Promise<AcceptedInvitationResult>
     };
   } catch {
     throw new Error('Invite is invalid or expired');
+  }
+}
+
+export async function updateClubName(clubId: string, name: string): Promise<UpdatedClubNameResult> {
+  const result = await supabase.rpc('update_club_name', {
+    p_club_id: clubId,
+    p_name: name,
+  });
+
+  if (result.error) {
+    throw new Error(mapClubError(result.error, "You don't have permission to rename this club", 'update_club_name'));
+  }
+
+  const row = firstRpcRow(result.data);
+  if (!row) {
+    throw new Error("You don't have permission to rename this club");
+  }
+
+  try {
+    return {
+      clubId: requireString(row, 'club_id'),
+      name: requireString(row, 'name'),
+    };
+  } catch {
+    throw new Error("You don't have permission to rename this club");
   }
 }
 

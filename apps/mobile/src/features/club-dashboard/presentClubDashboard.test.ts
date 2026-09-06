@@ -295,9 +295,10 @@ describe('unimplemented club capabilities', () => {
       invite: true,
       leave: false,
       pinToHome: false,
-      editDetails: false,
+      editDetails: true,
     });
     assert.equal(presentClubSettingsItems({ isOwner: false }).invite, false);
+    assert.equal(presentClubSettingsItems({ isOwner: false }).editDetails, false);
   });
 });
 

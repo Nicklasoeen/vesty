@@ -10,9 +10,10 @@ import { clubMemberCountLabel, presentClubSettingsItems } from './presentClubDas
 interface ClubSettingsPanelProps {
   club: ClubSummary;
   onInvite: () => void;
+  onEditName: () => void;
 }
 
-export function ClubSettingsPanel({ club, onInvite }: ClubSettingsPanelProps) {
+export function ClubSettingsPanel({ club, onInvite, onEditName }: ClubSettingsPanelProps) {
   const { spacing } = useTheme();
   const items = presentClubSettingsItems({ isOwner: club.isOwner });
   const governance = GOVERNANCE_OPTIONS.find((option) => option.value === club.governanceThresholdKind);
@@ -26,6 +27,11 @@ export function ClubSettingsPanel({ club, onInvite }: ClubSettingsPanelProps) {
           <AppText variant="supporting" style={{ marginTop: 2 }}>
             {clubMemberCountLabel(club.members.length)}
           </AppText>
+          {items.editDetails ? (
+            <View style={{ marginTop: spacing.md }}>
+              <Button label="Edit name" variant="secondary" onPress={onEditName} />
+            </View>
+          ) : null}
         </View>
       ) : null}
 

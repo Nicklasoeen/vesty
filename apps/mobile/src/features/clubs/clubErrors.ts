@@ -13,6 +13,7 @@ const PRODUCT_MESSAGES: Record<string, string> = {
   'vesty.invalid_package': 'Unable to create club right now',
   'vesty.invalid_target': 'Unable to create club right now',
   'vesty.invite_forbidden': "You don't have permission to invite members",
+  'vesty.club_rename_forbidden': "You don't have permission to rename this club",
   'vesty.invite_invalid': 'Invite is invalid or expired',
   'vesty.invite_expired': 'Invite is invalid or expired',
   'vesty.invite_not_recipient': 'Invite is invalid or expired',

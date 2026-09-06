@@ -115,6 +115,7 @@ Archiving stops new operational activity but preserves history. A club with mean
 - An active club has exactly one active owner membership.
 - The base currency is one explicit ISO currency; NOK is the expected Norwegian V1 default.
 - All authoritative member saving-plan and cycle expectation amounts use the club base currency.
+- The club name may be changed after creation by the active owner. Members cannot rename the club.
 - The governance rule set is chosen when the club is created and is not editable in V1.
 - At most one ownership transfer is pending at a time.
 - At most one strategy version is effective at a given instant.
@@ -1017,6 +1018,7 @@ This section defines intended authority, not RLS implementation.
 
 ### Ownership and membership administration
 
+- Only the active owner may rename the club.
 - Only the active owner may remove another active member.
 - Only the owner may initiate ownership transfer to another active member.
 - The selected target member must explicitly accept before ownership changes.

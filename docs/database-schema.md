@@ -17,6 +17,7 @@ The schema is created by:
 - `supabase/migrations/20260905121758_curated_investment_packages_v1.sql`
 - `supabase/migrations/20260905123104_add_marketstack_provider.sql`
 - `supabase/migrations/20260905123105_seed_marketstack_v1_allowlist.sql`
+- `supabase/migrations/20260906150144_rename_club_v1.sql`
 
 It uses the Supabase-managed `auth.users` table only as the authentication identity boundary. It does not duplicate credentials, sessions, or authentication state.
 
@@ -412,10 +413,11 @@ The following require trusted transaction functions, later authorization policy,
 
 ## Trusted write paths
 
-`supabase/migrations/20260904110626_add_club_create_join_v1.sql`, `supabase/migrations/20260905075952_add_instruments_transactions_v1.sql`, and `supabase/migrations/20260905121758_curated_investment_packages_v1.sql` add public invoker wrappers over private `SECURITY DEFINER` functions:
+`supabase/migrations/20260904110626_add_club_create_join_v1.sql`, `supabase/migrations/20260905075952_add_instruments_transactions_v1.sql`, `supabase/migrations/20260905121758_curated_investment_packages_v1.sql`, and `supabase/migrations/20260906150144_rename_club_v1.sql` add public invoker wrappers over private `SECURITY DEFINER` functions:
 
 - `create_club` — authenticates via `auth.uid()`, resolves an allowlisted `p_package_id` to canonical allocations, then creates the club, owner membership, owner pointer, genesis StrategyVersion 1, and a complete 10000-bps snapshot. Callers cannot supply allocation rows. Unknown package ids raise `vesty.invalid_package`. Canonical packages are private tables, not Data API resources.
 - `create_club_invitation` — current owner only, after StrategyVersion 1 exists; returns a one-time plaintext token and stores only `token_hash`
+- `update_club_name` — current owner only, active club; trims the name and rejects empty or over-80-character values with `vesty.club_name_invalid`
 - `accept_club_invitation` — authenticates via `auth.uid()`, validates token/expiry/recipient, creates one active membership, and marks the invitation accepted without changing ownership
 - `ensure_open_investment_day_v1` — authenticates via `auth.uid()`, opens or reuses the caller's current TestFlight cycle/participation, and never writes transactions
 - `confirm_investment_day_v1` — authenticates via `auth.uid()`, inserts missing member-reported amount-only buys for the caller only, and is idempotent on retry

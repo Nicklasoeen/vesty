@@ -1,6 +1,6 @@
 import * as clubsApi from './api';
 import type { CuratedPackageId } from './curatedInvestmentPackages';
-import type { ClubSummary, CreatedInvitationResult } from './types';
+import type { ClubSummary, CreatedInvitationResult, UpdatedClubNameResult } from './types';
 
 export { ClubsProvider, useClubs } from './ClubsProvider';
 
@@ -27,4 +27,14 @@ export async function attachClub(
 
 export async function createInvitationForClub(clubId: string): Promise<CreatedInvitationResult> {
   return clubsApi.createClubInvitation(clubId);
+}
+
+export async function renameClub(
+  refresh: (preferredClubId?: string) => Promise<ClubSummary[]>,
+  clubId: string,
+  name: string,
+): Promise<UpdatedClubNameResult> {
+  const updated = await clubsApi.updateClubName(clubId, name);
+  await refresh(clubId);
+  return updated;
 }
