@@ -21,7 +21,14 @@ export function AppText({ variant = 'body', color, style, ...rest }: AppTextProp
 }
 
 function defaultColorFor(variant: AppTextVariant): AppTextColor {
-  return variant === 'meta' || variant === 'eyebrow' || variant === 'sectionTitle' ? 'secondary' : 'primary';
+  return variant === 'meta' ||
+    variant === 'eyebrow' ||
+    variant === 'sectionTitle' ||
+    variant === 'label' ||
+    variant === 'supporting' ||
+    variant === 'statLabel'
+    ? 'secondary'
+    : 'primary';
 }
 
 function resolveColor(color: AppTextColor, colors: ThemeColors): string {

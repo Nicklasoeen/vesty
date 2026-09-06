@@ -2,7 +2,16 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { darkColors, lightColors, radius, spacing, typography, type ColorScheme, type ThemeColors } from './tokens';
+import {
+  darkColors,
+  lightColors,
+  radius,
+  shadows,
+  spacing,
+  typography,
+  type ColorScheme,
+  type ThemeColors,
+} from './tokens';
 
 export type AppearancePreference = 'system' | 'light' | 'dark';
 
@@ -17,6 +26,7 @@ interface ThemeContextValue {
   colors: ThemeColors;
   spacing: typeof spacing;
   radius: typeof radius;
+  shadows: typeof shadows;
   typography: typeof typography;
 }
 
@@ -69,6 +79,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       colors: colorScheme === 'dark' ? darkColors : lightColors,
       spacing,
       radius,
+      shadows,
       typography,
     }),
     [colorScheme, preference, setAppearancePreference],

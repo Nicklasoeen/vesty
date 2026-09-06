@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Vesty Design System v2 — Source of Truth</title>
+<style>
+:root{
+  --vesty-blue:#12384A;
+  --vesty-blue-deep:#0B2D3D;
+  --vesty-mint:#22C59A;
+  --vesty-mint-soft:#DFF7EF;
+  --bg:#F7F9F8;
+  --surface:#FFFFFF;
+  --surface-subtle:#F3F7F5;
+  --ink:#102B3A;
+  --muted:#778995;
+  --muted-2:#9AA8B0;
+  --line:#E4ECE9;
+  --positive:#17B67E;
+  --warning:#E8A84B;
+  --danger:#D95E63;
+  --r-xs:10px;
+  --r-sm:14px;
+  --r-md:18px;
+  --r-lg:22px;
+  --r-xl:28px;
+  --r-pill:999px;
+  --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:20px;--s6:24px;--s7:32px;--s8:40px;
+  --shadow-1:0 2px 10px rgba(15,47,64,.06);
+  --shadow-2:0 10px 28px rgba(15,47,64,.08);
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Display","Inter",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:linear-gradient(180deg,#EDF7F4 0%,#F8FAF9 42%,#EEF6F3 100%);
+  color:var(--ink);
+  font-family:var(--font);
+}
+button{font:inherit}
+.page{
+  max-width:1380px;
+  margin:0 auto;
+  padding:32px 22px 80px;
+  display:grid;
+  grid-template-columns:330px minmax(0,1fr);
+  gap:28px;
+}
+.panel{
+  background:rgba(255,255,255,.96);
+  border:1px solid rgba(18,56,74,.08);
+  border-radius:30px;
+  box-shadow:var(--shadow-2);
+}
+.sidebar{
+  padding:26px;
+  position:sticky;
+  top:22px;
+  height:max-content;
+}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:22px}
+.brand-mark{width:42px;height:42px;border-radius:12px;background:var(--vesty-blue);color:#fff;display:grid;place-items:center;font-weight:900;font-size:22px}
+.brand-word{font-size:28px;font-weight:800;letter-spacing:-.045em;color:var(--vesty-blue)}
+.eyebrow{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+.sidebar h2{margin:5px 0 8px;font-size:22px;letter-spacing:-.035em}
+.sidebar p{color:var(--muted);font-size:13px;line-height:1.55}
+.token-list{display:grid;gap:8px;margin-top:14px}
+.token{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px}
+.swatch{width:34px;height:34px;border-radius:11px;border:1px solid rgba(0,0,0,.06)}
+.rule-list{padding-left:18px;color:var(--muted);font-size:13px;line-height:1.55}
+.main{display:grid;gap:28px}
+.library{padding:24px}
+.library h1,.library h2{margin:0;letter-spacing:-.04em}
+.library h1{font-size:28px}.library h2{font-size:22px}
+.library .intro{margin:6px 0 22px;color:var(--muted);font-size:13px}
+.section-label{margin:26px 0 12px;font-size:13px;font-weight:800;color:var(--vesty-blue)}
+.grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.lib-box{background:var(--bg);border:1px solid var(--line);border-radius:20px;padding:16px}
+.lib-title{font-size:11px;color:var(--muted);font-weight:800;margin-bottom:12px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+
+/* Primitives */
+.btn{border:0;border-radius:14px;padding:12px 16px;font-weight:800;font-size:13px}
+.btn.primary{background:var(--vesty-blue);color:#fff}
+.btn.secondary{background:var(--surface);color:var(--vesty-blue);border:1px solid var(--line)}
+.icon-btn{width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--vesty-blue);display:grid;place-items:center}
+.badge{display:inline-flex;align-items:center;padding:6px 9px;border-radius:var(--r-pill);background:var(--vesty-mint-soft);color:var(--vesty-blue);font-size:11px;font-weight:800}
+
+/* "Photo" avatar placeholders in source-of-truth file.
+   Production component uses real user profile image; initials are fallback only. */
+.avatar{width:42px;height:42px;border-radius:50%;border:3px solid var(--surface);margin-left:-8px;background-size:cover;background-position:center;box-shadow:0 0 0 1px rgba(18,56,74,.03)}
+.avatar:first-child{margin-left:0}
+.avatar.p1{background-image:radial-gradient(circle at 50% 34%,#f1c7a6 0 22%,transparent 23%),linear-gradient(145deg,#273b45 0 37%,#d6eae4 38%)}
+.avatar.p2{background-image:radial-gradient(circle at 50% 34%,#e5b590 0 22%,transparent 23%),linear-gradient(145deg,#7b563d 0 37%,#d7e7f3 38%)}
+.avatar.p3{background-image:radial-gradient(circle at 50% 34%,#f0c5a4 0 22%,transparent 23%),linear-gradient(145deg,#4b3427 0 37%,#eee0d8 38%)}
+.avatar.p4{background-image:radial-gradient(circle at 50% 34%,#d7a17f 0 22%,transparent 23%),linear-gradient(145deg,#1f2f36 0 37%,#e6dded 38%)}
+.avatar.plus{display:grid;place-items:center;background:#EEF3F2;color:var(--vesty-blue);font-size:13px;font-weight:800}
+.avatar-stack{display:flex;align-items:center}
+.stat{min-width:0}
+.stat b{display:block;font-size:18px;letter-spacing:-.03em}
+.stat span{display:block;color:var(--muted);font-size:10px;margin-top:3px}
+.stat .positive{color:var(--positive)}
+
+/* Domain components */
+.portfolio-card{background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:18px;box-shadow:var(--shadow-1)}
+.portfolio-title{font-size:12px;color:var(--muted)}
+.portfolio-value{font-size:42px;font-weight:850;letter-spacing:-.055em;margin-top:4px}
+.portfolio-gain{color:var(--positive);font-size:16px;font-weight:850;margin-top:2px}
+.portfolio-copy{font-size:12px;color:var(--muted);margin-top:4px}
+.chart{height:158px;margin-top:8px}
+.chart svg{width:100%;height:100%}
+.range{display:grid;grid-template-columns:repeat(5,1fr);background:#F2F5F4;padding:4px;border-radius:15px;margin-top:2px}
+.range span{text-align:center;padding:8px 4px;border-radius:11px;color:var(--muted);font-size:11px;font-weight:750}
+.range .active{background:var(--vesty-mint-soft);color:var(--vesty-blue)}
+.portfolio-stats{margin-top:14px;padding-top:14px;border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(3,1fr)}
+.portfolio-stats .stat{padding:0 12px;border-right:1px solid var(--line)}
+.portfolio-stats .stat:first-child{padding-left:0}
+.portfolio-stats .stat:last-child{border-right:0;padding-right:0}
+
+.pinned-club{background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:18px;box-shadow:var(--shadow-1)}
+.pinned-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.pinned-title{font-size:22px;font-weight:850;letter-spacing:-.035em}
+.pinned-meta{font-size:12px;color:var(--muted);margin-top:3px}
+.pinned-actions{display:flex;align-items:center;gap:10px}
+.star{border:0;background:transparent;color:var(--vesty-blue);font-size:20px;padding:0}
+.chev{font-size:28px;color:var(--vesty-blue);line-height:1}
+.pinned-members{margin:18px 0 16px}
+.pinned-members .avatar{width:48px;height:48px}
+.pinned-stats{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--line);padding-top:15px}
+.pinned-stats .stat{padding:0 10px;border-right:1px solid var(--line)}
+.pinned-stats .stat:first-child{padding-left:0}
+.pinned-stats .stat:last-child{border-right:0;padding-right:0}
+
+.investment-day{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:14px;display:grid;grid-template-columns:48px 1fr 24px;gap:12px;align-items:center;box-shadow:var(--shadow-1)}
+.day-icon{width:48px;height:48px;border-radius:15px;background:var(--vesty-mint-soft);display:grid;place-items:center;color:var(--vesty-blue);font-size:20px}
+.day-label{font-size:11px;color:var(--muted)}
+.day-date{font-size:17px;font-weight:850;margin-top:1px}
+.day-meta{font-size:11px;color:var(--muted);margin-top:2px}
+
+.section-head{display:flex;align-items:center;justify-content:space-between;margin:18px 0 10px}
+.section-head h3{margin:0;font-size:17px;letter-spacing:-.025em}
+.section-head span{font-size:11px;color:var(--muted)}
+
+.club-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.club-card{border:1px solid var(--line);border-radius:17px;padding:11px;box-shadow:var(--shadow-1);min-height:112px}
+.club-card.tint-a{background:linear-gradient(180deg,#F2FBF8 0%,#FFFFFF 76%)}
+.club-card.tint-b{background:linear-gradient(180deg,#F3F7FD 0%,#FFFFFF 76%)}
+.club-card.tint-c{background:linear-gradient(180deg,#FFF8F0 0%,#FFFFFF 76%)}
+.club-card .avatar{width:25px;height:25px;border-width:2px;margin-left:-5px}
+.club-card .avatar.plus{font-size:9px}
+.club-card .name{font-size:12px;font-weight:850;margin-top:7px}
+.club-card .meta{font-size:10px;color:var(--muted);margin-top:1px}
+.club-card .value{font-size:12px;font-weight:850;margin-top:8px}
+.club-card .return{font-size:11px;color:var(--positive);font-weight:850;margin-top:1px}
+
+/* Device */
+.device-wrap{display:flex;justify-content:center}
+.device{width:min(430px,100%);min-height:970px;background:var(--bg);border:1px solid #DCE6E3;border-radius:46px;box-shadow:0 34px 80px rgba(15,47,64,.18);overflow:hidden}
+.status{height:38px;padding:0 24px 7px;display:flex;justify-content:space-between;align-items:flex-end;font-size:12px;font-weight:800}
+.screen{padding:10px 18px 18px}
+.home-top{display:grid;grid-template-columns:44px 1fr 44px;align-items:center;margin-bottom:20px}
+.profile{width:42px;height:42px;border-radius:50%;background:radial-gradient(circle at 50% 34%,#f0c5a4 0 22%,transparent 23%),linear-gradient(145deg,#3c302b 0 37%,#d8ebe5 38%);border:3px solid #fff;box-shadow:var(--shadow-1);position:relative}
+.profile:after{content:"";position:absolute;right:-1px;bottom:0;width:9px;height:9px;border-radius:50%;background:var(--positive);border:2px solid var(--bg)}
+.logo-center{display:flex;align-items:center;justify-content:center;gap:8px;color:var(--vesty-blue);font-size:20px;font-weight:850;letter-spacing:-.04em}
+.logo-center .mini{width:28px;height:28px;border-radius:8px;background:var(--vesty-blue);color:#fff;display:grid;place-items:center;font-size:14px}
+.bell{justify-self:end;width:40px;height:40px;border:none;background:transparent;color:var(--vesty-blue);font-size:20px;position:relative}
+.bell:after{content:"";position:absolute;width:7px;height:7px;border-radius:50%;right:7px;top:6px;background:var(--vesty-mint);border:2px solid var(--bg)}
+.greeting{margin-bottom:18px}
+.greeting h1{margin:0;color:var(--vesty-blue);font-size:31px;line-height:1;letter-spacing:-.045em}
+.greeting p{margin:6px 0 0;color:var(--muted);font-size:13px}
+.stack{display:grid;gap:14px}
+
+.bottom-nav{height:80px;background:rgba(255,255,255,.97);border-top:1px solid var(--line);display:grid;grid-template-columns:1fr 1fr 64px 1fr 1fr;align-items:center;padding:4px 14px 10px}
+.nav-item{text-align:center;color:var(--muted);font-size:10px;font-weight:750}
+.nav-item.active{color:var(--vesty-blue)}
+.nav-ico{display:block;font-size:19px;margin-bottom:4px}
+.nav-plus{width:52px;height:52px;border-radius:50%;background:var(--vesty-blue);color:#fff;display:grid;place-items:center;margin:auto;font-size:28px;box-shadow:0 8px 18px rgba(18,56,74,.18)}
+
+@media(max-width:940px){
+  .page{grid-template-columns:1fr}
+  .sidebar{position:relative;top:0}
+  .grid-2,.grid-3{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="page">
+  <aside class="panel sidebar">
+    <div class="brand">
+      <div class="brand-mark">V</div>
+      <div>
+        <div class="eyebrow">Design system v2</div>
+        <div class="brand-word">vesty</div>
+      </div>
+    </div>
+
+    <h2>Locked Home direction</h2>
+    <p>
+      Source of truth for the redesign: personal portfolio first, pinned club second, Investment Day third,
+      compact club cards last. Real profile photos are the social identity. Deep Vesty blue is the brand anchor;
+      mint is reserved for performance and positive state.
+    </p>
+
+    <div class="eyebrow" style="margin-top:24px">Core palette</div>
+    <div class="token-list">
+      <div class="token"><span>Vesty blue</span><span class="swatch" style="background:#12384A"></span></div>
+      <div class="token"><span>Mint</span><span class="swatch" style="background:#22C59A"></span></div>
+      <div class="token"><span>Mint soft</span><span class="swatch" style="background:#DFF7EF"></span></div>
+      <div class="token"><span>Background</span><span class="swatch" style="background:#F7F9F8"></span></div>
+      <div class="token"><span>Surface</span><span class="swatch" style="background:#FFFFFF"></span></div>
+      <div class="token"><span>Muted</span><span class="swatch" style="background:#778995"></span></div>
+    </div>
+
+    <div class="eyebrow" style="margin-top:24px">Locked rules</div>
+    <ul class="rule-list">
+      <li>Home is personal, not a Club duplicate.</li>
+      <li>Portfolio period control sits below the chart.</li>
+      <li>One pinned club on Home; one club is auto-selected when it is the only club.</li>
+      <li>Pinning happens from the Club screen.</li>
+      <li>No strategy label on the pinned Home card.</li>
+      <li>Stats are horizontal at the bottom of the pinned club card.</li>
+      <li>Your Clubs uses small member-photo stacks, not emojis or stock-cover art.</li>
+      <li>Profile photo → initials fallback. No Bitmoji system.</li>
+    </ul>
+  </aside>
+
+  <main class="main">
+    <section class="panel library">
+      <h1>Vesty v2 component library</h1>
+      <p class="intro">Reusable tokens, primitives and domain components extracted from the approved Home direction.</p>
+
+      <div class="section-label">Primitives</div>
+      <div class="grid-3">
+        <div class="lib-box">
+          <div class="lib-title">Buttons & badge</div>
+          <div class="row">
+            <button class="btn primary">Primary</button>
+            <button class="btn secondary">Secondary</button>
+            <span class="badge">Estimated</span>
+          </div>
+        </div>
+        <div class="lib-box">
+          <div class="lib-title">Member stack</div>
+          <div class="avatar-stack">
+            <div class="avatar p1"></div><div class="avatar p2"></div><div class="avatar p3"></div><div class="avatar p4"></div><div class="avatar plus">+2</div>
+          </div>
+        </div>
+        <div class="lib-box">
+          <div class="lib-title">Stat</div>
+          <div class="stat"><b>12 460 kr</b><span>Group value</span></div>
+        </div>
+      </div>
+
+      <div class="section-label">Domain components</div>
+      <div class="grid-2">
+        <div class="lib-box">
+          <div class="lib-title">Pinned club</div>
+          <div class="pinned-club">
+            <div class="pinned-top">
+              <div><div class="pinned-title">Pottervest 🌱</div><div class="pinned-meta">6 members</div></div>
+              <div class="pinned-actions"><button class="star">★</button><span class="chev">›</span></div>
+            </div>
+            <div class="avatar-stack pinned-members">
+              <div class="avatar p1"></div><div class="avatar p2"></div><div class="avatar p3"></div><div class="avatar p4"></div><div class="avatar plus">+2</div>
+            </div>
+            <div class="pinned-stats">
+              <div class="stat"><b>12 460 kr</b><span>Group value</span></div>
+              <div class="stat"><b>3 280 kr</b><span>Your stake</span></div>
+              <div class="stat"><b class="positive">+14.2%</b><span>All-time return</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="lib-box">
+          <div class="lib-title">Compact Your Clubs card</div>
+          <div class="club-card tint-a" style="max-width:150px">
+            <div class="avatar-stack">
+              <div class="avatar p1"></div><div class="avatar p2"></div><div class="avatar p3"></div><div class="avatar plus">+1</div>
+            </div>
+            <div class="name">Clean Energy</div>
+            <div class="meta">4 members</div>
+            <div class="value">3 540 kr</div>
+            <div class="return">+18.7%</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="device-wrap">
+      <div class="device">
+        <div class="status"><span>9:41</span><span>▮▮▮ ◉ ▰</span></div>
+
+        <div class="screen">
+          <div class="home-top">
+            <div class="profile"></div>
+            <div class="logo-center"><span class="mini">V</span> vesty</div>
+            <button class="bell">♢</button>
+          </div>
+
+          <div class="greeting">
+            <h1>Hei, Nicklas 👋</h1>
+            <p>Invest smarter, together.</p>
+          </div>
+
+          <div class="stack">
+            <section class="portfolio-card">
+              <div class="portfolio-title">Your portfolio</div>
+              <div class="portfolio-value">24 860 kr</div>
+              <div class="portfolio-gain">+1 840 kr (+8.0%)</div>
+              <div class="portfolio-copy">Total value across all your clubs</div>
+
+              <div class="chart">
+                <svg viewBox="0 0 360 158">
+                  <defs>
+                    <linearGradient id="mintFill" x1="0" x2="0" y1="0" y2="1">
+                      <stop offset="0%" stop-color="#22C59A" stop-opacity=".26"/>
+                      <stop offset="100%" stop-color="#22C59A" stop-opacity="0"/>
+                    </linearGradient>
+                  </defs>
+                  <line x1="14" x2="346" y1="124" y2="124" stroke="#EDF2F0"/>
+                  <line x1="14" x2="346" y1="86" y2="86" stroke="#EDF2F0"/>
+                  <line x1="14" x2="346" y1="48" y2="48" stroke="#EDF2F0"/>
+                  <path d="M14 125 C38 107,52 116,72 99 S105 96,122 82 S153 84,176 66 S214 68,232 55 S260 49,278 39 S312 43,346 20 L346 142 L14 142 Z" fill="url(#mintFill)"/>
+                  <path d="M14 125 C38 107,52 116,72 99 S105 96,122 82 S153 84,176 66 S214 68,232 55 S260 49,278 39 S312 43,346 20" fill="none" stroke="#22C59A" stroke-width="4" stroke-linecap="round"/>
+                  <circle cx="346" cy="20" r="5.5" fill="#22C59A" stroke="#fff" stroke-width="3"/>
+                </svg>
+              </div>
+
+              <div class="range">
+                <span>1M</span><span>3M</span><span class="active">6M</span><span>1Y</span><span>All</span>
+              </div>
+
+              <div class="portfolio-stats">
+                <div class="stat"><b>22 020 kr</b><span>Total invested</span></div>
+                <div class="stat"><b class="positive">+8.0%</b><span>Your return</span></div>
+                <div class="stat"><b>3</b><span>Active clubs</span></div>
+              </div>
+            </section>
+
+            <section class="pinned-club">
+              <div class="pinned-top">
+                <div>
+                  <div class="pinned-title">Pottervest 🌱</div>
+                  <div class="pinned-meta">6 members</div>
+                </div>
+                <div class="pinned-actions">
+                  <button class="star" aria-label="Pinned on Home">★</button>
+                  <span class="chev">›</span>
+                </div>
+              </div>
+
+              <div class="avatar-stack pinned-members">
+                <div class="avatar p1"></div>
+                <div class="avatar p2"></div>
+                <div class="avatar p3"></div>
+                <div class="avatar p4"></div>
+                <div class="avatar plus">+2</div>
+              </div>
+
+              <div class="pinned-stats">
+                <div class="stat"><b>12 460 kr</b><span>Group value</span></div>
+                <div class="stat"><b>3 280 kr</b><span>Your stake</span></div>
+                <div class="stat"><b class="positive">+14.2%</b><span>All-time return</span></div>
+              </div>
+            </section>
+
+            <section class="investment-day">
+              <div class="day-icon">▣</div>
+              <div>
+                <div class="day-label">Next Investment Day</div>
+                <div class="day-date">Friday, 20 June</div>
+                <div class="day-meta">3 actions to review</div>
+              </div>
+              <div class="chev">›</div>
+            </section>
+
+            <div>
+              <div class="section-head">
+                <h3>Your Clubs</h3>
+                <span>View all ›</span>
+              </div>
+
+              <div class="club-cards">
+                <article class="club-card tint-a">
+                  <div class="avatar-stack">
+                    <div class="avatar p1"></div><div class="avatar p2"></div><div class="avatar p3"></div><div class="avatar plus">+1</div>
+                  </div>
+                  <div class="name">Clean Energy</div>
+                  <div class="meta">4 members</div>
+                  <div class="value">3 540 kr</div>
+                  <div class="return">+18.7%</div>
+                </article>
+
+                <article class="club-card tint-b">
+                  <div class="avatar-stack">
+                    <div class="avatar p2"></div><div class="avatar p3"></div><div class="avatar p4"></div><div class="avatar plus">+3</div>
+                  </div>
+                  <div class="name">Next Gen</div>
+                  <div class="meta">7 members</div>
+                  <div class="value">2 140 kr</div>
+                  <div class="return">+9.3%</div>
+                </article>
+
+                <article class="club-card tint-c">
+                  <div class="avatar-stack">
+                    <div class="avatar p4"></div><div class="avatar p1"></div><div class="avatar p2"></div><div class="avatar plus">+2</div>
+                  </div>
+                  <div class="name">Familien</div>
+                  <div class="meta">5 members</div>
+                  <div class="value">5 920 kr</div>
+                  <div class="return">+12.1%</div>
+                </article>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <nav class="bottom-nav">
+          <div class="nav-item active"><span class="nav-ico">⌂</span>Home</div>
+          <div class="nav-item"><span class="nav-ico">⌕</span>Club</div>
+          <div class="nav-plus">+</div>
+          <div class="nav-item"><span class="nav-ico">↗</span>Invest</div>
+          <div class="nav-item"><span class="nav-ico">≡</span>Activity</div>
+        </nav>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>

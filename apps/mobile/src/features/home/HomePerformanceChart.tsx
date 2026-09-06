@@ -2,21 +2,28 @@ import { useMemo, useState } from 'react';
 import { LayoutChangeEvent, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 
-import { PORTFOLIO_RANGE_OPTIONS, type PortfolioRangeKey } from '@/demo/clubDemoData';
+import type { PortfolioRangeKey } from '@/demo/clubDemoData';
 import type { OverallPerformancePoint } from '@/demo/homeDemoData';
 import { buildSmoothLinePath, type Point2D } from '@/lib/smoothLinePath';
 import { useTheme } from '@/theme';
 import { AppText, RangeSelector } from '@/ui';
+import { chartDomain, mapChartX, mapChartY } from './chartScale';
+import { HOME_PORTFOLIO_RANGE_LABELS, HOME_PORTFOLIO_RANGE_OPTIONS } from './presentHomePortfolio';
 
-const CHART_HEIGHT = 100;
-const VERTICAL_PADDING = 6;
+const DEFAULT_CHART_HEIGHT = 100;
 /** Fraction of each interval's width spent rising to the new invested total — the rest stays flat. */
 const CONTRIBUTION_RISE_FRACTION = 0.3;
 
 interface HomePerformanceChartProps {
   historyByRange: Record<PortfolioRangeKey, OverallPerformancePoint[]>;
-  defaultRange: PortfolioRangeKey;
+  defaultRange?: PortfolioRangeKey;
+  range?: PortfolioRangeKey;
+  onRangeChange?: (range: PortfolioRangeKey) => void;
   valueLegendLabel?: string;
+  performanceColor?: 'mint' | 'accent';
+  rangeVariant?: 'underline' | 'segmented';
+  chartHeight?: number;
+  compactLegend?: boolean;
 }
 
 /**
@@ -29,15 +36,27 @@ interface HomePerformanceChartProps {
  */
 export function HomePerformanceChart({
   historyByRange,
-  defaultRange,
+  defaultRange = '6M',
+  range,
+  onRangeChange,
   valueLegendLabel = 'Value',
+  performanceColor = 'accent',
+  rangeVariant = 'underline',
+  chartHeight = DEFAULT_CHART_HEIGHT,
+  compactLegend = false,
 }: HomePerformanceChartProps) {
   const { colors, spacing } = useTheme();
-  const [range, setRange] = useState<PortfolioRangeKey>(defaultRange);
+  const [internalRange, setInternalRange] = useState<PortfolioRangeKey>(defaultRange);
   const [width, setWidth] = useState(0);
+  const selectedRange = range ?? internalRange;
+  const handleRangeChange = onRangeChange ?? setInternalRange;
+  const lineColor = performanceColor === 'mint' ? colors.mint : colors.accent;
 
-  const points = historyByRange[range];
-  const geometry = useMemo(() => (width > 0 ? buildDualLineGeometry(points, width) : null), [points, width]);
+  const points = historyByRange[selectedRange];
+  const geometry = useMemo(
+    () => (width > 0 ? buildDualLineGeometry(points, width, chartHeight) : null),
+    [chartHeight, points, width],
+  );
 
   const handleLayout = (event: LayoutChangeEvent) => {
     const nextWidth = Math.round(event.nativeEvent.layout.width);
@@ -48,18 +67,28 @@ export function HomePerformanceChart({
 
   return (
     <View>
-      <View style={styles.legendRow}>
-        <LegendItem color={colors.accent} label={valueLegendLabel} />
-        <LegendItem color={colors.textSecondary} label="Invested" style={{ marginLeft: spacing.lg }} dashed />
+      <View style={[styles.legendRow, compactLegend ? styles.legendRowCompact : null]}>
+        <LegendItem color={lineColor} label={valueLegendLabel} compact={compactLegend} />
+        <LegendItem
+          color={colors.textSecondary}
+          label="Invested"
+          style={{ marginLeft: compactLegend ? spacing.md : spacing.lg }}
+          dashed
+          compact={compactLegend}
+        />
       </View>
 
-      <View onLayout={handleLayout} style={[styles.chartFrame, { marginTop: spacing.sm }]} accessibilityLabel="Overall performance history">
+      <View
+        onLayout={handleLayout}
+        style={[styles.chartFrame, { marginTop: compactLegend ? 2 : spacing.sm, height: chartHeight }]}
+        accessibilityLabel="Overall performance history"
+      >
         {geometry ? (
-          <Svg width={width} height={CHART_HEIGHT}>
+          <Svg width={width} height={chartHeight}>
             <Defs>
               <LinearGradient id="homePerformanceAreaFill" x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0%" stopColor={colors.accent} stopOpacity={0.16} />
-                <Stop offset="100%" stopColor={colors.accent} stopOpacity={0} />
+                <Stop offset="0%" stopColor={lineColor} stopOpacity={performanceColor === 'mint' ? 0.26 : 0.16} />
+                <Stop offset="100%" stopColor={lineColor} stopOpacity={0} />
               </LinearGradient>
             </Defs>
             <Path d={geometry.areaPath} fill="url(#homePerformanceAreaFill)" />
@@ -74,8 +103,8 @@ export function HomePerformanceChart({
             <Path
               d={geometry.valueLine}
               fill="none"
-              stroke={colors.accent}
-              strokeWidth={2}
+              stroke={lineColor}
+              strokeWidth={performanceColor === 'mint' ? 3 : 2}
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -83,7 +112,14 @@ export function HomePerformanceChart({
         ) : null}
       </View>
 
-      <RangeSelector options={PORTFOLIO_RANGE_OPTIONS} value={range} onChange={setRange} style={{ marginTop: spacing.sm }} />
+      <RangeSelector
+        options={HOME_PORTFOLIO_RANGE_OPTIONS}
+        labels={HOME_PORTFOLIO_RANGE_LABELS}
+        value={selectedRange}
+        onChange={handleRangeChange}
+        variant={rangeVariant}
+        style={{ marginTop: compactLegend ? 2 : spacing.sm }}
+      />
     </View>
   );
 }
@@ -93,19 +129,23 @@ interface LegendItemProps {
   label: string;
   /** Renders a hollow ring instead of a solid dot, echoing the dashed line. */
   dashed?: boolean;
+  compact?: boolean;
   style?: StyleProp<ViewStyle>;
 }
 
-function LegendItem({ color, label, dashed, style }: LegendItemProps) {
+function LegendItem({ color, label, dashed, compact, style }: LegendItemProps) {
   return (
     <View style={[styles.legendItem, style]}>
       <View
         style={[
-          styles.legendMark,
+          compact ? styles.legendMarkCompact : styles.legendMark,
           { borderColor: color, backgroundColor: dashed ? 'transparent' : color, borderWidth: dashed ? 1.5 : 0 },
         ]}
       />
-      <AppText variant="meta" color="secondary" style={styles.legendLabel}>
+      <AppText
+        variant={compact ? 'statLabel' : 'meta'}
+        style={styles.legendLabel}
+      >
         {label}
       </AppText>
     </View>
@@ -118,7 +158,11 @@ interface DualLineGeometry {
   areaPath: string;
 }
 
-function buildDualLineGeometry(points: OverallPerformancePoint[], width: number): DualLineGeometry | null {
+function buildDualLineGeometry(
+  points: OverallPerformancePoint[],
+  width: number,
+  chartHeight: number,
+): DualLineGeometry | null {
   if (points.length < 2 || width <= 0) {
     return null;
   }
@@ -126,13 +170,12 @@ function buildDualLineGeometry(points: OverallPerformancePoint[], width: number)
   const allValues = points.flatMap((point) => [point.portfolioValueNok, point.investedCapitalNok]);
   const min = Math.min(...allValues);
   const max = Math.max(...allValues);
-  const range = Math.max(max - min, 1);
-  const plotHeight = CHART_HEIGHT - VERTICAL_PADDING * 2;
-  const stepX = width / (points.length - 1);
-  const toY = (amount: number) => VERTICAL_PADDING + plotHeight * (1 - (amount - min) / range);
+  const { domainMin, domainMax } = chartDomain(min, max);
+  const toY = (amount: number) => mapChartY(amount, domainMin, domainMax, chartHeight);
+  const toX = (index: number) => mapChartX(index, points.length, width);
 
-  const valuePoints: Point2D[] = points.map((point, index) => ({ x: index * stepX, y: toY(point.portfolioValueNok) }));
-  const investedPoints: Point2D[] = points.map((point, index) => ({ x: index * stepX, y: toY(point.investedCapitalNok) }));
+  const valuePoints: Point2D[] = points.map((point, index) => ({ x: toX(index), y: toY(point.portfolioValueNok) }));
+  const investedPoints: Point2D[] = points.map((point, index) => ({ x: toX(index), y: toY(point.investedCapitalNok) }));
 
   const valueLine = buildSmoothLinePath(valuePoints);
   // Invested capital only moves when money is actually contributed, so it's
@@ -143,7 +186,7 @@ function buildDualLineGeometry(points: OverallPerformancePoint[], width: number)
   const investedLine = buildContributionStepPath(investedPoints);
   const last = valuePoints[valuePoints.length - 1];
   const first = valuePoints[0];
-  const areaPath = `${valueLine} L ${last.x} ${CHART_HEIGHT} L ${first.x} ${CHART_HEIGHT} Z`;
+  const areaPath = `${valueLine} L ${last.x} ${chartHeight} L ${first.x} ${chartHeight} Z`;
 
   return { valueLine, investedLine, areaPath };
 }
@@ -168,11 +211,13 @@ function buildContributionStepPath(points: Point2D[]): string {
 const styles = StyleSheet.create({
   chartFrame: {
     width: '100%',
-    height: CHART_HEIGHT,
   },
   legendRow: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  legendRowCompact: {
+    minHeight: 14,
   },
   legendItem: {
     flexDirection: 'row',
@@ -183,7 +228,12 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
+  legendMarkCompact: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
   legendLabel: {
-    marginLeft: 6,
+    marginLeft: 4,
   },
 });

@@ -3,8 +3,9 @@ import { Image, View, type ImageSourcePropType, type StyleProp, type ViewStyle }
 
 import { useTheme } from '@/theme';
 import { AppText } from './AppText';
+import { resolveAvatarContent, splitAvatarStack } from './avatarPresentation';
 
-export type AvatarSize = 'sm' | 'stack' | 'md' | 'lg';
+export type AvatarSize = 'sm' | 'stack' | 'md' | 'header' | 'lg' | 'xl';
 type AvatarRing = 'ready' | 'pending' | 'none';
 
 export interface AvatarPerson {
@@ -28,14 +29,16 @@ interface AvatarProps {
   style?: StyleProp<ViewStyle>;
 }
 
-const DIAMETER: Record<AvatarSize, number> = { sm: 24, stack: 27, md: 32, lg: 44 };
+const DIAMETER: Record<AvatarSize, number> = { sm: 24, stack: 26, md: 32, header: 42, lg: 44, xl: 48 };
 const TEXT_VARIANT: Record<AvatarSize, 'meta' | 'body'> = {
   sm: 'meta',
   stack: 'meta',
   md: 'meta',
+  header: 'body',
   lg: 'body',
+  xl: 'body',
 };
-const OVERLAP_INSET: Record<AvatarSize, number> = { sm: 8, stack: 9, md: 10, lg: 12 };
+const OVERLAP_INSET: Record<AvatarSize, number> = { sm: 6, stack: 6, md: 8, header: 8, lg: 10, xl: 10 };
 
 export function Avatar({
   initials,
@@ -50,10 +53,18 @@ export function Avatar({
   const { colors } = useTheme();
   const [failedSource, setFailedSource] = useState<ImageSourcePropType | undefined>(undefined);
   const diameter = DIAMETER[size];
-  const showImage = !overflow && imageSource !== undefined && failedSource !== imageSource;
+  const showImage = resolveAvatarContent({ imageSource, failedSource, overflow }) === 'image';
   const hasRing = !overflow && ring !== 'none';
   const borderWidth = hasRing ? 2 : overflow ? 1 : overlap ? 1.5 : showImage ? 1 : 0;
-  const borderColor = ring === 'ready' ? colors.positive : ring === 'pending' ? colors.border : overflow ? colors.border : overlap ? colors.background : colors.border;
+  const borderColor = ring === 'ready'
+    ? colors.positive
+    : ring === 'pending'
+      ? colors.border
+      : overflow
+        ? colors.border
+        : overlap
+          ? colors.surface
+          : colors.border;
 
   return (
     <View
@@ -107,8 +118,7 @@ interface AvatarStackProps {
  * Compact overlapping identity stack. Overflow is a quieter +N chip, not a person.
  */
 export function AvatarStack({ people, maxVisible = 3, size = 'sm', style }: AvatarStackProps) {
-  const visible = people.slice(0, maxVisible);
-  const overflowCount = people.length - visible.length;
+  const { visible, overflowCount } = splitAvatarStack(people, maxVisible);
   const overlapInset = OVERLAP_INSET[size];
 
   return (

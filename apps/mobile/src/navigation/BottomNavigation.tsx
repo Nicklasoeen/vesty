@@ -1,15 +1,15 @@
 import { Feather } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Defs, LinearGradient, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { spacing, useTheme, type ColorScheme } from '@/theme';
 import { AppText, VestyMark } from '@/ui';
 
+import { BOTTOM_NAV_SLOTS, type BottomNavigationTabKey } from './bottomNavStructure';
 import { QuickActionsSheet } from './QuickActionsSheet';
 
-export type BottomNavigationTabKey = 'home' | 'club' | 'invest' | 'activity';
+export type { BottomNavigationTabKey };
 
 type FeatherTabConfig = {
   key: Exclude<BottomNavigationTabKey, 'home'>;
@@ -35,7 +35,7 @@ const TABS: TabConfig[] = [
   { key: 'activity', label: 'Activity', icon: 'activity' },
 ];
 
-const NAV_SLOTS = ['home', 'club', 'action', 'invest', 'activity'] as const;
+const NAV_SLOTS = BOTTOM_NAV_SLOTS;
 
 /** Compact capsule height: large enough for icon + label without wasted space. */
 const NAV_CONTAINER_HEIGHT = 62;
@@ -103,16 +103,16 @@ function navMaterials(scheme: ColorScheme): NavMaterials {
   }
 
   return {
-    containerFill: 'rgba(255, 255, 255, 0.97)',
-    containerBorder: 'rgba(3, 44, 60, 0.12)',
-    activeFill: 'rgba(3, 44, 60, 0.10)',
-    activeBorder: 'rgba(3, 44, 60, 0.14)',
-    activeHighlight: 'rgba(255, 255, 255, 0.46)',
-    actionFill: 'rgba(255, 255, 255, 0.98)',
-    actionBorder: 'rgba(3, 44, 60, 0.16)',
-    actionHighlight: 'rgba(255, 255, 255, 0.94)',
-    actionIcon: '#032C3C',
-    actionShadow: '#032C3C',
+    containerFill: '#FFFFFF',
+    containerBorder: '#E4ECE9',
+    activeFill: 'transparent',
+    activeBorder: 'transparent',
+    activeHighlight: 'transparent',
+    actionFill: '#12384A',
+    actionBorder: '#12384A',
+    actionHighlight: 'transparent',
+    actionIcon: '#FFFFFF',
+    actionShadow: '#12384A',
   };
 }
 
@@ -148,8 +148,6 @@ export function BottomNavigation({ activeTab, onSelectTab }: BottomNavigationPro
           },
         ]}
       >
-        <NavTopReflection dark={colorScheme === 'dark'} />
-
         {NAV_SLOTS.map((slot) => {
           if (slot === 'action') {
             return <View key="action" style={styles.actionSlot} pointerEvents="none" />;
@@ -233,65 +231,12 @@ export function BottomNavigation({ activeTab, onSelectTab }: BottomNavigationPro
             ]}
           >
             <View pointerEvents="none" style={[styles.actionHighlight, { backgroundColor: materials.actionHighlight }]} />
-            <Feather name="plus" size={22} color={materials.actionIcon} />
+            <Feather name="plus" size={26} color={materials.actionIcon} />
           </Pressable>
         </View>
       </View>
 
       <QuickActionsSheet visible={actionsOpen} onClose={() => setActionsOpen(false)} />
-    </View>
-  );
-}
-
-const NAV_REFLECTION_HEIGHT = 10;
-
-/**
- * Soft light on the top edge of the nav material. Weaker than the selected
- * pill and the center action. Does not replace the structural border.
- */
-function NavTopReflection({ dark }: { dark: boolean }) {
-  const [width, setWidth] = useState(0);
-
-  const handleLayout = (event: LayoutChangeEvent) => {
-    const next = Math.round(event.nativeEvent.layout.width);
-    if (next !== width) {
-      setWidth(next);
-    }
-  };
-
-  return (
-    <View pointerEvents="none" style={styles.topReflection} onLayout={handleLayout}>
-      {width > 0 ? (
-        <Svg width={width} height={NAV_REFLECTION_HEIGHT}>
-          <Defs>
-            <LinearGradient
-              id="navTopWash"
-              x1={0}
-              y1={0}
-              x2={0}
-              y2={NAV_REFLECTION_HEIGHT}
-              gradientUnits="userSpaceOnUse"
-            >
-              <Stop offset="0" stopColor="#FFFFFF" stopOpacity={dark ? 0.035 : 0.12} />
-              <Stop offset="1" stopColor="#FFFFFF" stopOpacity={0} />
-            </LinearGradient>
-            <RadialGradient
-              id="navTopCatch"
-              cx={width * 0.36}
-              cy={0}
-              rx={width * 0.5}
-              ry={NAV_REFLECTION_HEIGHT * 1.2}
-              gradientUnits="userSpaceOnUse"
-            >
-              <Stop offset="0" stopColor="#FFFFFF" stopOpacity={dark ? 0.10 : 0.28} />
-              <Stop offset="0.48" stopColor="#FFFFFF" stopOpacity={dark ? 0.035 : 0.10} />
-              <Stop offset="1" stopColor="#FFFFFF" stopOpacity={0} />
-            </RadialGradient>
-          </Defs>
-          <Rect width={width} height={NAV_REFLECTION_HEIGHT} fill="url(#navTopWash)" />
-          <Rect width={width} height={NAV_REFLECTION_HEIGHT} fill="url(#navTopCatch)" />
-        </Svg>
-      ) : null}
     </View>
   );
 }
@@ -308,13 +253,6 @@ const styles = StyleSheet.create({
     borderRadius: NAV_CONTAINER_RADIUS,
     paddingHorizontal: 6,
     overflow: 'hidden',
-  },
-  topReflection: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: NAV_REFLECTION_HEIGHT,
   },
   item: {
     flex: 1,

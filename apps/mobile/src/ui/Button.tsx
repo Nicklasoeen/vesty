@@ -45,7 +45,7 @@ export function Button({
       style={({ pressed }) => [
         styles.base,
         {
-          borderRadius: compact ? radius.sm : radius.md,
+          borderRadius: compact ? radius.md : radius.lg,
           paddingVertical: compact ? spacing.xs + 2 : spacing.sm + 2,
           paddingHorizontal: compact ? spacing.md : spacing.lg,
           minHeight: compact ? 36 : 44,

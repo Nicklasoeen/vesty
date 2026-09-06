@@ -1,12 +1,11 @@
-import type { TextStyle } from 'react-native';
+import type { TextStyle, ViewStyle } from 'react-native';
 
 /**
- * Minimal semantic theme tokens for the Club Dashboard design spike.
+ * Vesty Design System v2 tokens.
  *
- * Colors are derived from the existing Vesty brand mark (#032c3c, a dark
- * navy-teal — see assets/brand/vesty-icon.svg) rather than an invented
- * palette. Dark mode reuses the same hue family at lower saturation for
- * layered surfaces and a lifted tint for accent, instead of pure black.
+ * Light mode is the approved direction: pale background, deep Vesty blue,
+ * mint reserved for performance and selected states. Dark mode stays a
+ * functional fallback — visual polish comes later.
  */
 
 export type ColorScheme = 'light' | 'dark';
@@ -19,10 +18,13 @@ export interface ThemeColors {
   textSecondary: string;
   border: string;
   accent: string;
+  accentDeep: string;
   /** Low-opacity accent, used for subtle fills (e.g. active tab indicator halo). */
   accentMuted: string;
   /** Text/content color guaranteed to be readable on top of `accent`. */
   onAccent: string;
+  mint: string;
+  mintSoft: string;
   positive: string;
   negative: string;
   /** Small, curated data-visualization ramp for the strategy allocation bar. */
@@ -30,18 +32,21 @@ export interface ThemeColors {
 }
 
 export const lightColors: ThemeColors = {
-  background: '#F7F8F9',
+  background: '#F7F9F8',
   surface: '#FFFFFF',
-  surfaceSecondary: '#EEF1F3',
-  textPrimary: '#0B1B22',
-  textSecondary: '#5B6B72',
-  border: 'rgba(3, 44, 60, 0.10)',
-  accent: '#032C3C',
-  accentMuted: 'rgba(3, 44, 60, 0.08)',
+  surfaceSecondary: '#F3F7F5',
+  textPrimary: '#102B3A',
+  textSecondary: '#778995',
+  border: '#E4ECE9',
+  accent: '#12384A',
+  accentDeep: '#0B2D3D',
+  accentMuted: 'rgba(18, 56, 74, 0.08)',
   onAccent: '#FFFFFF',
-  positive: '#1F8F5E',
-  negative: '#C1503D',
-  chart: ['#032C3C', '#4F7A8C', '#9BB2BA', '#C9AE81'],
+  mint: '#22C59A',
+  mintSoft: '#DFF7EF',
+  positive: '#17B67E',
+  negative: '#D95E63',
+  chart: ['#12384A', '#4F7A8C', '#9BB2BA', '#22C59A'],
 };
 
 export const darkColors: ThemeColors = {
@@ -52,11 +57,14 @@ export const darkColors: ThemeColors = {
   textSecondary: '#8FA3AC',
   border: 'rgba(255, 255, 255, 0.08)',
   accent: '#4FA6B8',
+  accentDeep: '#0B2D3D',
   accentMuted: 'rgba(79, 166, 184, 0.16)',
   onAccent: '#08161C',
+  mint: '#22C59A',
+  mintSoft: 'rgba(34, 197, 154, 0.16)',
   positive: '#4CBB8A',
   negative: '#E2836E',
-  chart: ['#4FA6B8', '#7FA1AC', '#5C737C', '#D2BE93'],
+  chart: ['#4FA6B8', '#7FA1AC', '#5C737C', '#22C59A'],
 };
 
 export const spacing = {
@@ -73,24 +81,45 @@ export const radius = {
   sm: 8,
   md: 12,
   lg: 16,
+  xl: 22,
+  xxl: 28,
   full: 999,
 } as const;
 
+export const shadows = {
+  card: {
+    shadowColor: '#0F2F40',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  nav: {
+    shadowColor: '#12384A',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+} as const satisfies Record<string, ViewStyle>;
+
 /**
- * Semantic typography roles for the design spike.
+ * Semantic typography roles.
  *
- * display     — strongest number/value on a screen (e.g. 92 480 kr)
- * hero        — prominent event when the moment warrants it (e.g. Investment Day today)
- * title       — screen / entity titles (e.g. WRIC)
- * sectionTitle— natural title-case section headings (Total value, Strategy)
- * value       — medium financial emphasis (+8 480 kr · +10.1%)
- * body        — normal descriptive text
+ * display     — strongest figure on a screen (portfolio value)
+ * hero        — greeting / rare prominent moment
+ * title       — card / entity title (club name)
+ * subtitle    — Home section title (Your Clubs)
+ * sectionTitle— quieter in-card heading (kept for Club / Invest)
+ * value       — gain / secondary financial figure
+ * statValue   — compact column figure
+ * body        — readable copy
  * bodyStrong  — emphasized body
- * meta        — secondary information (4 members, 3 of 4 ready)
- * eyebrow     — rare uppercase contextual/status label (NEXT INVESTMENT DAY)
- *
- * Uppercase eyebrows are intentionally sparse — prefer sectionTitle for
- * ordinary section headings so screens don't read like analytics dashboards.
+ * label       — card eyebrow (“Your portfolio”) — sentence case, not uppercase
+ * supporting  — captions and helper copy
+ * statLabel   — column captions under statValue
+ * meta        — generic secondary (older screens)
+ * eyebrow     — rare uppercase status. Do not use for ordinary Home labels.
  */
 export type AppTextVariant =
   | 'display'
@@ -99,17 +128,21 @@ export type AppTextVariant =
   | 'sectionTitle'
   | 'subtitle'
   | 'value'
+  | 'statValue'
   | 'body'
   | 'bodyStrong'
+  | 'label'
+  | 'supporting'
+  | 'statLabel'
   | 'meta'
   | 'eyebrow';
 
 export const typography: Record<AppTextVariant, TextStyle> = {
   display: {
     fontSize: 34,
-    lineHeight: 40,
+    lineHeight: 38,
     fontWeight: '700',
-    letterSpacing: -0.4,
+    letterSpacing: -0.55,
     fontVariant: ['tabular-nums'],
   },
   hero: {
@@ -120,9 +153,9 @@ export const typography: Record<AppTextVariant, TextStyle> = {
   },
   title: {
     fontSize: 20,
-    lineHeight: 26,
+    lineHeight: 25,
     fontWeight: '600',
-    letterSpacing: -0.2,
+    letterSpacing: -0.25,
   },
   sectionTitle: {
     fontSize: 15,
@@ -140,6 +173,13 @@ export const typography: Record<AppTextVariant, TextStyle> = {
     fontWeight: '600',
     fontVariant: ['tabular-nums'],
   },
+  statValue: {
+    fontSize: 15,
+    lineHeight: 19,
+    fontWeight: '600',
+    letterSpacing: -0.2,
+    fontVariant: ['tabular-nums'],
+  },
   body: {
     fontSize: 15,
     lineHeight: 21,
@@ -149,6 +189,21 @@ export const typography: Record<AppTextVariant, TextStyle> = {
     fontSize: 15,
     lineHeight: 21,
     fontWeight: '600',
+  },
+  label: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '500',
+  },
+  supporting: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '400',
+  },
+  statLabel: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '500',
   },
   meta: {
     fontSize: 13,

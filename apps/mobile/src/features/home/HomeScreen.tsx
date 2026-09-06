@@ -1,58 +1,65 @@
+import { Feather } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { Fragment, useState } from 'react';
-import { Pressable, StyleSheet, View, type ImageSourcePropType } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, View, type ImageSourcePropType } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HomeClubsEmpty } from '@/features/clubs/ClubEmptyState';
 import { useClubs } from '@/features/clubs/useClubs';
+import { useInvestmentDay } from '@/features/invest/useInvestmentDay';
+import { historyByRange } from '@/features/portfolio/buildPortfolioChartSeries';
+import { useMemberPortfolio } from '@/features/portfolio/useMemberPortfolio';
 import { ProfileSettingsModal } from '@/features/profile/ProfileSettingsModal';
 import { useProfile } from '@/features/profile/useProfile';
 import { BOTTOM_NAVIGATION_HEIGHT, BottomNavigation } from '@/navigation/BottomNavigation';
 import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { useTheme } from '@/theme';
-import { Avatar, Screen, Section, VestyMark } from '@/ui';
+import { AppText, Avatar, Screen, SectionHeader, VestyWordmark } from '@/ui';
+
+import { HomeClubCard } from './HomeClubCard';
+import { HomeNextInvestmentDay } from './HomeNextInvestmentDay';
+import { HomePinnedClubCard } from './HomePinnedClubCard';
+import { HomePortfolioCard } from './HomePortfolioCard';
+import { presentHomeClubs } from './presentHomeClubs';
+import { homeScrollBottomPadding } from './presentHomeMoney';
 import {
-  homeOverallPerformanceSummary,
-  overallPerformanceHistoryByRange,
-  OVERALL_PERFORMANCE_DEFAULT_RANGE,
-} from '@/demo/homeDemoData';
-import { historyByRange } from '@/features/portfolio/buildPortfolioChartSeries';
-import { useMemberPortfolio } from '@/features/portfolio/useMemberPortfolio';
-import { portfolioValueCaption, portfolioValueChartLabel } from '@/features/portfolio/valuationLabels';
-import { ClubListItem } from './ClubListItem';
-import { InvestmentDaySummary, type InvestmentDayVisualState } from './InvestmentDaySummary';
-import { OverallPerformanceSection } from './OverallPerformanceSection';
-import { homeInvestmentDayDemo, presentHomeClubs } from './presentHomeClubs';
+  formatHomeInvestmentDayDate,
+  homeGreeting,
+  presentHomePortfolio,
+} from './presentHomePortfolio';
+import { HOME_CLUB_CARD_TINT_COUNT, clubCardTintIndex, filterYourClubs, resolveHomePinnedClub } from './resolveHomePinnedClub';
 
-/**
- * Spike demo switch for Home Investment Day visual states.
- * Flip to 'actionRequired' or 'today' for visual QA; leave 'upcoming'
- * for the default everyday Home screenshot. Not a product control.
- */
-const HOME_INVESTMENT_DAY_STATE: InvestmentDayVisualState = 'upcoming';
-
-/**
- * Home answers four questions in order:
- * 1. How are all my Vesty investments doing? (Total value)
- * 2. What is happening next? (Investment Day)
- * 3. Which clubs am I in? (Your clubs)
- * 4. Does anything need my attention? (Proposal)
- *
- * Club identity is real. Overall performance and Investment Day amounts
- * remain DEMO until the financial pipeline exists.
- */
 export function HomeScreen() {
   const { colorScheme, colors, spacing } = useTheme();
   const insets = useSafeAreaInsets();
   const { activeTab, onSelectTab } = useAppNavigation('home');
-  const { clubs, isLoading, selectClub } = useClubs();
-  const { initials, avatarSource } = useProfile();
+  const { clubs, selectedClub, isLoading, selectClub } = useClubs();
+  const { initials, avatarSource, profile } = useProfile();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const membershipKey = clubs.map((club) => club.clubId).join('|');
+  const homePinnedClubId = useMemo(
+    () =>
+      resolveHomePinnedClub({
+        clubs,
+        selectedClubId: selectedClub?.clubId ?? null,
+        pinnedClubId: null,
+      })?.clubId ?? null,
+    // Recompute only when memberships change so opening another club does not move the Home pin.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- selected club is sampled at membership change only
+    [membershipKey],
+  );
   const { summary, history, clubSummaries } = useMemberPortfolio();
-  const useEstimated = summary?.modellingScope === 'curated_etf';
+  const investmentDay = useInvestmentDay(homePinnedClubId);
   const homeClubRows = presentHomeClubs(clubs, clubSummaries);
+  const pinnedClub = homeClubRows.find((club) => club.clubId === homePinnedClubId) ?? null;
+  const otherClubs = filterYourClubs(homeClubRows, homePinnedClubId);
+  const portfolio = presentHomePortfolio(summary, clubs.length);
   const estimatedHistory = historyByRange(history);
-  const investmentDayClub = clubs[0] ?? null;
+
+  const openClub = (clubId: string) => {
+    void selectClub(clubId);
+    onSelectTab('club');
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -61,7 +68,7 @@ export function HomeScreen() {
       <Screen
         contentContainerStyle={{
           paddingHorizontal: spacing.lg,
-          paddingBottom: BOTTOM_NAVIGATION_HEIGHT + insets.bottom + spacing.xl,
+          paddingBottom: homeScrollBottomPadding(BOTTOM_NAVIGATION_HEIGHT, insets.bottom),
         }}
       >
         <HomeHeader
@@ -70,75 +77,72 @@ export function HomeScreen() {
           onOpenSettings={() => setSettingsOpen(true)}
         />
 
-        <View style={{ marginBottom: spacing.xl }}>
-          <OverallPerformanceSection
-            totalValueNok={
-              useEstimated
-                ? Math.trunc((summary?.estimatedCurrentValueMinor ?? summary?.investedMinor ?? 0) / 100)
-                : homeOverallPerformanceSummary.totalValueNok
-            }
-            gainNok={
-              useEstimated
-                ? summary?.gainLossMinor != null
-                  ? Math.trunc(summary.gainLossMinor / 100)
-                  : null
-                : homeOverallPerformanceSummary.gainNok
-            }
-            gainPercentage={
-              useEstimated
-                ? summary?.gainLossBps != null
-                  ? summary.gainLossBps / 100
-                  : null
-                : homeOverallPerformanceSummary.gainPercentage
-            }
-            historyByRange={useEstimated ? estimatedHistory : overallPerformanceHistoryByRange}
-            defaultRange={OVERALL_PERFORMANCE_DEFAULT_RANGE}
-            caption={useEstimated && summary ? portfolioValueCaption(summary.valuationConfidence) : null}
-            valueLegendLabel={
-              useEstimated && summary
-                ? portfolioValueChartLabel(summary.valuationConfidence)
-                : 'Value'
-            }
-            isDemo={!useEstimated}
-          />
+        <View style={{ marginBottom: spacing.lg }}>
+          <AppText variant="hero" color="accent" numberOfLines={1} adjustsFontSizeToFit>
+            {homeGreeting(profile?.displayName)}
+          </AppText>
+          <AppText variant="supporting" style={{ marginTop: spacing.xs }}>
+            Invest smarter, together.
+          </AppText>
         </View>
 
-        {investmentDayClub ? (
-          <View style={{ marginBottom: spacing.xl }}>
-            <InvestmentDaySummary
-              clubName={investmentDayClub.name}
-              investmentDayLabel={homeInvestmentDayDemo.investmentDayLabel}
-              investmentDayShortLabel={homeInvestmentDayDemo.investmentDayShortLabel}
-              expectedContributionNok={homeInvestmentDayDemo.expectedContributionNok}
-              members={investmentDayClub.members}
-              visualState={HOME_INVESTMENT_DAY_STATE}
-              onOpenInvest={() => onSelectTab('invest')}
+        <View style={{ marginBottom: spacing.md }}>
+          <HomePortfolioCard presentation={portfolio} historyByRange={estimatedHistory} />
+        </View>
+
+        {pinnedClub ? (
+          <View style={{ marginBottom: spacing.md }}>
+            <HomePinnedClubCard
+              name={pinnedClub.name}
+              members={pinnedClub.members}
+              memberCount={pinnedClub.memberCount}
+              groupValueNok={null}
+              yourStakeNok={pinnedClub.portfolioValueNok}
+              returnPercentage={pinnedClub.returnPercentage}
+              onOpenClub={() => openClub(pinnedClub.clubId)}
             />
           </View>
         ) : null}
 
-        <Section title="Your clubs" isLast>
-          {isLoading && homeClubRows.length === 0 ? null : homeClubRows.length === 0 ? (
-            <HomeClubsEmpty />
-          ) : (
-            homeClubRows.map((club, index) => (
-              <Fragment key={club.clubId}>
-                {index > 0 ? <View style={{ height: 1, backgroundColor: colors.border }} /> : null}
-                <ClubListItem
-                  clubName={club.name}
-                  members={club.members}
-                  portfolioValueNok={club.portfolioValueNok ?? 0}
-                  returnPercentage={club.returnPercentage}
-                  history={club.history}
-                  onPress={() => {
-                    void selectClub(club.clubId);
-                    onSelectTab('club');
-                  }}
-                />
-              </Fragment>
-            ))
-          )}
-        </Section>
+        {homePinnedClubId ? (
+          <View style={{ marginBottom: spacing.md }}>
+            <HomeNextInvestmentDay
+              dateLabel={
+                investmentDay.plan
+                  ? formatHomeInvestmentDayDate(investmentDay.plan.investmentDayAt)
+                  : investmentDay.error
+                    ? 'Date unavailable'
+                    : 'Loading…'
+              }
+              plannedMinor={investmentDay.plan?.expectedAmountMinor ?? null}
+              onPress={() => onSelectTab('invest')}
+            />
+          </View>
+        ) : null}
+
+        <SectionHeader title="Your Clubs" />
+        {isLoading && homeClubRows.length === 0 ? null : homeClubRows.length === 0 ? (
+          <HomeClubsEmpty />
+        ) : otherClubs.length === 0 ? (
+          <AppText variant="supporting">
+            Your other clubs will show up here.
+          </AppText>
+        ) : (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.clubRow}>
+            {otherClubs.map((club) => (
+              <HomeClubCard
+                key={club.clubId}
+                name={club.name}
+                members={club.members}
+                memberCount={club.memberCount}
+                valueNok={club.portfolioValueNok}
+                returnPercentage={club.returnPercentage}
+                tintIndex={clubCardTintIndex(club.clubId, HOME_CLUB_CARD_TINT_COUNT)}
+                onPress={() => openClub(club.clubId)}
+              />
+            ))}
+          </ScrollView>
+        )}
       </Screen>
 
       <BottomNavigation activeTab={activeTab} onSelectTab={onSelectTab} />
@@ -160,9 +164,7 @@ function HomeHeader({
   const { colors, spacing } = useTheme();
 
   return (
-    <View style={[styles.headerRow, { marginTop: spacing.md, marginBottom: spacing.md }]}>
-      <VestyMark color={colors.textPrimary} height={22} />
-
+    <View style={[styles.headerRow, { marginTop: spacing.sm, marginBottom: 20 }]}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Open profile settings"
@@ -170,8 +172,21 @@ function HomeHeader({
         onPress={onOpenSettings}
         style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
       >
-        <Avatar initials={initials} imageSource={imageSource} size="md" />
+        <Avatar initials={initials} imageSource={imageSource} size="header" />
       </Pressable>
+
+      <View style={styles.logoCenter} pointerEvents="none">
+        <VestyWordmark color={colors.accent} height={23} />
+      </View>
+
+      <View
+        accessible
+        accessibilityRole="text"
+        accessibilityLabel="Notifications are not available yet"
+        style={styles.bellSlot}
+      >
+        <Feather name="bell" size={20} color={colors.accent} />
+      </View>
     </View>
   );
 }
@@ -181,5 +196,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  logoCenter: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bellSlot: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clubRow: {
+    gap: 9,
+    paddingBottom: 2,
   },
 });
