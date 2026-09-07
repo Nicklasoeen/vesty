@@ -48,12 +48,22 @@ export function HomeScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- selected club is sampled at membership change only
     [membershipKey],
   );
-  const { summary, history, clubSummaries } = useMemberPortfolio();
+  const {
+    summary,
+    history,
+    clubSummaries,
+    isLoading: portfolioLoading,
+    error: portfolioError,
+    refresh: refreshPortfolio,
+  } = useMemberPortfolio();
   const investmentDay = useInvestmentDay(homePinnedClubId);
   const homeClubRows = presentHomeClubs(clubs, clubSummaries);
   const pinnedClub = homeClubRows.find((club) => club.clubId === homePinnedClubId) ?? null;
   const otherClubs = filterYourClubs(homeClubRows, homePinnedClubId);
-  const portfolio = presentHomePortfolio(summary, clubs.length);
+  const portfolio = presentHomePortfolio(summary, clubs.length, {
+    isLoading: portfolioLoading,
+    error: portfolioError,
+  });
   const estimatedHistory = historyByRange(history);
 
   const openClub = (clubId: string) => {
@@ -87,7 +97,11 @@ export function HomeScreen() {
         </View>
 
         <View style={{ marginBottom: spacing.md }}>
-          <HomePortfolioCard presentation={portfolio} historyByRange={estimatedHistory} />
+          <HomePortfolioCard
+            presentation={portfolio}
+            historyByRange={estimatedHistory}
+            onRetry={refreshPortfolio}
+          />
         </View>
 
         {pinnedClub ? (

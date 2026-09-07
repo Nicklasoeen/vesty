@@ -1,4 +1,4 @@
-import { Alert, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, View } from 'react-native';
 
 import { HomeNextInvestmentDay } from '@/features/home/HomeNextInvestmentDay';
 import { HomePerformanceChart } from '@/features/home/HomePerformanceChart';
@@ -34,11 +34,23 @@ interface ClubOverviewProps {
   summary: MemberPortfolioSummary | null;
   history: PortfolioHistoryPoint[];
   positions: EstimatedPosition[];
+  isLoading: boolean;
+  error: string | null;
+  onRetry: () => void;
   onOpenInvest: () => void;
 }
 
-export function ClubOverview({ clubId, summary, history, positions, onOpenInvest }: ClubOverviewProps) {
-  const { radius, spacing } = useTheme();
+export function ClubOverview({
+  clubId,
+  summary,
+  history,
+  positions,
+  isLoading,
+  error,
+  onRetry,
+  onOpenInvest,
+}: ClubOverviewProps) {
+  const { colors, radius, spacing } = useTheme();
   const { allocations } = useClubStrategy(clubId);
   const contribution = useClubContribution(clubId);
   const contributionSummary = contribution.policy
@@ -67,7 +79,18 @@ export function ClubOverview({ clubId, summary, history, positions, onOpenInvest
     <View>
       <View style={{ marginBottom: spacing.lg }}>
         <SectionHeader title={CLUB_PERFORMANCE_TITLE} style={{ marginBottom: 6 }} />
-        {finance.presentation === 'estimated' && finance.yourStakeMinor != null ? (
+        {isLoading ? (
+          <View style={{ paddingVertical: spacing.md, alignItems: 'center' }}>
+            <ActivityIndicator accessibilityLabel="Loading club portfolio" color={colors.accent} />
+          </View>
+        ) : error ? (
+          <View>
+            <AppText variant="supporting">{error}</AppText>
+            <View style={{ marginTop: spacing.md }}>
+              <Button label="Try again" variant="secondary" onPress={onRetry} />
+            </View>
+          </View>
+        ) : finance.presentation === 'estimated' && finance.yourStakeMinor != null ? (
           <>
             <AppText variant="title" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
               {formatHomeNokFromMinor(finance.yourStakeMinor)}
@@ -107,8 +130,21 @@ export function ClubOverview({ clubId, summary, history, positions, onOpenInvest
               </View>
             ) : null}
           </>
+        ) : finance.investedMinor === 0 ? (
+          <AppText variant="supporting">No reported investments yet.</AppText>
         ) : (
-          <AppText variant="supporting">Performance for this club is unavailable.</AppText>
+          <View>
+            <AppText variant="bodyStrong">Value unavailable</AppText>
+            {finance.investedMinor !== null ? (
+              <AppText variant="supporting" style={{ marginTop: 2 }}>
+                {`Reported invested: ${formatHomeNokFromMinor(finance.investedMinor)}`}
+              </AppText>
+            ) : (
+              <AppText variant="supporting" style={{ marginTop: 2 }}>
+                Performance for this club is unavailable.
+              </AppText>
+            )}
+          </View>
         )}
       </View>
 

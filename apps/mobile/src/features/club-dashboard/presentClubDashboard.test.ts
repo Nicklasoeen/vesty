@@ -96,6 +96,7 @@ describe('club viewer finance', () => {
     assert.equal(finance.usesDemo, false);
     assert.equal(finance.presentation, 'estimated');
     assert.equal(finance.yourStakeMinor, 248_000);
+    assert.equal(finance.investedMinor, 200_000);
     assert.equal(finance.returnPercentage, 24);
   });
 
@@ -113,6 +114,24 @@ describe('club viewer finance', () => {
     assert.equal(finance.usesDemo, false);
     assert.equal(finance.presentation, 'unavailable');
     assert.equal(finance.yourStakeMinor, null);
+    assert.equal(finance.investedMinor, null);
+    assert.equal(finance.returnPercentage, null);
+  });
+
+  it('keeps reported invested separate when current value is unknown', () => {
+    const finance = presentClubViewerFinance({
+      clubId: 'club-a',
+      modellingScope: 'curated_etf',
+      investedMinor: 200_000,
+      estimatedCurrentValueMinor: null,
+      gainLossMinor: null,
+      gainLossBps: null,
+      valuationConfidence: 'unavailable',
+    });
+
+    assert.equal(finance.presentation, 'unavailable');
+    assert.equal(finance.yourStakeMinor, null);
+    assert.equal(finance.investedMinor, 200_000);
     assert.equal(finance.returnPercentage, null);
   });
 });

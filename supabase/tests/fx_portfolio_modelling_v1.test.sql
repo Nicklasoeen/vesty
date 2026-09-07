@@ -387,22 +387,14 @@ create temporary table bob_join as
 select *
 from public.accept_club_invitation((select invite_token from alice_invite));
 
-select extensions.is(
-  (
-    select aggregate_visible
-    from public.club_estimated_portfolio_v1((select club_id from alice_club))
-  ),
-  false,
-  'Club monetary aggregate stays hidden with fewer than three contributors'
+select extensions.ok(
+  to_regprocedure('public.club_estimated_portfolio_v1(uuid)') is null,
+  'Club monetary total RPC is not exposed'
 );
 
-select extensions.is(
-  (
-    select invested_minor
-    from public.club_estimated_portfolio_v1((select club_id from alice_club))
-  ),
-  null,
-  'Hidden club aggregate does not leak invested NOK'
+select extensions.ok(
+  to_regprocedure('public.club_portfolio_history_v1(uuid,date,date,integer)') is null,
+  'Club monetary history RPC is not exposed'
 );
 
 reset role;
@@ -458,6 +450,65 @@ select extensions.is(
 );
 
 reset role;
+
+delete from public.market_prices
+where investment_target_id = '31000000-0000-4000-8000-000000000012'
+  and provider = 'marketstack'
+  and price_type = 'close'
+  and price_date = current_date;
+
+set local role authenticated;
+select tests.authenticate_as('00000000-0000-4000-8000-000000000081');
+
+select extensions.is(
+  (
+    select invested_minor
+    from public.member_estimated_portfolio_v1((select club_id from alice_club))
+  ),
+  200000::bigint,
+  'Reported invested amount remains known when one current price is missing'
+);
+
+select extensions.is(
+  (
+    select estimated_current_value_nok
+    from public.member_estimated_portfolio_v1((select club_id from alice_club))
+  ),
+  null,
+  'One missing current price makes the complete member value unavailable'
+);
+
+select extensions.is(
+  (
+    select gain_loss_minor
+    from public.member_estimated_portfolio_v1((select club_id from alice_club))
+  ),
+  null,
+  'Unavailable complete value does not produce a gain or loss amount'
+);
+
+select extensions.is(
+  (
+    select gain_loss_bps
+    from public.member_estimated_portfolio_v1((select club_id from alice_club))
+  ),
+  null,
+  'Unavailable complete value does not produce a return percentage'
+);
+
+reset role;
+
+insert into public.market_prices (
+  investment_target_id, provider, price_date, price, currency, price_type
+)
+values (
+  '31000000-0000-4000-8000-000000000012',
+  'marketstack',
+  current_date,
+  55.00000000,
+  'EUR',
+  'close'
+);
 
 insert into public.clubs (
   id, name, status, base_currency, governance_threshold_kind, current_owner_membership_id
@@ -635,22 +686,23 @@ select
 set local role authenticated;
 select tests.authenticate_as('00000000-0000-4000-8000-000000000081');
 
-select extensions.is(
-  (
-    select aggregate_visible
-    from public.club_estimated_portfolio_v1((select club_id from alice_club))
-  ),
-  true,
-  'Club monetary aggregate is visible once three distinct members have contributed'
+select extensions.ok(
+  to_regprocedure('public.club_estimated_portfolio_v1(uuid)') is null,
+  'Flexible members cannot fetch a club monetary total after three members contribute'
+);
+
+select extensions.ok(
+  to_regprocedure('public.club_portfolio_history_v1(uuid,date,date,integer)') is null,
+  'Flexible members cannot fetch club monetary history after three members contribute'
 );
 
 select extensions.is(
   (
     select invested_minor
-    from public.club_estimated_portfolio_v1((select club_id from alice_club))
+    from public.member_estimated_portfolio_v1((select club_id from alice_club))
   ),
-  300000::bigint,
-  'Visible club aggregate sums reported NOK without exposing a member row'
+  200000::bigint,
+  'The caller can still read only their own reported invested amount'
 );
 
 select * from extensions.finish();

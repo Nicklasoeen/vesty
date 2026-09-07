@@ -88,7 +88,7 @@ Home answers “How are my investments doing?” Club answers “How is this gro
 - Opening another club from Your Clubs must not change the Home pin in-session
 - No strategy / package label
 - Stats are horizontal at the bottom: Group value · Your stake · All-time return
-- Group value stays `—` until a privacy-safe club aggregate is wired (existing ≥3-contributor rule)
+- Group value stays `—`; V1 authenticated APIs do not expose a club-wide monetary aggregate
 
 ## Your Clubs
 

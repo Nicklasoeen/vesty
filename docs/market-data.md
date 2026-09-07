@@ -293,7 +293,7 @@ Valuation states:
 - `quantity_incomplete` — null or partial quantity; show invested amount only
 - `no_mapping` / `no_price` / `price_not_fresh` / `currency_mismatch` — quantity may exist; current value stays hidden
 
-Club/Home headlines for curated V1 ETF clubs use the member's own estimated NOK portfolio. Club-wide monetary aggregates exist only through `club_estimated_portfolio_v1` / `club_portfolio_history_v1` and stay hidden unless at least three distinct members have contributed. Legacy KLP/DNB clubs keep the labeled demo adapter.
+Club/Home headlines for curated V1 ETF clubs use the member's own estimated NOK portfolio. Club-wide monetary total and history RPCs are not exposed to authenticated clients; the old three-contributor threshold was removed because it did not protect Flexible amounts from inference. Legacy KLP/DNB clubs remain unavailable to the valuation model.
 
 ## EUR/NOK FX (Norges Bank)
 

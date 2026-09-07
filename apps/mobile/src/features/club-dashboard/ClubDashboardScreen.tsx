@@ -172,7 +172,14 @@ function ClubDashboard({
   const [selectedProposalId, setSelectedProposalId] = useState<string | null>(null);
   const proposalsState = useClubProposals(club.clubId);
   const selectedProposal = proposalsState.proposals.find((proposal) => proposal.id === selectedProposalId) ?? null;
-  const { summary, history, positions } = useMemberPortfolio(club.clubId);
+  const {
+    summary,
+    history,
+    positions,
+    isLoading: portfolioLoading,
+    error: portfolioError,
+    refresh: refreshPortfolio,
+  } = useMemberPortfolio(club.clubId);
   const finance = presentClubViewerFinance(summary);
   const stats = presentClubHeroStats({
     groupAggregateMinor: null,
@@ -326,6 +333,11 @@ function ClubDashboard({
           summary={summary}
           history={history}
           positions={positions}
+          isLoading={portfolioLoading}
+          error={portfolioError}
+          onRetry={() => {
+            refreshPortfolio();
+          }}
           onOpenInvest={onOpenInvest}
         />
       ) : clubTab === 'proposals' ? (

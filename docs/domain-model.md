@@ -1010,16 +1010,14 @@ Future data from `IMPORT`, `BROKER_API`, or `EMBEDDED_BROKER` may set a separate
 
 ### Aggregate club information
 
-Exact per-member amounts remain private. A monetary aggregate may be exposed only when it includes contribution records from at least three distinct members. This safeguard applies independently to expected, member-confirmed, and independently verified totals.
+Exact per-member amounts remain private. V1 does not expose club-wide monetary
+totals, averages, ranges, minimums, maximums, returns, or money history to
+authenticated members. A minimum contributor threshold is not sufficient
+because members can compare updates or subtract their own known amounts.
 
-When the threshold is met, the club may expose clearly labelled aggregates such as:
-
-- total expected contribution for a cycle
-- total member-confirmed contribution
-- total independently verified contribution
-- count of members ready, confirmed, skipped, failed, or verified
-
-When fewer than three distinct member records are included, Vesty shows only non-monetary group information such as “2 / 2 ready,” “2 members confirmed,” or “Investment Day completed.” Filtering must not permit a member to reduce an exposed monetary aggregate below the three-member threshold and infer another member's amount.
+The club may expose non-monetary group information such as “2 / 2 ready,”
+“2 members confirmed,” or “Investment Day completed.” These social projections
+must not include an indirect monetary field.
 
 ### Calendar semantics
 
@@ -1153,7 +1151,9 @@ This largest-remainder boundary prevents silent loss or creation of minor units.
 
 These amounts remain planning guidance. A broker may apply minimum order sizes, fees, different rounding, or fail to execute.
 
-Club expected, member-confirmed, and broker-verified totals are different aggregates and must be labelled accordingly. A monetary aggregate may be shown only when it includes records from at least three distinct members; otherwise only non-monetary counts or completion indicators may be shown.
+Expected, member-confirmed, and broker-verified amounts remain distinct private
+concepts. V1 club surfaces may show non-monetary counts or completion indicators,
+but not monetary aggregates derived from those amounts.
 
 ## 12. Audit and Historical Integrity
 

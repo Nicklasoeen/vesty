@@ -114,15 +114,15 @@ Saving-plan replacement can preserve rows through an end followed by an insert, 
 
 No raw monetary table is broadly readable. Home and Club headlines use the caller's own estimated portfolio (`member_estimated_portfolio_v1`), so they do not expose another member's amount.
 
-`club_estimated_portfolio_v1` and `club_portfolio_history_v1` are fixed-shape trusted aggregates:
+`club_estimated_portfolio_v1` and `club_portfolio_history_v1` were removed from the
+client API in `20260907080226_remove_club_money_aggregates_v1.sql`. A contributor
+threshold does not prevent members from inferring Flexible amounts through
+differences or by subtracting their own known amounts.
 
-- require an active club membership
-- expose a fixed aggregate without arbitrary member filters
-- return money only when at least three distinct contributing memberships are included on that result (per chart date for history)
-- return no row-level amounts
-- treat estimated club totals as member-reported / modelled, not independently verified
-
-When the threshold is not met, monetary columns are null. Non-monetary club status/count projections still require the same careful fixed-shape design.
+Authenticated clients can still read their own reported/modelled portfolio and
+the existing non-monetary social participation projection. No exact club-wide
+invested amount, value, return, average, minimum, maximum, or money history is
+available to club members.
 
 ## RLS Helper Functions
 

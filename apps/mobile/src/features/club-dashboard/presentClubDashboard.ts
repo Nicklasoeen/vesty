@@ -118,9 +118,9 @@ export function presentClubPrimaryActions(input: { isOwner: boolean }): ClubPrim
 }
 
 /**
- * Group value stays hidden unless a privacy-safe club aggregate is supplied.
- * This screen does not mark aggregates safe — the ≥3-contributor rule stays
- * on the backend, and Club V2 does not invent a group total.
+ * Group value stays hidden unless a future privacy-safe sharing contract is
+ * supplied. Current authenticated APIs expose caller-owned values only, and
+ * Club V2 does not invent a group total.
  */
 export function presentClubHeroStats(input: {
   groupAggregateMinor: number | null;

@@ -120,6 +120,7 @@ describe('presentHomePortfolio', () => {
   it('uses curated estimated totals and never demo values', () => {
     const presented = presentHomePortfolio(curatedSummary(), 2);
     assert.equal(presented.usesDemo, false);
+    assert.equal(presented.status, 'available');
     assert.equal(presented.available, true);
     assert.equal(presented.valueMinor, 248000);
     assert.equal(presented.investedMinor, 200000);
@@ -153,9 +154,67 @@ describe('presentHomePortfolio', () => {
       1,
     );
     assert.equal(presented.usesDemo, false);
+    assert.equal(presented.status, 'unavailable');
     assert.equal(presented.available, false);
-    assert.equal(presented.valueMinor, 0);
+    assert.equal(presented.valueMinor, null);
+    assert.equal(presented.investedMinor, null);
     assert.equal(presented.gainLossMinor, null);
+  });
+
+  it('keeps known invested money separate when market value is unavailable', () => {
+    const presented = presentHomePortfolio(
+      {
+        ...curatedSummary(),
+        estimatedCurrentValueMinor: null,
+        gainLossMinor: null,
+        gainLossBps: null,
+        valuationConfidence: 'unavailable',
+      },
+      1,
+    );
+
+    assert.equal(presented.status, 'unavailable');
+    assert.equal(presented.valueMinor, null);
+    assert.equal(presented.investedMinor, 200000);
+    assert.equal(presented.gainLossMinor, null);
+    assert.equal(presented.gainLossBps, null);
+    assert.match(presented.detail, /Reported invested/i);
+  });
+
+  it('distinguishes a request failure from a known empty portfolio', () => {
+    const failed = presentHomePortfolio(null, 2, {
+      isLoading: false,
+      error: 'Unable to load your portfolio right now.',
+    });
+    const empty = presentHomePortfolio(
+      {
+        ...curatedSummary(),
+        investedMinor: 0,
+        estimatedCurrentValueMinor: null,
+        gainLossMinor: null,
+        gainLossBps: null,
+        valuationConfidence: 'unavailable',
+      },
+      1,
+    );
+
+    assert.equal(failed.status, 'error');
+    assert.equal(failed.valueMinor, null);
+    assert.equal(failed.investedMinor, null);
+    assert.equal(empty.status, 'empty');
+    assert.equal(empty.valueMinor, 0);
+    assert.equal(empty.investedMinor, 0);
+  });
+
+  it('keeps loading distinct from empty and error', () => {
+    const presented = presentHomePortfolio(null, 1, {
+      isLoading: true,
+      error: null,
+    });
+
+    assert.equal(presented.status, 'loading');
+    assert.equal(presented.valueMinor, null);
+    assert.equal(presented.investedMinor, null);
   });
 });
 
@@ -179,6 +238,22 @@ describe('presentHomeClubFinance', () => {
     });
     assert.equal(row.presentation, 'unavailable');
     assert.equal(row.portfolioValueNok, null);
+    assert.equal(row.returnPercentage, null);
+  });
+
+  it('does not present reported invested as current value', () => {
+    const row = presentHomeClubFinance({
+      ...curatedSummary(),
+      estimatedCurrentValueMinor: null,
+      gainLossMinor: null,
+      gainLossBps: null,
+      valuationConfidence: 'unavailable',
+    });
+
+    assert.equal(row.presentation, 'unavailable');
+    assert.equal(row.portfolioValueNok, null);
+    assert.equal(row.yourStakeMinor, null);
+    assert.equal(row.investedMinor, 200000);
     assert.equal(row.returnPercentage, null);
   });
 });

@@ -252,9 +252,10 @@ Money uses signed PostgreSQL `bigint` columns with positive-value checks. Alloca
 
 - `member_estimated_portfolio_v1` / `member_estimated_portfolios_v1` / `member_portfolio_history_v1`
   - Caller-owned curated ETF totals and history. Legacy clubs return `modelling_scope = legacy`
+  - One missing required quantity, fresh price, or FX rate makes the complete value and return unavailable while reported invested remains separate
 
 - `club_estimated_portfolio_v1` / `club_portfolio_history_v1`
-  - Club-wide money is null unless the caller is an active member and at least three distinct members have contributed
+  - Removed from the authenticated client API by `20260907080226_remove_club_money_aggregates_v1.sql`; the three-contributor threshold did not satisfy Flexible privacy
 
 - `market_data_instrument_mappings`
   - Primary key: `id`
@@ -430,7 +431,7 @@ The following require trusted transaction functions, later authorization policy,
 - saving-plan and participation currencies matching the club base currency
 - currency text naming an actual ISO 4217 currency
 - participation report correction only while its cycle is open and report immutability after completion
-- the three-member monetary aggregate threshold, safe club-level status projections, and authorization inside deferred trusted operations
+- removal of club-wide monetary aggregate projections, safe club-level status projections, and authorization inside deferred trusted operations
 
 ## Trusted write paths
 

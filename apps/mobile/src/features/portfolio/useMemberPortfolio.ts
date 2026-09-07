@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import {
   fetchEstimatedPositions,
@@ -22,13 +22,22 @@ export function useMemberPortfolio(clubId?: string | null): {
   positions: EstimatedPosition[];
   clubSummaries: MemberPortfolioSummary[];
   isLoading: boolean;
+  error: string | null;
+  refresh: () => void;
 } {
   const [summary, setSummary] = useState<MemberPortfolioSummary | null>(null);
   const [history, setHistory] = useState<PortfolioHistoryPoint[]>([]);
   const [positions, setPositions] = useState<EstimatedPosition[]>([]);
   const [clubSummaries, setClubSummaries] = useState<MemberPortfolioSummary[]>([]);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadVersion, setReloadVersion] = useState(0);
   const key = clubId ?? 'home';
+  const refresh = useCallback(() => {
+    setLoadedKey(null);
+    setError(null);
+    setReloadVersion((current) => current + 1);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,6 +60,7 @@ export function useMemberPortfolio(clubId?: string | null): {
           setHistory(nextHistory);
           setPositions(nextPositions);
           setClubSummaries(nextClubSummaries);
+          setError(null);
           setLoadedKey(key);
         }
       })
@@ -60,6 +70,7 @@ export function useMemberPortfolio(clubId?: string | null): {
           setHistory([]);
           setPositions([]);
           setClubSummaries([]);
+          setError('Unable to load your portfolio right now.');
           setLoadedKey(key);
         }
       });
@@ -67,7 +78,7 @@ export function useMemberPortfolio(clubId?: string | null): {
     return () => {
       cancelled = true;
     };
-  }, [clubId, key]);
+  }, [clubId, key, reloadVersion]);
 
   return {
     summary: loadedKey === key ? summary : null,
@@ -75,5 +86,7 @@ export function useMemberPortfolio(clubId?: string | null): {
     positions: loadedKey === key ? positions : [],
     clubSummaries: loadedKey === key ? clubSummaries : [],
     isLoading: loadedKey !== key,
+    error: loadedKey === key ? error : null,
+    refresh,
   };
 }
