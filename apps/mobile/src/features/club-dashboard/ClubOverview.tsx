@@ -2,8 +2,9 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, View } from 'react-nat
 
 import { HomeNextInvestmentDay } from '@/features/home/HomeNextInvestmentDay';
 import { HomePerformanceChart } from '@/features/home/HomePerformanceChart';
+import { presentInvestmentDayHeading } from '@/features/home/presentInvestmentDay';
 import { formatHomeInvestmentDayDate } from '@/features/home/presentHomePortfolio';
-import { presentClubContributionSummary } from '@/features/clubs/presentContribution';
+import { presentClubContributionSummary, presentContributionPolicyTiming } from '@/features/clubs/presentContribution';
 import { useClubContribution } from '@/features/clubs/useClubContribution';
 import { useClubStrategy } from '@/features/clubs/useClubStrategy';
 import { canAddExactHoldings } from '@/features/invest/holdingConfidence';
@@ -53,10 +54,18 @@ export function ClubOverview({
   const { colors, radius, spacing } = useTheme();
   const { allocations } = useClubStrategy(clubId);
   const contribution = useClubContribution(clubId);
+  const investmentDay = useInvestmentDay(clubId);
   const contributionSummary = contribution.policy
     ? presentClubContributionSummary(contribution.policy)
     : null;
-  const investmentDay = useInvestmentDay(clubId);
+  const contributionTiming =
+    contribution.policy?.mode === 'equal'
+      ? presentContributionPolicyTiming({
+          mode: 'equal',
+          policyAmountMinor: contribution.policy.equalAmountMinor,
+          frozenCycleAmountMinor: investmentDay.plan?.expectedAmountMinor ?? null,
+        })
+      : { appliesCopy: null };
   const participation = useInvestmentDayParticipation(clubId, investmentDay.plan?.cycleId ?? null);
   const compactParticipation = participation.participation
     ? presentClubOverviewParticipation({
@@ -150,6 +159,11 @@ export function ClubOverview({
 
       <View style={{ marginBottom: spacing.lg }}>
         <HomeNextInvestmentDay
+          title={presentInvestmentDayHeading({
+            setupRequired: investmentDay.setupRequired,
+            cycleStatus: investmentDay.plan?.cycleStatus ?? null,
+            investmentDayAt: investmentDay.plan?.investmentDayAt ?? null,
+          })}
           dateLabel={
             investmentDay.setupRequired
               ? 'Set your contribution'
@@ -179,6 +193,11 @@ export function ClubOverview({
           <AppText variant="supporting" style={{ marginTop: 2 }}>
             {contributionSummary.detail}
           </AppText>
+          {contributionTiming.appliesCopy ? (
+            <AppText variant="supporting" style={{ marginTop: 2 }}>
+              {contributionTiming.appliesCopy}
+            </AppText>
+          ) : null}
         </View>
       ) : null}
 

@@ -2,9 +2,10 @@ import { useRouter } from 'expo-router';
 import { View } from 'react-native';
 
 import { governanceLabel, GOVERNANCE_OPTIONS } from '@/features/clubs/governance';
-import { clubDecidesContributionStyleCopy, presentClubContributionSummary, presentOwnFlexibleContribution } from '@/features/clubs/presentContribution';
+import { clubDecidesContributionStyleCopy, presentClubContributionSummary, presentContributionPolicyTiming, presentOwnFlexibleContribution } from '@/features/clubs/presentContribution';
 import type { ClubSummary } from '@/features/clubs/types';
 import { useClubContribution } from '@/features/clubs/useClubContribution';
+import { useInvestmentDay } from '@/features/invest/useInvestmentDay';
 import { useTheme } from '@/theme';
 import { AppText, Avatar, Button, SectionHeader } from '@/ui';
 
@@ -22,12 +23,29 @@ export function ClubSettingsPanel({ club, onInvite, onEditName }: ClubSettingsPa
   const items = presentClubSettingsItems({ isOwner: club.isOwner });
   const governance = GOVERNANCE_OPTIONS.find((option) => option.value === club.governanceThresholdKind);
   const contribution = useClubContribution(club.clubId);
+  const investmentDay = useInvestmentDay(club.clubId);
   const contributionSummary = contribution.policy
     ? presentClubContributionSummary(contribution.policy)
     : null;
   const ownContribution = contribution.policy?.mode === 'flexible'
     ? presentOwnFlexibleContribution(contribution.commitment)
     : null;
+  const equalTiming =
+    contribution.policy?.mode === 'equal'
+      ? presentContributionPolicyTiming({
+          mode: 'equal',
+          policyAmountMinor: contribution.policy.equalAmountMinor,
+          frozenCycleAmountMinor: investmentDay.plan?.expectedAmountMinor ?? null,
+        })
+      : { appliesCopy: null };
+  const flexibleTiming =
+    contribution.policy?.mode === 'flexible'
+      ? presentContributionPolicyTiming({
+          mode: 'flexible',
+          policyAmountMinor: contribution.commitment?.amountMinor ?? null,
+          frozenCycleAmountMinor: investmentDay.plan?.expectedAmountMinor ?? null,
+        })
+      : { appliesCopy: null };
 
   return (
     <View>
@@ -75,6 +93,11 @@ export function ClubSettingsPanel({ club, onInvite, onEditName }: ClubSettingsPa
           <AppText variant="supporting" style={{ marginTop: 2 }}>
             {contributionSummary.detail}
           </AppText>
+          {equalTiming.appliesCopy ? (
+            <AppText variant="supporting" style={{ marginTop: 2 }}>
+              {equalTiming.appliesCopy}
+            </AppText>
+          ) : null}
           {ownContribution ? (
             <View style={{ marginTop: spacing.md }}>
               <AppText variant="body">{ownContribution.label}</AppText>
@@ -84,6 +107,11 @@ export function ClubSettingsPanel({ club, onInvite, onEditName }: ClubSettingsPa
               <AppText variant="supporting" style={{ marginTop: 2 }}>
                 {ownContribution.privacy}
               </AppText>
+              {flexibleTiming.appliesCopy ? (
+                <AppText variant="supporting" style={{ marginTop: 2 }}>
+                  {flexibleTiming.appliesCopy}
+                </AppText>
+              ) : null}
               <View style={{ marginTop: spacing.md }}>
                 <Button
                   label={ownContribution.amountLabel ? 'Edit' : 'Set amount'}

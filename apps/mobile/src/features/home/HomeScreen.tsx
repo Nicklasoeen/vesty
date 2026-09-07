@@ -22,6 +22,7 @@ import { HomePinnedClubCard } from './HomePinnedClubCard';
 import { HomePortfolioCard } from './HomePortfolioCard';
 import { presentHomeClubs } from './presentHomeClubs';
 import { homeScrollBottomPadding } from './presentHomeMoney';
+import { presentInvestmentDayHeading } from './presentInvestmentDay';
 import {
   formatHomeInvestmentDayDate,
   homeGreeting,
@@ -121,6 +122,11 @@ export function HomeScreen() {
         {homePinnedClubId ? (
           <View style={{ marginBottom: spacing.md }}>
             <HomeNextInvestmentDay
+              title={presentInvestmentDayHeading({
+                setupRequired: investmentDay.setupRequired,
+                cycleStatus: investmentDay.plan?.cycleStatus ?? null,
+                investmentDayAt: investmentDay.plan?.investmentDayAt ?? null,
+              })}
               dateLabel={
                 investmentDay.setupRequired
                   ? 'Set your contribution'

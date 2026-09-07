@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { needsFlexibleContributionSetup, presentClubContributionSummary } from './presentContribution.ts';
+import {
+  needsFlexibleContributionSetup,
+  presentClubContributionSummary,
+  presentContributionPolicyTiming,
+} from './presentContribution.ts';
 
 test('equal summary shows the shared amount and never an aggregate', () => {
   const presented = presentClubContributionSummary({
@@ -29,6 +33,33 @@ test('flexible summary never includes another member amount', () => {
   assert.equal(presented.styleLabel, 'Flexible amounts');
   assert.equal(presented.detail, 'Each member chooses their amount privately');
   assert.doesNotMatch(presented.detail, /\d/);
+});
+
+test('future policy that differs from a frozen cycle amount gets calm timing copy', () => {
+  const equal = presentContributionPolicyTiming({
+    mode: 'equal',
+    policyAmountMinor: 500000,
+    frozenCycleAmountMinor: 350000,
+  });
+  assert.equal(equal.appliesCopy, 'Applies from the next Investment Day.');
+  assert.equal(equal.frozenAmountMinor, 350000);
+  assert.equal(equal.policyAmountMinor, 500000);
+
+  const matching = presentContributionPolicyTiming({
+    mode: 'equal',
+    policyAmountMinor: 350000,
+    frozenCycleAmountMinor: 350000,
+  });
+  assert.equal(matching.appliesCopy, null);
+  assert.equal(matching.frozenAmountMinor, 350000);
+
+  const flexible = presentContributionPolicyTiming({
+    mode: 'flexible',
+    policyAmountMinor: 300000,
+    frozenCycleAmountMinor: 200000,
+  });
+  assert.equal(flexible.appliesCopy, 'Applies from your next Investment Day.');
+  assert.equal(flexible.frozenAmountMinor, 200000);
 });
 
 test('setup is required only for flexible members without a commitment', () => {

@@ -6,12 +6,12 @@ export const CONTRIBUTION_STYLE_OPTIONS = [
   {
     value: 'equal' as const,
     label: 'Same amount',
-    description: 'Everyone contributes the same amount on each Investment Day.',
+    description: 'Everyone contributes the same amount.',
   },
   {
     value: 'flexible' as const,
     label: 'Flexible amounts',
-    description: 'Each member privately chooses how much they want to contribute.',
+    description: 'Each member privately chooses their own amount.',
   },
 ] as const;
 
@@ -21,8 +21,38 @@ export function contributionStyleLabel(mode: ContributionPolicyMode): string {
 
 export function contributionStyleDescription(mode: ContributionPolicyMode): string {
   return mode === 'equal'
-    ? 'Everyone contributes the same amount on each Investment Day.'
-    : 'Each member privately chooses how much they want to contribute.';
+    ? 'Everyone contributes the same amount.'
+    : 'Each member privately chooses their own amount.';
+}
+
+export function presentContributionPolicyTiming(input: {
+  mode: ContributionPolicyMode;
+  policyAmountMinor: number | null;
+  frozenCycleAmountMinor: number | null;
+}): {
+  appliesCopy: string | null;
+  policyAmountMinor: number | null;
+  frozenAmountMinor: number | null;
+} {
+  const frozenAmountMinor = input.frozenCycleAmountMinor;
+  const policyAmountMinor = input.policyAmountMinor;
+
+  if (policyAmountMinor == null || frozenAmountMinor == null || policyAmountMinor === frozenAmountMinor) {
+    return {
+      appliesCopy: null,
+      policyAmountMinor,
+      frozenAmountMinor,
+    };
+  }
+
+  return {
+    appliesCopy:
+      input.mode === 'flexible'
+        ? 'Applies from your next Investment Day.'
+        : 'Applies from the next Investment Day.',
+    policyAmountMinor,
+    frozenAmountMinor,
+  };
 }
 
 export function presentClubContributionSummary(policy: ClubContributionPolicy): {

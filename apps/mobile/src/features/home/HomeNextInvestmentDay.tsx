@@ -13,6 +13,7 @@ export interface InvestmentDayParticipantPreview {
 }
 
 interface HomeNextInvestmentDayProps {
+  title: string;
   dateLabel: string;
   plannedMinor: number | null;
   onPress?: () => void;
@@ -22,6 +23,7 @@ interface HomeNextInvestmentDayProps {
 }
 
 export function HomeNextInvestmentDay({
+  title,
   dateLabel,
   plannedMinor,
   onPress,
@@ -36,7 +38,7 @@ export function HomeNextInvestmentDay({
       onPress={onPress}
       disabled={!onPress}
       accessibilityRole={onPress ? 'button' : undefined}
-      accessibilityLabel={onPress ? 'Open Invest for next Investment Day' : undefined}
+      accessibilityLabel={onPress ? `Open Invest for ${title}` : undefined}
       style={({ pressed }) => ({ opacity: onPress && pressed ? 0.85 : 1 })}
     >
       <Surface
@@ -62,7 +64,7 @@ export function HomeNextInvestmentDay({
           <Feather name="calendar" size={20} color={colors.accent} />
         </View>
         <View style={{ flex: 1, marginHorizontal: spacing.md, minWidth: 0 }}>
-          <AppText variant="label">{setupRequired ? 'Your contribution' : 'Next Investment Day'}</AppText>
+          <AppText variant="label">{title}</AppText>
           <AppText variant="subtitle" numberOfLines={1} style={{ marginTop: 1 }}>
             {dateLabel}
           </AppText>
