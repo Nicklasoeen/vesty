@@ -144,3 +144,21 @@ export async function discardCreateClubDraft(
   await saveCreateClubDraft(store, profileId, next);
   return next;
 }
+
+export type CreateClubLeaveStorageChoice = 'save_and_leave' | 'discard_setup' | 'keep_creating';
+
+export async function applyCreateClubLeaveChoice(
+  store: CreateClubDraftStore,
+  profileId: string,
+  draft: CreateClubDraft,
+  choice: CreateClubLeaveStorageChoice,
+): Promise<void> {
+  if (choice === 'keep_creating') {
+    return;
+  }
+  if (choice === 'save_and_leave') {
+    await saveCreateClubDraft(store, profileId, draft);
+    return;
+  }
+  await clearCreateClubDraft(store, profileId);
+}

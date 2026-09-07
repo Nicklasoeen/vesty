@@ -16,28 +16,29 @@ import {
   type CreateClubDraft,
   type CreateClubStep,
 } from './createClubWizard.ts';
-import type { SingleFundProduct } from './singleFundCatalog.ts';
+import type { CatalogLoadState, SingleFundProduct } from './singleFundCatalog.ts';
 import { presentCreateClubReviewAgreement } from './presentSingleFund.ts';
 import { GOVERNANCE_OPTIONS, type GovernanceThresholdKind } from './governance.ts';
+import { createClubGovernanceLabel } from './presentCreateClubFlow.ts';
 
 export const CREATE_CLUB_STEP_ORDER: readonly CreateClubStep[] = CREATE_CLUB_STEPS;
 
 const STEP_TITLES: Record<CreateClubStep, string> = {
-  name: 'Club name',
-  mode: 'How do you want to invest?',
-  fund: 'Choose a fund',
-  contribution: 'Monthly contribution',
-  governance: 'How decisions are made',
-  review: 'Review',
+  name: 'What should your club be called?',
+  mode: 'Find your saving rhythm.',
+  fund: 'One fund. Many companies.',
+  contribution: 'A habit that fits everyday life.',
+  governance: 'How will you agree?',
+  review: 'This is your club.',
 };
 
 const STEP_SUPPORTING: Record<CreateClubStep, string | null> = {
-  name: 'What should your club be called?',
-  mode: 'Choose the routine that fits your group.',
-  fund: 'One fund. One purchase in each member’s own account.',
-  contribution: 'Choose how members contribute.',
-  governance: 'Choose how future proposals pass.',
-  review: 'Confirm what your group has chosen.',
+  name: 'You can change the name later.',
+  mode: 'Choose how much you want to decide together.',
+  fund: 'A simple starting point for your shared habit.',
+  contribution: 'Choose whether the amount is shared or individual.',
+  governance: 'When someone proposes a change, the club votes.',
+  review: 'Look over the choices before you create the club.',
 };
 
 const LEGAL_INSTRUMENT_NAME = /ucits|\betf\b|vanguard ftse|ishares core|ishares nasdaq|\(usd\)|\(acc\)/i;
@@ -94,20 +95,20 @@ export function presentCreateClubInvestmentOption(item: CuratedInvestmentPackage
 export function presentCreateClubContributionOptions() {
   return [
     {
-      value: 'equal' as const,
-      title: 'Same amount',
-      description: 'Everyone contributes the same amount.',
-      amountLabel: 'Club amount',
-      amountHint: 'per month, shared with members',
-      privacy: null,
-    },
-    {
       value: 'flexible' as const,
-      title: 'Flexible amounts',
-      description: 'Each member privately chooses their own amount.',
-      amountLabel: 'Your amount',
+      title: 'Each chooses their own amount',
+      description: 'Every member privately chooses what they save.',
+      amountLabel: 'Your monthly amount',
       amountHint: null,
       privacy: 'Only you can see your amount. Other members will not see it.',
+    },
+    {
+      value: 'equal' as const,
+      title: 'Everyone saves the same amount',
+      description: 'The club shares one amount that members can see.',
+      amountLabel: 'Monthly amount for each member',
+      amountHint: 'shared with members',
+      privacy: null,
     },
   ] as const;
 }
@@ -136,9 +137,14 @@ export function presentCreateClubContributionChoice(
 export function presentCreateClubGovernanceOptions() {
   return GOVERNANCE_OPTIONS.map((option) => ({
     value: option.value,
-    title: option.label,
-    description: option.description,
-    guidance: option.value === 'simple_majority' ? 'Good for most clubs' : null,
+    title: createClubGovernanceLabel(option.value),
+    description:
+      option.value === 'simple_majority'
+        ? 'More than half of the votes must be yes.'
+        : option.value === 'supermajority'
+          ? 'At least two out of three votes must be yes.'
+          : 'Everyone must vote yes.',
+    guidance: null,
     tappable: true,
     accessibilityRole: 'radio' as const,
   }));
@@ -191,9 +197,11 @@ export function presentCreateClubCatalogPanel(state: 'idle' | 'loading' | 'ready
 export function presentCreateClubContinue(
   draft: CreateClubDraft,
   products: readonly SingleFundProduct[] = [],
+  catalogState: CatalogLoadState | 'unavailable' = 'ready',
 ) {
+  const catalogReady = draft.step !== 'fund' || catalogState === 'ready';
   return {
-    enabled: canContinueCreateClub(draft, products),
+    enabled: catalogReady && canContinueCreateClub(draft, products),
     label: draft.step === 'review' ? 'Create club' : 'Continue',
   };
 }

@@ -1,7 +1,6 @@
 import { formatNokFromMinor } from '../../lib/currency.ts';
 import { presentSelectableOptionAppearance } from '../../ui/selectableOptionAppearance.ts';
-import { contributionStyleLabel } from './presentContribution.ts';
-import { governanceLabel } from './governance.ts';
+import { createClubContributionTitle, createClubGovernanceLabel } from './presentCreateClubFlow.ts';
 import {
   parsedCreatorFlexibleAmountMinor,
   parsedEqualAmountMinor,
@@ -17,9 +16,9 @@ export function presentGroupTypeOptions(selected: ClubInvestmentModeChoice | nul
     {
       value: 'single_fund' as const,
       title: 'Simple saving',
-      description: 'Choose one fund and build a regular investing habit together.',
-      facts: ['One investment', 'Minimal monthly upkeep', 'Ready-made fund choices'],
-      expanded: 'Each member owns and buys the fund in their own brokerage account.',
+      description: 'One fund. One steady habit.',
+      facts: ['One fund · Buy in NOK'],
+      expanded: 'Each member buys and owns the fund in their own brokerage account.',
       locked: false,
       lockReason: null,
       accessibilityLabel: 'Simple saving',
@@ -28,8 +27,8 @@ export function presentGroupTypeOptions(selected: ClubInvestmentModeChoice | nul
     {
       value: 'custom_portfolio' as const,
       title: 'Build your strategy',
-      description: 'Choose investments together and decide how the club should be allocated.',
-      facts: ['Choose several investments', 'Set target percentages', 'More decisions on Investment Day'],
+      description: 'Choose several investments together',
+      facts: [],
       expanded: null,
       locked: true,
       lockReason: 'Available after initial testing',
@@ -56,24 +55,30 @@ export function presentSingleFundCard(product: SingleFundProduct, selected: bool
     title: product.displayName,
     description: product.shortDescription,
     facts: [
-      'One fund and one purchase',
       `Buy for a ${product.currency} amount`,
       `Risk ${product.riskIndicator}`,
       product.recommendedHorizon,
       verifiedBrokers.length > 0
-        ? `Confirmed available at ${verifiedBrokers.join(' and ')}`
+        ? `Available at ${verifiedBrokers.join(' and ')}`
         : 'Broker availability is still being checked',
-      `Product facts checked ${formatCheckedOn(product.checkedOn)}`,
+      `Checked ${formatCheckedOn(product.checkedOn)}`,
     ],
     ...presentSelectableOptionAppearance(selected),
   };
 }
 
 export function presentSingleFundDetails(product: SingleFundProduct) {
+  const verifiedBrokers = product.brokers
+    .filter((listing) => listing.isVerified)
+    .map((listing) => (listing.broker === 'dnb' ? 'DNB' : 'Nordnet'));
+
   return {
     legalName: product.legalName,
     isin: product.isin,
     managerName: product.managerName,
+    risk: `Risk ${product.riskIndicator}`,
+    horizon: product.recommendedHorizon,
+    brokers: verifiedBrokers.length > 0 ? `Available at ${verifiedBrokers.join(' and ')}` : null,
     costs: product.brokers.map((listing) => presentBrokerCost(listing)),
     links: product.brokers.flatMap((listing) => {
       if (!isAllowedSingleFundSourceUrl(listing.productUrl)) {
@@ -105,40 +110,40 @@ export function presentCreateClubReviewAgreement(
       ? parsedEqualAmountMinor(draft)
       : parsedCreatorFlexibleAmountMinor(draft);
   const amountLabel = amountMinor == null ? '' : formatNokFromMinor(amountMinor);
+  const contributionTitle = draft.contributionMode ? createClubContributionTitle(draft.contributionMode) : 'Not selected';
 
   return {
     clubName: trimmedClubName(draft.name),
-    groupTypeLabel: 'How you invest',
+    groupTypeLabel: 'Saving',
     groupTypeName: 'Simple saving',
     groupTypeDetail: `The club saves in ${product.legalName}.`,
     investmentLabel: 'Fund',
-    investmentName: product.legalName,
+    investmentName: product.displayName,
     investmentDetails: [
       'Each member buys and owns the fund in their own brokerage account.',
-      'One fund and one purchase, for a NOK amount.',
     ],
-    contributionStyleLabel: 'Monthly contribution',
-    contributionName: draft.contributionMode ? contributionStyleLabel(draft.contributionMode) : 'Not selected',
+    contributionStyleLabel: 'Contribution',
+    contributionName: contributionTitle,
     contributionDetail:
       draft.contributionMode === 'equal'
-        ? `${amountLabel} per month, shared with members`
+        ? `${amountLabel} each month, shared with members`
         : amountLabel,
     contributionPrivacy:
       draft.contributionMode === 'flexible'
         ? 'Only you can see your amount. Other members will not see it.'
         : null,
-    governanceLabel: 'How decisions are made',
-    governanceName: governanceLabel(draft.governance),
-    ownership: 'Vesty does not hold money and does not execute trades.',
+    governanceLabel: 'Decisions',
+    governanceName: createClubGovernanceLabel(draft.governance),
+    ownership: 'Each member buys and owns the fund in their own brokerage account. Vesty does not hold money and does not execute trades.',
     primaryLines: [
       trimmedClubName(draft.name),
       `The club saves in ${product.legalName}.`,
       'Each member buys and owns the fund in their own brokerage account.',
-      draft.contributionMode ? contributionStyleLabel(draft.contributionMode) : '',
+      draft.contributionMode ? createClubContributionTitle(draft.contributionMode) : '',
       draft.contributionMode === 'flexible'
         ? 'Only you can see your amount. Other members will not see it.'
         : amountLabel,
-      governanceLabel(draft.governance),
+      createClubGovernanceLabel(draft.governance),
       'Vesty does not hold money and does not execute trades.',
     ].filter(Boolean),
   };

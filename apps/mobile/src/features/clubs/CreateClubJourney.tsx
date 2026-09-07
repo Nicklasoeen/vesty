@@ -1,9 +1,21 @@
-import { ActivityIndicator, Linking, Pressable, View } from 'react-native';
+import { useState } from 'react';
+import { Keyboard, ScrollView, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '@/theme';
-import { AppText, Button, SelectableOptionCard, Surface, TextField } from '@/ui';
+import { AppText, Button, VestyMark } from '@/ui';
 
-import { CreateClubStepHeader } from './CreateClubStepHeader';
+import { CreateClubAmountControl } from './CreateClubAmountControl';
+import { CreateClubCatalogPanel } from './CreateClubCatalogPanel';
+import { CreateClubChoice } from './CreateClubChoice';
+import { CreateClubChrome } from './CreateClubChrome';
+import { CreateClubFundCard } from './CreateClubFundCard';
+import { CreateClubIntro } from './CreateClubIntro';
+import { CreateClubLeaveSheet } from './CreateClubLeaveSheet';
+import { CreateClubFooterNote, CreateClubPrimaryBar, CreateClubStickyFooter } from './CreateClubPrimaryBar';
+import { CreateClubReviewSummary } from './CreateClubReviewSummary';
+import { CreateClubSuccess } from './CreateClubSuccess';
+import { presentCreateClubConflict, presentCreateClubSubmit, type CreateClubSubmitState } from './createClubSubmission';
 import {
   advanceCreateClubStep,
   canContinueCreateClub,
@@ -12,20 +24,27 @@ import {
   type CreateClubDraft,
 } from './createClubWizard';
 import { CLUB_NAME_MAX_LENGTH } from './genesisStrategy';
-import { presentCreateClubAmountPreview, presentCreateClubCatalogPanel, presentCreateClubContinue, presentCreateClubContributionOptions, presentCreateClubGovernanceOptions } from './presentCreateClub';
 import {
-  presentCreateClubReviewAgreement,
-  presentGroupTypeOptions,
-  presentSingleFundCard,
-  presentSingleFundDetails,
-} from './presentSingleFund';
-import { presentCreateClubConflict, presentCreateClubSubmit, type CreateClubSubmitState } from './createClubSubmission';
+  presentCreateClubAmountPreview,
+  presentCreateClubContinue,
+  presentCreateClubContributionOptions,
+  presentCreateClubGovernanceOptions,
+} from './presentCreateClub';
+import {
+  applyCreateClubAmountPreset,
+  presentCreateClubCloseControl,
+  presentCreateClubMoneyPlanNote,
+  presentCreateClubNameBackTarget,
+  presentCreateClubPhase,
+  type CreateClubPhase,
+  type CreateClubSuccessModel,
+} from './presentCreateClubFlow';
+import { presentCreateClubReviewAgreement, presentGroupTypeOptions } from './presentSingleFund';
 import {
   findSingleFundProduct,
   type CatalogLoadState,
   type SingleFundProduct,
 } from './singleFundCatalog';
-import { isAllowedSingleFundSourceUrl } from './singleFundSourceUrl';
 
 export interface CreateClubJourneyProps {
   draft: CreateClubDraft;
@@ -40,11 +59,24 @@ export interface CreateClubJourneyProps {
   onGoToClubs?: () => void;
   onStartNewSetup?: () => void;
   onDiscardSetup?: () => void;
+  onSaveAndLeave?: () => void;
   fundDetailOpen?: boolean;
   onFundDetailOpenChange?: (open: boolean) => void;
   onLeave: () => void;
+  leaveSheetOpen?: boolean;
   compact?: boolean;
   largeText?: boolean;
+  phase?: CreateClubPhase;
+  introVisible?: boolean;
+  introDismissed?: boolean;
+  onStartClub?: () => void;
+  onReturnToIntro?: () => void;
+  success?: CreateClubSuccessModel | null;
+  onInviteMembers?: () => void;
+  onGoToClub?: () => void;
+  reduceMotion?: boolean;
+  playCelebration?: boolean;
+  embedded?: boolean;
 }
 
 export function CreateClubJourney({
@@ -60,14 +92,36 @@ export function CreateClubJourney({
   onGoToClubs,
   onStartNewSetup,
   onDiscardSetup,
+  onSaveAndLeave,
   fundDetailOpen = false,
   onFundDetailOpenChange,
   onLeave,
+  leaveSheetOpen = false,
   compact = false,
-  largeText = false,
+  phase,
+  introVisible,
+  introDismissed = false,
+  onStartClub,
+  onReturnToIntro,
+  success = null,
+  onInviteMembers,
+  onGoToClub,
+  reduceMotion = false,
+  playCelebration = false,
+  embedded = false,
 }: CreateClubJourneyProps) {
-  const { spacing } = useTheme();
-  const continueState = presentCreateClubContinue(draft, products);
+  const { colors, spacing } = useTheme();
+  const insets = useSafeAreaInsets();
+  const resolvedPhase =
+    phase ??
+    presentCreateClubPhase({
+      introVisible,
+      introDismissed,
+      draft,
+      success,
+      submitState,
+    });
+  const continueState = presentCreateClubContinue(draft, products, catalogState);
   const submit = presentCreateClubSubmit(submitState);
   const selectedProduct = findSingleFundProduct(products, draft.catalogProductId);
   const review =
@@ -75,14 +129,44 @@ export function CreateClubJourney({
       ? presentCreateClubReviewAgreement(draft, selectedProduct)
       : null;
   const busy = submitState === 'loading';
+  const continueEnabled = continueState.enabled && !busy;
+  const [leaveOpen, setLeaveOpen] = useState(leaveSheetOpen);
+  const closeControl = presentCreateClubCloseControl({
+    phase: resolvedPhase,
+    submitState,
+  });
+
+  const requestClose = () => {
+    if (closeControl.action === 'hidden' || closeControl.action === 'blocked') {
+      return;
+    }
+    if (closeControl.action === 'leave') {
+      onLeave();
+      return;
+    }
+    Keyboard.dismiss();
+    setLeaveOpen(true);
+  };
+
+  const keepCreating = () => {
+    setLeaveOpen(false);
+  };
 
   const goBack = () => {
-    if (busy) {
+    if (busy || resolvedPhase === 'success') {
+      return;
+    }
+    if (resolvedPhase === 'intro') {
+      onLeave();
       return;
     }
     const previous = previousCreateClubStep(draft.step);
     if (previous) {
       onDraftChange({ ...draft, step: previous });
+      return;
+    }
+    if (presentCreateClubNameBackTarget({ introDismissed, draft }) === 'intro') {
+      onReturnToIntro?.();
       return;
     }
     onLeave();
@@ -95,326 +179,286 @@ export function CreateClubJourney({
     onDraftChange({ ...draft, step: advanceCreateClubStep(draft.step) });
   };
 
-  return (
-    <View style={{ width: '100%', maxWidth: compact ? 375 : undefined, alignSelf: compact ? 'center' : undefined }}>
-      <CreateClubStepHeader
-        step={draft.step}
-        onBack={goBack}
-        backDisabled={busy}
-        supporting={review?.clubName}
-        supportingEmphasis={draft.step === 'review'}
-      />
-
-      {draft.step === 'name' ? (
-        <View style={{ marginTop: spacing.xl }}>
-          <TextField
-            label="Club name"
-            value={draft.name}
-            onChangeText={(name) => onDraftChange({ ...draft, name })}
-            autoCapitalize="words"
-            autoCorrect={false}
-            maxLength={CLUB_NAME_MAX_LENGTH}
-            editable={!busy}
-            accessibilityLabel="Club name"
-            returnKeyType="done"
-            blurOnSubmit
-            onSubmitEditing={goNext}
-          />
-          <PrimaryContinue label={continueState.label} enabled={continueState.enabled && !busy} onPress={goNext} />
-        </View>
-      ) : null}
-
-      {draft.step === 'mode' ? (
-        <View style={{ marginTop: spacing.lg }}>
-          {presentGroupTypeOptions(draft.mode).map((option, index) => (
-            <View key={option.value} style={{ marginTop: index === 0 ? 0 : spacing.sm }}>
-              <SelectableOptionCard
-                title={option.title}
-                description={option.description}
-                caption={option.locked ? null : option.lockReason}
-                selected={option.selected}
-                disabled={option.locked || busy}
-                locked={option.locked}
-                lockReason={option.lockReason}
-                accessibilityLabel={option.accessibilityLabel}
-                onPress={() => onDraftChange(selectCreateClubMode(draft, option.value))}
-              >
-                <View style={{ gap: 4 }}>
-                  {option.facts.map((fact) => (
-                    <AppText key={fact} variant="supporting">{`• ${fact}`}</AppText>
-                  ))}
-                  {option.selected && option.expanded ? (
-                    <AppText variant="supporting" style={{ marginTop: spacing.xs }}>
-                      {option.expanded}
-                    </AppText>
-                  ) : null}
-                </View>
-              </SelectableOptionCard>
-            </View>
-          ))}
-          <PrimaryContinue label={continueState.label} enabled={continueState.enabled && !busy} onPress={goNext} />
-        </View>
-      ) : null}
-
-      {draft.step === 'fund' ? (
-        <View style={{ marginTop: spacing.lg }}>
-          <CatalogPanel state={catalogState} message={catalogMessage} onRetry={onRetryCatalog} />
-          {catalogState === 'ready'
-            ? products.map((product) => {
-                const card = presentSingleFundCard(product, product.id === draft.catalogProductId);
-                const details = presentSingleFundDetails(product);
-                const selected = product.id === draft.catalogProductId;
-                return (
-                  <View key={product.id} style={{ marginBottom: spacing.sm }}>
-                    <SelectableOptionCard
-                      title={card.title}
-                      description={card.description}
-                      selected={card.selected}
-                      disabled={busy || product.status !== 'active'}
-                      accessibilityLabel={card.title}
-                      onPress={() =>
-                        onDraftChange({
-                          ...draft,
-                          catalogProductId: product.id === draft.catalogProductId ? null : product.id,
-                        })
-                      }
-                    >
-                      <View style={{ gap: 4 }}>
-                        {card.facts.map((fact) => (
-                          <AppText key={fact} variant="supporting">{`• ${fact}`}</AppText>
-                        ))}
-                      </View>
-                      {selected ? (
-                        <View style={{ marginTop: spacing.md }}>
-                          <Pressable
-                            accessibilityRole="button"
-                            accessibilityLabel={fundDetailOpen ? 'Hide fund details' : 'View fund details'}
-                            onPress={() => onFundDetailOpenChange?.(!fundDetailOpen)}
-                          >
-                            <AppText variant="bodyStrong" color="accent">
-                              {fundDetailOpen ? 'Hide fund details' : 'View fund details'}
-                            </AppText>
-                          </Pressable>
-                          {fundDetailOpen ? <FundDetails details={details} largeText={largeText} /> : null}
-                        </View>
-                      ) : null}
-                    </SelectableOptionCard>
-                  </View>
-                );
-              })
-            : null}
-          <PrimaryContinue label={continueState.label} enabled={continueState.enabled && !busy} onPress={goNext} />
-        </View>
-      ) : null}
-
-      {draft.step === 'contribution' ? (
-        <ContributionStep draft={draft} onDraftChange={onDraftChange} busy={busy} onContinue={goNext} />
-      ) : null}
-
-      {draft.step === 'governance' ? (
-        <View style={{ marginTop: spacing.lg }}>
-          {presentCreateClubGovernanceOptions().map((option, index) => (
-            <View key={option.value} style={{ marginTop: index === 0 ? 0 : spacing.sm }}>
-              <SelectableOptionCard
-                title={option.title}
-                description={option.description}
-                caption={option.guidance}
-                selected={option.value === draft.governance}
-                disabled={busy}
-                accessibilityLabel={option.title}
-                onPress={() => onDraftChange({ ...draft, governance: option.value })}
-              />
-            </View>
-          ))}
-          <PrimaryContinue label={continueState.label} enabled={!busy} onPress={goNext} />
-        </View>
-      ) : null}
-
-      {draft.step === 'review' && review ? (
-        <View style={{ marginTop: spacing.lg }}>
-          <ReviewBlock label={review.groupTypeLabel} value={review.groupTypeName} details={[review.groupTypeDetail]} />
-          <ReviewDivider />
-          <ReviewBlock
-            label={review.investmentLabel}
-            value={review.investmentName}
-            details={review.investmentDetails}
-          />
-          <ReviewDivider />
-          <ReviewBlock
-            label={review.contributionStyleLabel}
-            value={review.contributionName}
-            details={[review.contributionDetail, review.contributionPrivacy].filter(
-              (line): line is string => Boolean(line),
-            )}
-          />
-          <ReviewDivider />
-          <ReviewBlock label={review.governanceLabel} value={review.governanceName} />
-          <Surface bordered style={{ padding: spacing.md, marginTop: spacing.lg }}>
-            <AppText variant="bodyStrong">{review.ownership}</AppText>
-          </Surface>
-          {submitMessage || submit.message ? (
-            <AppText
-              variant="meta"
-              color="negative"
-              style={{ marginTop: spacing.md }}
-              accessibilityLiveRegion="polite"
-            >
-              {submitMessage ?? submit.message}
-            </AppText>
-          ) : null}
-          {submit.showConflictActions ? (
-            <View style={{ marginTop: spacing.xl, gap: spacing.sm }}>
-              <Button
-                label={presentCreateClubConflict().goToClubsLabel}
-                variant="primary"
-                block
-                disabled={busy}
-                onPress={onGoToClubs}
-              />
-              <Button
-                label={presentCreateClubConflict().startNewSetupLabel}
-                variant="secondary"
-                block
-                disabled={busy}
-                onPress={onStartNewSetup}
-              />
-            </View>
-          ) : (
-            <View style={{ marginTop: spacing.xl }}>
-              <Button
-                label={submit.label}
-                variant="primary"
-                block
-                busy={submit.busy}
-                disabled={submit.disabled || !continueState.enabled}
-                onPress={onSubmit}
-              />
-              {onDiscardSetup && submitState === 'idle' ? (
-                <View style={{ marginTop: spacing.sm }}>
-                  <Button
-                    label="Discard setup"
-                    variant="secondary"
-                    block
-                    disabled={busy}
-                    onPress={onDiscardSetup}
-                  />
-                </View>
-              ) : null}
-            </View>
-          )}
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
-function PrimaryContinue({
-  label,
-  enabled,
-  onPress,
-}: {
-  label: string;
-  enabled: boolean;
-  onPress: () => void;
-}) {
-  const { spacing } = useTheme();
-  return (
-    <View style={{ marginTop: spacing.xl }}>
-      <Button label={label} variant="primary" block disabled={!enabled} onPress={onPress} />
-    </View>
-  );
-}
-
-function CatalogPanel({
-  state,
-  message,
-  onRetry,
-}: {
-  state: CatalogLoadState;
-  message?: string | null;
-  onRetry?: () => void;
-}) {
-  const { colors, spacing } = useTheme();
-  if (state === 'ready' && !message) {
-    return null;
-  }
-  if (state === 'loading' || state === 'idle') {
-    const loading = presentCreateClubCatalogPanel(state);
+  if (resolvedPhase === 'intro') {
     return (
-      <View style={{ paddingVertical: spacing.xl, alignItems: 'center' }}>
-        <ActivityIndicator accessibilityLabel="Loading funds" color={colors.accent} />
-        <AppText variant="supporting" style={{ marginTop: spacing.sm }}>
-          {loading.title}
-        </AppText>
+      <View style={{ flex: 1, width: '100%', maxWidth: compact ? 375 : undefined, alignSelf: compact ? 'center' : undefined }}>
+        <CreateClubIntro
+          onStart={() => onStartClub?.()}
+          onClose={requestClose}
+          closeDisabled={closeControl.disabled}
+          embedded={embedded}
+        />
       </View>
     );
   }
-  const copy = presentCreateClubCatalogPanel(state === 'ready' ? 'unavailable' : state);
+
+  if (resolvedPhase === 'success' && success) {
+    return (
+      <View style={{ flex: 1, width: '100%', maxWidth: compact ? 375 : undefined, alignSelf: compact ? 'center' : undefined }}>
+        <CreateClubSuccess
+          success={success}
+          celebrate={playCelebration && !reduceMotion}
+          onInvite={() => onInviteMembers?.()}
+          onGoToClub={() => onGoToClub?.()}
+          embedded={embedded}
+        />
+      </View>
+    );
+  }
+
   return (
-    <Surface bordered style={{ padding: spacing.md, marginBottom: spacing.md }}>
-      <AppText variant="bodyStrong">{copy.title}</AppText>
-      <AppText variant="supporting" style={{ marginTop: spacing.xs }}>
-        {message ?? copy.body}
-      </AppText>
-      {state === 'error' && onRetry ? (
-        <View style={{ marginTop: spacing.md }}>
-          <Button label="Try again" variant="secondary" onPress={onRetry} />
-        </View>
-      ) : null}
-    </Surface>
+    <View
+      style={{
+        flex: 1,
+        width: '100%',
+        maxWidth: compact ? 375 : undefined,
+        alignSelf: compact ? 'center' : undefined,
+        backgroundColor: colors.background,
+        paddingTop: (embedded ? 0 : insets.top) + spacing.sm,
+        paddingHorizontal: spacing.lg,
+      }}
+    >
+      <CreateClubChrome
+        step={draft.step}
+        onBack={goBack}
+        onClose={requestClose}
+        backDisabled={busy}
+        closeDisabled={closeControl.disabled}
+        closeAccessibilityLabel={closeControl.accessibilityLabel}
+        closeAccessibilityHint={closeControl.accessibilityHint}
+      />
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingTop: spacing.md, paddingBottom: spacing.xl }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+        showsVerticalScrollIndicator={false}
+      >
+        {draft.step === 'name' ? <NameStep draft={draft} onDraftChange={onDraftChange} busy={busy} /> : null}
+        {draft.step === 'mode' ? <ModeStep draft={draft} onDraftChange={onDraftChange} busy={busy} /> : null}
+        {draft.step === 'fund' ? (
+          <FundStep
+            draft={draft}
+            onDraftChange={onDraftChange}
+            products={products}
+            catalogState={catalogState}
+            catalogMessage={catalogMessage}
+            onRetryCatalog={onRetryCatalog}
+            fundDetailOpen={fundDetailOpen}
+            onFundDetailOpenChange={onFundDetailOpenChange}
+            busy={busy}
+          />
+        ) : null}
+        {draft.step === 'contribution' ? (
+          <ContributionStep draft={draft} onDraftChange={onDraftChange} busy={busy} />
+        ) : null}
+        {draft.step === 'governance' ? (
+          <GovernanceStep draft={draft} onDraftChange={onDraftChange} busy={busy} />
+        ) : null}
+        {draft.step === 'review' && review ? (
+          <ReviewStep review={review} submit={submit} submitMessage={submitMessage} />
+        ) : null}
+      </ScrollView>
+      <CreateClubStickyFooter>
+        {draft.step === 'review' && submit.showConflictActions ? (
+          <View style={{ gap: spacing.sm }}>
+            <Button
+              label={presentCreateClubConflict().goToClubsLabel}
+              variant="primary"
+              block
+              disabled={busy}
+              onPress={onGoToClubs}
+            />
+            <Button
+              label={presentCreateClubConflict().startNewSetupLabel}
+              variant="secondary"
+              block
+              disabled={busy}
+              onPress={onStartNewSetup}
+            />
+          </View>
+        ) : draft.step === 'review' ? (
+          <>
+            <CreateClubPrimaryBar
+              label={submit.label}
+              enabled={!submit.disabled && continueState.enabled}
+              busy={submit.busy}
+              onPress={onSubmit}
+            />
+            <CreateClubFooterNote>No payment. This is the start of a shared habit.</CreateClubFooterNote>
+          </>
+        ) : (
+          <CreateClubPrimaryBar
+            label={continueState.label}
+            enabled={continueEnabled}
+            busy={busy}
+            onPress={goNext}
+          />
+        )}
+      </CreateClubStickyFooter>
+      <View style={{ height: insets.bottom + spacing.sm }} />
+      <CreateClubLeaveSheet
+        visible={leaveOpen}
+        onSaveAndLeave={() => {
+          setLeaveOpen(false);
+          if (onSaveAndLeave) {
+            onSaveAndLeave();
+            return;
+          }
+          onLeave();
+        }}
+        onDiscardSetup={() => {
+          setLeaveOpen(false);
+          onDiscardSetup?.();
+        }}
+        onKeepCreating={keepCreating}
+      />
+    </View>
   );
 }
 
-function FundDetails({
-  details,
-  largeText,
+function NameStep({
+  draft,
+  onDraftChange,
+  busy,
 }: {
-  details: ReturnType<typeof presentSingleFundDetails>;
-  largeText: boolean;
+  draft: CreateClubDraft;
+  onDraftChange: (draft: CreateClubDraft) => void;
+  busy: boolean;
 }) {
-  const { colors, spacing } = useTheme();
+  const { colors, spacing, typography } = useTheme();
+
   return (
-    <Surface style={{ padding: spacing.md, marginTop: spacing.sm, backgroundColor: colors.surfaceSecondary }}>
-      <AppText variant="label" style={largeText ? { fontSize: 18 } : undefined}>
-        {details.legalName}
-      </AppText>
-      <AppText variant="supporting" style={{ marginTop: spacing.xs }}>
-        {`ISIN ${details.isin}`}
-      </AppText>
-      <AppText variant="supporting" style={{ marginTop: spacing.xs }}>
-        {`Manager ${details.managerName}`}
-      </AppText>
-      {details.costs.map((cost) => (
-        <View key={cost.broker} style={{ marginTop: spacing.sm }}>
-          <AppText variant="bodyStrong">{cost.label}</AppText>
-          <AppText variant="supporting">{cost.source}</AppText>
-          {cost.minimumNote ? <AppText variant="supporting">{cost.minimumNote}</AppText> : null}
-        </View>
-      ))}
-      {details.links.map((link) => (
-        <Pressable
-          key={link.url}
-          accessibilityRole="link"
-          accessibilityLabel={link.label}
-          onPress={() => {
-            if (!isAllowedSingleFundSourceUrl(link.url)) {
-              return;
-            }
-            void Linking.openURL(link.url);
-          }}
-          style={{ marginTop: spacing.sm }}
+    <View>
+      <View
+        style={{
+          width: 88,
+          height: 88,
+          borderRadius: 28,
+          backgroundColor: colors.mintSoft,
+          alignItems: 'center',
+          justifyContent: 'center',
+          alignSelf: 'center',
+          marginBottom: spacing.xl,
+        }}
+      >
+        <VestyMark color={colors.accentDeep} height={36} />
+      </View>
+      <AppText variant="label">Club name</AppText>
+      <TextInput
+        value={draft.name}
+        onChangeText={(name) => onDraftChange({ ...draft, name })}
+        autoCapitalize="words"
+        autoCorrect={false}
+        maxLength={CLUB_NAME_MAX_LENGTH}
+        editable={!busy}
+        accessibilityLabel="Club name"
+        placeholder="Friday Club"
+        placeholderTextColor={colors.textSecondary}
+        returnKeyType="done"
+        blurOnSubmit
+        style={[
+          typography.title,
+          {
+            marginTop: spacing.sm,
+            paddingVertical: spacing.md,
+            color: colors.textPrimary,
+            borderBottomWidth: 2,
+            borderBottomColor: colors.border,
+          },
+        ]}
+      />
+    </View>
+  );
+}
+
+function ModeStep({
+  draft,
+  onDraftChange,
+  busy,
+}: {
+  draft: CreateClubDraft;
+  onDraftChange: (draft: CreateClubDraft) => void;
+  busy: boolean;
+}) {
+  const { spacing } = useTheme();
+
+  return (
+    <View style={{ gap: spacing.sm }}>
+      {presentGroupTypeOptions(draft.mode).map((option) => (
+        <CreateClubChoice
+          key={option.value}
+          title={option.title}
+          description={option.description}
+          selected={option.selected}
+          locked={option.locked}
+          lockReason={option.lockReason}
+          accessibilityLabel={option.accessibilityLabel}
+          disabled={busy}
+          onPress={() => onDraftChange(selectCreateClubMode(draft, option.value))}
         >
-          <AppText variant="bodyStrong" color="accent">
-            {link.label}
-          </AppText>
-        </Pressable>
+          {option.facts.length > 0 ? (
+            <AppText variant="supporting" style={{ marginTop: spacing.sm }}>
+              {option.facts.join(' · ')}
+            </AppText>
+          ) : null}
+          {option.selected && option.expanded ? (
+            <AppText variant="supporting" style={{ marginTop: spacing.sm }}>
+              {option.expanded}
+            </AppText>
+          ) : null}
+        </CreateClubChoice>
       ))}
-      {details.notes.map((note) => (
-        <AppText key={note} variant="supporting" style={{ marginTop: spacing.xs }}>
-          {note}
-        </AppText>
-      ))}
-    </Surface>
+    </View>
+  );
+}
+
+function FundStep({
+  draft,
+  onDraftChange,
+  products,
+  catalogState,
+  catalogMessage,
+  onRetryCatalog,
+  fundDetailOpen,
+  onFundDetailOpenChange,
+  busy,
+}: {
+  draft: CreateClubDraft;
+  onDraftChange: (draft: CreateClubDraft) => void;
+  products: readonly SingleFundProduct[];
+  catalogState: CatalogLoadState;
+  catalogMessage?: string | null;
+  onRetryCatalog?: () => void;
+  fundDetailOpen: boolean;
+  onFundDetailOpenChange?: (open: boolean) => void;
+  busy: boolean;
+}) {
+  const { spacing } = useTheme();
+
+  return (
+    <View>
+      <CreateClubCatalogPanel state={catalogState} message={catalogMessage} onRetry={onRetryCatalog} />
+      {catalogState === 'ready'
+        ? products.map((product) => (
+            <View key={product.id} style={{ marginBottom: spacing.md }}>
+              <CreateClubFundCard
+                product={product}
+                selected={product.id === draft.catalogProductId}
+                detailOpen={product.id === draft.catalogProductId && fundDetailOpen}
+                disabled={busy || product.status !== 'active'}
+                onSelect={() =>
+                  onDraftChange({
+                    ...draft,
+                    catalogProductId: product.id === draft.catalogProductId ? null : product.id,
+                  })
+                }
+                onToggleDetails={() => onFundDetailOpenChange?.(!fundDetailOpen)}
+              />
+            </View>
+          ))
+        : null}
+    </View>
   );
 }
 
@@ -422,104 +466,112 @@ function ContributionStep({
   draft,
   onDraftChange,
   busy,
-  onContinue,
 }: {
   draft: CreateClubDraft;
   onDraftChange: (draft: CreateClubDraft) => void;
   busy: boolean;
-  onContinue: () => void;
 }) {
   const { spacing } = useTheme();
-  const continueState = presentCreateClubContinue(draft);
+  const selected = presentCreateClubContributionOptions().find((option) => option.value === draft.contributionMode);
+  const amountValue =
+    draft.contributionMode === 'equal' ? draft.equalAmountInput : draft.creatorFlexibleAmountInput;
+  const preview = amountValue ? presentCreateClubAmountPreview(amountValue) : null;
+
   return (
-    <View style={{ marginTop: spacing.lg }}>
-      {presentCreateClubContributionOptions().map((option, index) => {
-        const selected = option.value === draft.contributionMode;
-        const value = option.value === 'equal' ? draft.equalAmountInput : draft.creatorFlexibleAmountInput;
-        const preview =
-          option.value === 'equal'
-            ? presentCreateClubAmountPreview(draft.equalAmountInput)
-            : presentCreateClubAmountPreview(draft.creatorFlexibleAmountInput);
-        return (
-          <View key={option.value} style={{ marginTop: index === 0 ? 0 : spacing.sm }}>
-            <SelectableOptionCard
-              title={option.title}
-              description={option.description}
-              selected={selected}
-              disabled={busy}
-              accessibilityLabel={option.title}
-              onPress={() => onDraftChange({ ...draft, contributionMode: option.value })}
-            >
-              {selected ? (
-                <View>
-                  <TextField
-                    label={option.amountLabel}
-                    value={value}
-                    onChangeText={(next) =>
-                      onDraftChange(
-                        option.value === 'equal'
-                          ? { ...draft, equalAmountInput: next }
-                          : { ...draft, creatorFlexibleAmountInput: next },
-                      )
-                    }
-                    keyboardType="number-pad"
-                    inputMode="numeric"
-                    editable={!busy}
-                    accessibilityLabel={option.value === 'equal' ? 'Club amount in kroner' : 'Your amount in kroner'}
-                  />
-                  <AppText variant="supporting" style={{ marginTop: spacing.xs }}>
-                    {preview && option.amountHint ? `${preview} ${option.amountHint}` : preview ?? option.privacy ?? option.amountHint}
-                  </AppText>
-                  {option.privacy && preview ? (
-                    <AppText variant="supporting" style={{ marginTop: spacing.xs }}>
-                      {option.privacy}
-                    </AppText>
-                  ) : null}
-                </View>
-              ) : null}
-            </SelectableOptionCard>
-          </View>
-        );
-      })}
-      <PrimaryContinue label={continueState.label} enabled={continueState.enabled && !busy} onPress={onContinue} />
+    <View>
+      <View style={{ gap: spacing.sm }}>
+        {presentCreateClubContributionOptions().map((option) => (
+          <CreateClubChoice
+            key={option.value}
+            title={option.title}
+            description={option.description}
+            selected={option.value === draft.contributionMode}
+            disabled={busy}
+            onPress={() => onDraftChange({ ...draft, contributionMode: option.value })}
+          />
+        ))}
+      </View>
+      {selected ? (
+        <View style={{ marginTop: spacing.xl }}>
+          <CreateClubAmountControl
+            label={selected.amountLabel}
+            value={amountValue}
+            onChangeText={(next) =>
+              onDraftChange(
+                selected.value === 'equal'
+                  ? { ...draft, equalAmountInput: next }
+                  : { ...draft, creatorFlexibleAmountInput: next },
+              )
+            }
+            onApplyPreset={(input) => onDraftChange(applyCreateClubAmountPreset({ ...draft, contributionMode: selected.value }, input))}
+            accessibilityLabel={selected.value === 'equal' ? 'Club amount in kroner' : 'Your amount in kroner'}
+            editable={!busy}
+          />
+          {selected.privacy ? (
+            <AppText variant="supporting" style={{ marginTop: spacing.md }}>
+              {selected.privacy}
+            </AppText>
+          ) : null}
+          {selected.amountHint && preview ? (
+            <AppText variant="supporting" style={{ marginTop: spacing.sm }}>
+              {`${preview} ${selected.amountHint}`}
+            </AppText>
+          ) : null}
+          <AppText variant="supporting" style={{ marginTop: spacing.lg }}>
+            {presentCreateClubMoneyPlanNote()}
+          </AppText>
+        </View>
+      ) : null}
     </View>
   );
 }
 
-function ReviewBlock({
-  label,
-  value,
-  details = [],
+function GovernanceStep({
+  draft,
+  onDraftChange,
+  busy,
 }: {
-  label: string;
-  value: string;
-  details?: readonly string[];
+  draft: CreateClubDraft;
+  onDraftChange: (draft: CreateClubDraft) => void;
+  busy: boolean;
 }) {
   const { spacing } = useTheme();
+
   return (
-    <View>
-      <AppText variant="label">{label}</AppText>
-      <AppText variant="subtitle" style={{ marginTop: 4 }}>
-        {value}
-      </AppText>
-      {details.map((line) => (
-        <AppText key={line} variant="supporting" style={{ marginTop: spacing.xs }}>
-          {line}
-        </AppText>
+    <View style={{ gap: spacing.sm }}>
+      {presentCreateClubGovernanceOptions().map((option) => (
+        <CreateClubChoice
+          key={option.value}
+          title={option.title}
+          description={option.description}
+          selected={option.value === draft.governance}
+          disabled={busy}
+          onPress={() => onDraftChange({ ...draft, governance: option.value })}
+        />
       ))}
     </View>
   );
 }
 
-function ReviewDivider() {
-  const { colors, spacing } = useTheme();
+function ReviewStep({
+  review,
+  submit,
+  submitMessage,
+}: {
+  review: ReturnType<typeof presentCreateClubReviewAgreement>;
+  submit: ReturnType<typeof presentCreateClubSubmit>;
+  submitMessage?: string | null;
+}) {
+  const { spacing } = useTheme();
+
   return (
-    <View
-      style={{
-        height: 1,
-        backgroundColor: colors.border,
-        marginVertical: spacing.lg,
-      }}
-    />
+    <View>
+      <CreateClubReviewSummary review={review} />
+      {submitMessage || submit.message ? (
+        <AppText variant="meta" color="negative" style={{ marginTop: spacing.md }} accessibilityLiveRegion="polite">
+          {submitMessage ?? submit.message}
+        </AppText>
+      ) : null}
+    </View>
   );
 }

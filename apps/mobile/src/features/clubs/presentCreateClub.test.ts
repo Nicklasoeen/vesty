@@ -37,20 +37,18 @@ describe('presentCreateClubProgress', () => {
     assert.deepEqual(presentCreateClubProgress('name'), {
       eyebrow: 'Create club',
       progressLabel: '1 of 6',
-      title: 'Club name',
-      supporting: 'What should your club be called?',
+      title: 'What should your club be called?',
+      supporting: 'You can change the name later.',
       stepIndex: 1,
       stepCount: 6,
     });
-    assert.equal(presentCreateClubProgress('mode').title, 'How do you want to invest?');
+    assert.equal(presentCreateClubProgress('mode').title, 'Find your saving rhythm.');
     assert.equal(presentCreateClubProgress('fund').progressLabel, '3 of 6');
-    assert.equal(
-      presentCreateClubProgress('fund').supporting,
-      'One fund. One purchase in each member’s own account.',
-    );
-    assert.equal(presentCreateClubProgress('contribution').title, 'Monthly contribution');
-    assert.equal(presentCreateClubProgress('governance').title, 'How decisions are made');
+    assert.equal(presentCreateClubProgress('fund').title, 'One fund. Many companies.');
+    assert.equal(presentCreateClubProgress('contribution').title, 'A habit that fits everyday life.');
+    assert.equal(presentCreateClubProgress('governance').title, 'How will you agree?');
     assert.equal(presentCreateClubProgress('review').progressLabel, '6 of 6');
+    assert.equal(presentCreateClubProgress('review').title, 'This is your club.');
   });
 });
 
@@ -58,6 +56,7 @@ describe('group type options', () => {
   it('keeps Simple saving active and Build your strategy locked', () => {
     const options = presentGroupTypeOptions(null);
     assert.equal(options[0]?.title, 'Simple saving');
+    assert.equal(options[0]?.description, 'One fund. One steady habit.');
     assert.equal(options[0]?.locked, false);
     assert.equal(options[1]?.title, 'Build your strategy');
     assert.equal(options[1]?.locked, true);
@@ -71,12 +70,23 @@ describe('fund card', () => {
   it('explains the DNB fund without advice or live NAV', () => {
     const card = presentSingleFundCard(DNB_GLOBAL_INDEKS_A, true);
     const details = presentSingleFundDetails(DNB_GLOBAL_INDEKS_A);
-    const visible = [card.title, card.description, ...card.facts, ...details.notes, ...details.costs.map((row) => row.label)].join('\n');
+    const visible = [
+      card.title,
+      card.description,
+      ...card.facts,
+      details.risk,
+      details.horizon,
+      details.brokers,
+      ...details.notes,
+      ...details.costs.map((row) => row.label),
+    ].join('\n');
 
     assert.equal(card.title, 'DNB Global Indeks A');
     assert.match(card.description, /developed markets/);
-    assert.equal(card.facts.some((fact) => fact.includes('One fund')), true);
+    assert.equal(card.facts.some((fact) => fact.includes('NOK')), true);
     assert.equal(card.facts.some((fact) => fact.includes('Nordnet') && fact.includes('DNB')), true);
+    assert.match(visible, /Risk 4 of 7/);
+    assert.match(visible, /At least 6 years/);
     assert.match(visible, /0\.20%/);
     assert.match(visible, /0\.25%/);
     assert.doesNotMatch(visible, /live NAV|expected return|best fund|recommended for you/i);
@@ -124,9 +134,9 @@ describe('catalog panel copy', () => {
 describe('contribution style options', () => {
   it('renders two tappable choices and reveals the matching amount field', () => {
     const options = presentCreateClubContributionOptions();
-    assert.equal(options[0]?.title, 'Same amount');
-    assert.equal(options[1]?.title, 'Flexible amounts');
-    assert.match(options[1]?.privacy ?? '', /Other members will not see it/);
+    assert.equal(options[0]?.title, 'Each chooses their own amount');
+    assert.equal(options[1]?.title, 'Everyone saves the same amount');
+    assert.match(options[0]?.privacy ?? '', /Other members will not see it/);
 
     const same = presentCreateClubContributionSelection('equal');
     assert.equal(same.revealsClubAmount, true);
@@ -149,29 +159,55 @@ describe('contribution style options', () => {
     }), [DNB_GLOBAL_INDEKS_A]);
     assert.equal(empty.enabled, false);
     assert.equal(valid.enabled, true);
+    assert.equal(presentCreateClubContinue(completeDraft({ step: 'name', name: '' })).enabled, false);
+    assert.equal(presentCreateClubContinue(completeDraft({ step: 'name', name: 'Friday Club' })).enabled, true);
+    assert.equal(presentCreateClubContinue(completeDraft({ step: 'review' }), [DNB_GLOBAL_INDEKS_A]).label, 'Create club');
+    assert.equal(
+      presentCreateClubContinue(completeDraft({ step: 'fund', catalogProductId: null }), [DNB_GLOBAL_INDEKS_A]).enabled,
+      false,
+    );
+    assert.equal(
+      presentCreateClubContinue(completeDraft({ step: 'fund' }), []).enabled,
+      false,
+    );
+    assert.equal(
+      presentCreateClubContinue(completeDraft({ step: 'fund' }), [DNB_GLOBAL_INDEKS_A], 'error').enabled,
+      false,
+    );
+    assert.equal(
+      presentCreateClubContinue(completeDraft({ step: 'fund' }), [DNB_GLOBAL_INDEKS_A], 'loading').enabled,
+      false,
+    );
   });
 });
 
 describe('governance options', () => {
-  it('exposes three tappable radios', () => {
+  it('maps stored values to ordinary English labels', () => {
     const options = presentCreateClubGovernanceOptions();
-    assert.equal(options.length, 3);
+    assert.deepEqual(options.map((option) => option.value), ['simple_majority', 'supermajority', 'unanimous']);
+    assert.deepEqual(options.map((option) => option.title), [
+      'Simple majority',
+      'Two-thirds majority',
+      'Everyone agrees',
+    ]);
     const selected = presentCreateClubGovernanceChoice('simple_majority', 'simple_majority');
     assert.equal(selected.selected, true);
   });
 });
 
 describe('create club review', () => {
-  it('reads as a Simple saving agreement', () => {
+  it('reads as a Simple saving agreement from the draft and catalog', () => {
     const review = presentCreateClubReview(completeDraft(), DNB_GLOBAL_INDEKS_A);
     const primary = review.primaryLines.join('\n');
 
     assert.equal(review.clubName, 'Den Beste Klubben');
     assert.equal(review.groupTypeName, 'Simple saving');
-    assert.match(review.groupTypeDetail, /DNB Global Indeks A/);
-    assert.equal(review.contributionName, 'Same amount');
+    assert.equal(review.investmentName, 'DNB Global Indeks A');
+    assert.equal(review.contributionName, 'Everyone saves the same amount');
+    assert.match(review.contributionDetail, /shared with members/);
     assert.equal('customLocked' in review, false);
-    assert.doesNotMatch(primary, /Build your strategy is not enabled/);
+    assert.doesNotMatch(primary, /Build your strategy/);
+    assert.doesNotMatch(primary, /Available after initial testing/);
     assert.match(primary, /does not hold money/);
     assert.doesNotMatch(primary, /recommended for you|live NAV|best fund/i);
   });
@@ -184,6 +220,8 @@ describe('create club review', () => {
       }),
       DNB_GLOBAL_INDEKS_A,
     );
+    assert.equal(review.contributionName, 'Each chooses their own amount');
     assert.match(review.contributionPrivacy ?? '', /Other members will not see it/);
+    assert.doesNotMatch(review.contributionDetail, /shared with members/);
   });
 });

@@ -3,6 +3,7 @@ import {
   type CreateClubDraft,
 } from '../clubs/createClubWizard.ts';
 import type { CreateClubSubmitState } from '../clubs/createClubSubmission.ts';
+import type { CreateClubPhase, CreateClubSuccessModel } from '../clubs/presentCreateClubFlow.ts';
 import {
   DNB_GLOBAL_INDEKS_A,
   DNB_GLOBAL_INDEKS_A_PRODUCT_ID,
@@ -22,9 +23,22 @@ export interface GroupModeGalleryScenario {
   fundDetailOpen?: boolean;
   compact?: boolean;
   largeText?: boolean;
+  phase?: CreateClubPhase;
+  introVisible?: boolean;
+  introDismissed?: boolean;
+  success?: CreateClubSuccessModel | null;
+  reduceMotion?: boolean;
+  playCelebration?: boolean;
+  leaveSheetOpen?: boolean;
 }
 
 const CREATION_ID = '86000000-0000-4000-8000-000000000001';
+
+const GALLERY_SUCCESS: CreateClubSuccessModel = {
+  clubId: '41000000-0000-4000-8000-000000000001',
+  clubName: 'Sammen hver måned',
+  fundName: 'DNB Global Indeks A',
+};
 
 const longFund: SingleFundProduct = {
   ...DNB_GLOBAL_INDEKS_A,
@@ -63,17 +77,27 @@ function scenario(
     products: [DNB_GLOBAL_INDEKS_A],
     catalogState: 'ready',
     submitState: 'idle',
+    introVisible: false,
+    introDismissed: true,
     ...overrides,
   };
 }
 
 export const GROUP_MODE_GALLERY_SCENARIOS: readonly GroupModeGalleryScenario[] = [
+  scenario('intro', 'Intro', createEmptyCreateClubDraft(CREATION_ID), {
+    phase: 'intro',
+    introVisible: true,
+    introDismissed: false,
+  }),
   scenario('name', 'Step · club name', baseDraft({ step: 'name', mode: null, catalogProductId: null })),
   scenario('mode-empty', 'Mode · unselected', baseDraft({ step: 'mode', mode: null, catalogProductId: null })),
   scenario('mode-simple', 'Mode · Simple selected', baseDraft({ step: 'mode' })),
   scenario('mode-locked', 'Mode · Build your strategy locked', baseDraft({ step: 'mode' })),
   scenario('catalog-loading', 'Catalog · loading', baseDraft({ step: 'fund' }), { catalogState: 'loading' }),
-  scenario('catalog-error', 'Catalog · error', baseDraft({ step: 'fund' }), { catalogState: 'error' }),
+  scenario('catalog-error', 'Catalog · error', baseDraft({ step: 'fund', catalogProductId: null }), {
+    catalogState: 'error',
+    products: [],
+  }),
   scenario('catalog-empty', 'Catalog · empty', baseDraft({ step: 'fund', catalogProductId: null }), {
     catalogState: 'empty',
     products: [],
@@ -98,10 +122,24 @@ export const GROUP_MODE_GALLERY_SCENARIOS: readonly GroupModeGalleryScenario[] =
   scenario('submit-timeout', 'Submit · timeout', baseDraft({ step: 'review' }), { submitState: 'timeout' }),
   scenario('submit-conflict', 'Submit · conflict', baseDraft({ step: 'review' }), { submitState: 'conflict' }),
   scenario('submit-idempotent', 'Submit · idempotent success', baseDraft({ step: 'review' }), {
+    phase: 'success',
     submitState: 'success',
-    submitMessage: 'This club was already created. Opening it now.',
+    success: GALLERY_SUCCESS,
+    playCelebration: false,
   }),
-  scenario('submit-success', 'Submit · success', baseDraft({ step: 'review' }), { submitState: 'success' }),
+  scenario('submit-success', 'Success', baseDraft({ step: 'review' }), {
+    phase: 'success',
+    submitState: 'success',
+    success: GALLERY_SUCCESS,
+    playCelebration: true,
+  }),
+  scenario('reduce-motion', 'Success · reduced motion', baseDraft({ step: 'review' }), {
+    phase: 'success',
+    submitState: 'success',
+    success: GALLERY_SUCCESS,
+    reduceMotion: true,
+    playCelebration: false,
+  }),
   scenario(
     'long-name',
     'Stress · long club name',
@@ -117,6 +155,10 @@ export const GROUP_MODE_GALLERY_SCENARIOS: readonly GroupModeGalleryScenario[] =
   }), { products: [longFund], compact: true, fundDetailOpen: true }),
   scenario('large-text', 'Stress · large text', baseDraft({ step: 'review' }), { compact: true, largeText: true }),
   scenario('small-iphone', 'Stress · 375 iPhone', baseDraft({ step: 'mode' }), { compact: true }),
+  scenario('leave-confirm', 'Leave · confirm', baseDraft({ step: 'name' }), {
+    compact: true,
+    leaveSheetOpen: true,
+  }),
 ];
 
 export function getGroupModeGalleryScenario(id: string): GroupModeGalleryScenario {

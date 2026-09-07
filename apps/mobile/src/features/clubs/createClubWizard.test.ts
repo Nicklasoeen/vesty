@@ -30,6 +30,27 @@ function completeDraft(overrides: Partial<CreateClubDraft> = {}): CreateClubDraf
   };
 }
 
+test('locked Build your strategy cannot change the draft', () => {
+  const draft = completeDraft({ step: 'mode', mode: 'single_fund' });
+  const ignored = selectCreateClubMode(draft, 'custom_portfolio');
+  assert.equal(ignored.mode, 'single_fund');
+  assert.equal(ignored.catalogProductId, draft.catalogProductId);
+  assert.equal(selectCreateClubMode(completeDraft({ step: 'mode', mode: null }), 'custom_portfolio').mode, null);
+});
+
+test('back and forward keep the same draft choices', () => {
+  const draft = completeDraft({ step: 'governance' });
+  const previous = { ...draft, step: previousCreateClubStep(draft.step) ?? draft.step };
+  const again = { ...previous, step: advanceCreateClubStep(previous.step) };
+  assert.equal(previous.step, 'contribution');
+  assert.equal(again.step, 'governance');
+  assert.equal(again.name, draft.name);
+  assert.equal(again.mode, draft.mode);
+  assert.equal(again.catalogProductId, draft.catalogProductId);
+  assert.equal(again.equalAmountInput, draft.equalAmountInput);
+  assert.equal(again.governance, draft.governance);
+});
+
 test('user cannot continue from mode without Simple saving', () => {
   const draft = completeDraft({ step: 'mode', mode: null, catalogProductId: null });
   assert.equal(canContinueCreateClub(draft, [DNB_GLOBAL_INDEKS_A]), false);

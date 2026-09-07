@@ -14,6 +14,8 @@ describe('create-club development gallery fixtures', () => {
   it('covers the required visual state matrix', () => {
     const ids = new Set(GROUP_MODE_GALLERY_SCENARIOS.map((scenario) => scenario.id));
     for (const required of [
+      'intro',
+      'name',
       'mode-empty',
       'mode-simple',
       'mode-locked',
@@ -31,10 +33,12 @@ describe('create-club development gallery fixtures', () => {
       'submit-idempotent',
       'submit-conflict',
       'submit-success',
+      'reduce-motion',
       'long-name',
       'long-fund',
       'large-text',
       'small-iphone',
+      'leave-confirm',
     ]) {
       assert.equal(ids.has(required), true, `missing gallery fixture: ${required}`);
     }
@@ -48,6 +52,12 @@ describe('create-club development gallery fixtures', () => {
     assert.equal(getGroupModeGalleryScenario('submit-timeout').submitState, 'timeout');
     assert.equal(getGroupModeGalleryScenario('submit-conflict').submitState, 'conflict');
     assert.equal(getGroupModeGalleryScenario('submit-success').submitState, 'success');
+    assert.equal(getGroupModeGalleryScenario('intro').phase, 'intro');
+    assert.equal(getGroupModeGalleryScenario('submit-success').phase, 'success');
+    assert.equal(getGroupModeGalleryScenario('reduce-motion').reduceMotion, true);
+    assert.equal(getGroupModeGalleryScenario('submit-idempotent').playCelebration, false);
+    assert.equal(getGroupModeGalleryScenario('leave-confirm').leaveSheetOpen, true);
+    assert.equal(getGroupModeGalleryScenario('leave-confirm').submitState, 'idle');
   });
 
   it('provides narrow, long-name, and large-text stress fixtures', () => {

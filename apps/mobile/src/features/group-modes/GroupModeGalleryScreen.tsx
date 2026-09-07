@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Pressable, ScrollView } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CreateClubJourney } from '@/features/clubs/CreateClubJourney';
 import { useTheme } from '@/theme';
-import { AppText, Screen, Surface } from '@/ui';
+import { AppText } from '@/ui';
 
 import {
   GROUP_MODE_GALLERY_SCENARIOS,
@@ -25,7 +26,9 @@ function galleryScenarioId(value: string | undefined): string | null {
  */
 export function GroupModeGalleryScreen() {
   const { colors, spacing } = useTheme();
-  const params = useLocalSearchParams<{ scenario?: string }>();
+  const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ scenario?: string; chrome?: string }>();
+  const hideChrome = params.chrome === '0';
   const requestedScenarioId = galleryScenarioId(
     typeof params.scenario === 'string' ? params.scenario : undefined,
   );
@@ -46,19 +49,15 @@ export function GroupModeGalleryScreen() {
   const scenario = getGroupModeGalleryScenario(scenarioId);
 
   return (
-    <Screen
-      contentContainerStyle={{
-        paddingHorizontal: scenario.compact ? spacing.sm : spacing.lg,
-        paddingBottom: spacing.xxl,
-      }}
-    >
-      <Surface
-        bordered
+    <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: hideChrome ? 0 : insets.top }}>
+      {hideChrome ? null : (
+      <View
         style={{
-          padding: spacing.md,
-          marginTop: spacing.sm,
-          marginBottom: spacing.lg,
+          paddingHorizontal: scenario.compact ? spacing.sm : spacing.md,
+          paddingBottom: spacing.sm,
           backgroundColor: colors.surfaceSecondary,
+          borderBottomWidth: 1,
+          borderBottomColor: colors.border,
         }}
       >
         <AppText variant="label">Development state gallery</AppText>
@@ -68,7 +67,7 @@ export function GroupModeGalleryScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: spacing.xs, paddingTop: spacing.md }}
+          contentContainerStyle={{ gap: spacing.xs, paddingTop: spacing.sm, paddingBottom: spacing.sm }}
         >
           {GROUP_MODE_GALLERY_SCENARIOS.map((item) => {
             const active = item.id === scenario.id;
@@ -97,34 +96,55 @@ export function GroupModeGalleryScreen() {
           })}
         </ScrollView>
         {retryCount > 0 ? (
-          <AppText variant="meta" color="positive" style={{ marginTop: spacing.sm }}>
+          <AppText variant="meta" color="positive">
             {`Retry callback received locally (${retryCount}).`}
           </AppText>
         ) : null}
-      </Surface>
+      </View>
+      )}
 
-      <CreateClubJourney
-        key={`${scenario.id}-${retryCount}`}
-        draft={draft}
-        onDraftChange={setDraft}
-        products={scenario.products}
-        catalogState={scenario.catalogState}
-        catalogMessage={scenario.catalogMessage}
-        onRetryCatalog={() => setRetryCount((count) => count + 1)}
-        submitState={scenario.submitState}
-        submitMessage={scenario.submitMessage}
-        onSubmit={() => {
-          if (galleryFixtureSendsServerCall(scenario)) {
-            throw new Error('Gallery must not send a server call');
-          }
-        }}
-        onGoToClubs={() => undefined}
-        onStartNewSetup={() => undefined}
-        fundDetailOpen={scenario.fundDetailOpen}
-        compact={scenario.compact}
-        largeText={scenario.largeText}
-        onLeave={() => undefined}
-      />
-    </Screen>
+      <View style={{ flex: 1, minHeight: scenario.compact ? 812 : undefined }}>
+        <CreateClubJourney
+          key={`${scenario.id}-${retryCount}`}
+          draft={draft}
+          onDraftChange={setDraft}
+          products={scenario.products}
+          catalogState={scenario.catalogState}
+          catalogMessage={scenario.catalogMessage}
+          onRetryCatalog={() => setRetryCount((count) => count + 1)}
+          submitState={scenario.submitState}
+          submitMessage={scenario.submitMessage}
+          onSubmit={() => {
+            if (galleryFixtureSendsServerCall(scenario)) {
+              throw new Error('Gallery must not send a server call');
+            }
+          }}
+          onGoToClubs={() => undefined}
+          onStartNewSetup={() => undefined}
+          onSaveAndLeave={() => undefined}
+          onDiscardSetup={() => undefined}
+          leaveSheetOpen={scenario.leaveSheetOpen}
+          fundDetailOpen={scenario.fundDetailOpen}
+          compact={scenario.compact}
+          largeText={scenario.largeText}
+          onLeave={() => undefined}
+          phase={scenario.phase}
+          introVisible={scenario.introVisible}
+          introDismissed={scenario.introDismissed}
+          onStartClub={() => undefined}
+          onReturnToIntro={() => undefined}
+          success={scenario.success}
+          onInviteMembers={() => {
+            if (galleryFixtureSendsServerCall(scenario)) {
+              throw new Error('Gallery must not send a server call');
+            }
+          }}
+          onGoToClub={() => undefined}
+          reduceMotion={scenario.reduceMotion}
+          playCelebration={scenario.playCelebration}
+          embedded
+        />
+      </View>
+    </View>
   );
 }

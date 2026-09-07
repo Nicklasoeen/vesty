@@ -5,6 +5,7 @@ import { clearSignedOutUserStorage } from '../auth/clearSignedOutUserStorage.ts'
 import {
   CREATE_CLUB_DRAFT_STORAGE_PREFIX,
   LEGACY_CREATE_CLUB_DRAFT_STORAGE_KEY,
+  applyCreateClubLeaveChoice,
   clearCreateClubDraft,
   createClubDraftStorageKey,
   discardCreateClubDraft,
@@ -170,5 +171,50 @@ describe('create club draft storage', () => {
     assert.equal(next.clientCreationId, CREATION_B);
     assert.equal(next.name, '');
     assert.equal(next.creatorFlexibleAmountInput, '');
+  });
+
+  it('save and leave keeps the same profile draft and creation id', async () => {
+    const store = memoryStore();
+    const draftA = flexibleDraft(CREATION_A, 'Keep A');
+    await saveCreateClubDraft(store, PROFILE_A, draftA);
+    await applyCreateClubLeaveChoice(store, PROFILE_A, draftA, 'save_and_leave');
+
+    const loaded = await loadCreateClubDraft(store, PROFILE_A, () => CREATION_B);
+    assert.equal(loaded.clientCreationId, CREATION_A);
+    assert.equal(loaded.name, 'Keep A');
+    assert.equal(loaded.creatorFlexibleAmountInput, '1500');
+    assert.equal(store.data[createClubDraftStorageKey(PROFILE_A)]?.includes(CREATION_A), true);
+    assert.equal(store.data[createClubDraftStorageKey(PROFILE_A)]?.includes(CREATION_B), false);
+  });
+
+  it('discard setup clears the active profile draft without minting a new request id', async () => {
+    const store = memoryStore();
+    await saveCreateClubDraft(store, PROFILE_A, flexibleDraft(CREATION_A, 'Throw away'));
+    await saveCreateClubDraft(store, PROFILE_B, flexibleDraft(CREATION_B, 'Keep B'));
+    await applyCreateClubLeaveChoice(store, PROFILE_A, flexibleDraft(CREATION_A, 'Throw away'), 'discard_setup');
+
+    assert.equal(store.data[createClubDraftStorageKey(PROFILE_A)], undefined);
+    assert.doesNotMatch(store.data[createClubDraftStorageKey(PROFILE_A)] ?? '', /Throw away|86000000-0000-4000-8000-000000000001/);
+    const keptB = await loadCreateClubDraft(store, PROFILE_B, () => '86000000-0000-4000-8000-000000000099');
+    assert.equal(keptB.clientCreationId, CREATION_B);
+    assert.equal(keptB.name, 'Keep B');
+    assert.equal(JSON.stringify(store.data).includes(CREATION_B), true);
+    assert.equal(JSON.stringify(store.data).includes(CREATION_A), false);
+  });
+
+  it('keep creating leaves both profile drafts unchanged', async () => {
+    const store = memoryStore();
+    const draftA = flexibleDraft(CREATION_A, 'Still here');
+    const draftB = flexibleDraft(CREATION_B, 'Also B');
+    await saveCreateClubDraft(store, PROFILE_A, draftA);
+    await saveCreateClubDraft(store, PROFILE_B, draftB);
+    await applyCreateClubLeaveChoice(store, PROFILE_A, { ...draftA, name: 'Changed in memory' }, 'keep_creating');
+
+    const loadedA = await loadCreateClubDraft(store, PROFILE_A, () => '86000000-0000-4000-8000-000000000099');
+    const loadedB = await loadCreateClubDraft(store, PROFILE_B, () => '86000000-0000-4000-8000-000000000098');
+    assert.equal(loadedA.name, 'Still here');
+    assert.equal(loadedA.clientCreationId, CREATION_A);
+    assert.equal(loadedB.name, 'Also B');
+    assert.equal(loadedB.clientCreationId, CREATION_B);
   });
 });
