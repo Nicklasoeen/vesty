@@ -4,6 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthLoadingScreen } from '@/features/auth/AuthLoadingScreen';
 import { AuthProvider, useAuth } from '@/features/auth/AuthProvider';
+import { presentAuthBootGate } from '@/features/auth/restoreAuthSession';
 import { ProfileProvider, useProfile } from '@/features/profile/ProfileProvider';
 import { ThemeProvider } from '@/theme';
 
@@ -24,22 +25,26 @@ export default function RootLayout() {
 function RootNavigation() {
   const { isInitializing, profileError, retryProfileSetup, session } = useAuth();
   const { isLoading: profileLoading, error: profileLoadError, profile, refresh } = useProfile();
-  const identityBlocked = Boolean(session) && !profileLoading && Boolean(profileLoadError) && !profile;
-  const blocking =
-    isInitializing || Boolean(profileError) || (Boolean(session) && profileLoading) || identityBlocked;
-  const error = profileError ?? (identityBlocked ? profileLoadError : null);
+  const gate = presentAuthBootGate({
+    isInitializing,
+    profileError,
+    hasSession: Boolean(session),
+    profileLoading,
+    profileLoadError,
+    hasProfile: Boolean(profile),
+  });
 
   return (
     <View style={styles.fill}>
       <Stack screenOptions={{ headerShown: false }} />
-      {blocking ? (
+      {gate.blocking ? (
         <View style={styles.overlay} pointerEvents="auto">
           <AuthLoadingScreen
-            error={error}
+            error={gate.error}
             onRetry={
               profileError
                 ? () => void retryProfileSetup()
-                : identityBlocked
+                : gate.identityBlocked
                   ? () => void refresh()
                   : undefined
             }

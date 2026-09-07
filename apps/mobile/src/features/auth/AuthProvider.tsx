@@ -13,6 +13,7 @@ import type { AuthError, Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase/client';
 import { ensureOwnProfile } from './ensureOwnProfile';
 import { mapAuthError } from './mapAuthError';
+import { restoreAuthSession } from './restoreAuthSession';
 import {
   isInvalidAuthIdentityError,
   isInvalidProfileIdentityError,
@@ -120,23 +121,27 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
   }, [clearInvalidSession]);
 
+  const restoreSession = useCallback(async (): Promise<void> => {
+    const result = await restoreAuthSession({
+      getSession: () => supabase.auth.getSession(),
+      applySession: (next) => applyAuthenticatedSession(next as Session | null),
+      onIssue: logAuthIssue,
+    });
+
+    if (result.status === 'failed') {
+      setProfileError(result.message);
+    }
+  }, [applyAuthenticatedSession]);
+
   useEffect(() => {
     let cancelled = false;
 
-    void supabase.auth.getSession().then(async ({ data, error }) => {
-      if (cancelled) {
-        return;
-      }
-
-      if (error) {
-        logAuthIssue('getSession failed', error);
-      }
-
-      await applyAuthenticatedSession(data.session);
+    void (async () => {
+      await restoreSession();
       if (!cancelled) {
         setIsInitializing(false);
       }
-    });
+    })();
 
     const {
       data: { subscription },
@@ -165,18 +170,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
       cancelled = true;
       subscription.unsubscribe();
     };
-  }, [applyAuthenticatedSession]);
+  }, [applyAuthenticatedSession, restoreSession]);
 
   const retryProfileSetup = useCallback(async () => {
-    const current = sessionRef.current;
-    if (!current?.user) {
-      return;
-    }
-
     setIsInitializing(true);
-    await applyAuthenticatedSession(current);
+    setProfileError(null);
+    await restoreSession();
     setIsInitializing(false);
-  }, [applyAuthenticatedSession]);
+  }, [restoreSession]);
 
   const signIn = useCallback(
     async (email: string, password: string): Promise<AuthActionResult> => {
