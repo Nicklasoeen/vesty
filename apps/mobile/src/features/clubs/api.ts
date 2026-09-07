@@ -11,6 +11,7 @@ import {
 } from './contributionPolicy';
 import {
   isContributionPolicyProposalStatus,
+  isContributionProposalResolutionReason,
   presentContributionPolicyProposalChange,
   type ContributionPolicyProposal,
 } from './contributionPolicyProposal';
@@ -245,6 +246,18 @@ function requireInteger(row: Record<string, unknown>, key: string): number {
   throw new Error(`Missing ${key}`);
 }
 
+function optionalInteger(row: Record<string, unknown>, key: string): number | null {
+  if (row[key] == null) {
+    return null;
+  }
+
+  try {
+    return requireInteger(row, key);
+  } catch {
+    return null;
+  }
+}
+
 export async function createClub(input: {
   name: string;
   governanceThresholdKind: GovernanceThresholdKind;
@@ -368,12 +381,20 @@ export async function fetchClubContributionPolicyProposals(
       clubId: requireString(row, 'club_id'),
       proposerMembershipId: requireString(row, 'proposer_membership_id'),
       status,
+      resolutionReason: isContributionProposalResolutionReason(row.resolution_reason)
+        ? row.resolution_reason
+        : null,
       deadlineAt: typeof row.deadline_at === 'string' ? row.deadline_at : null,
       openedAt: typeof row.opened_at === 'string' ? row.opened_at : null,
       closedAt: typeof row.closed_at === 'string' ? row.closed_at : null,
       approvedAt: typeof row.approved_at === 'string' ? row.approved_at : null,
-      electorateSize: typeof row.electorate_size === 'number' ? row.electorate_size : null,
-      requiredYesCount: typeof row.required_yes_count === 'number' ? row.required_yes_count : null,
+      createdAt: typeof row.created_at === 'string' ? row.created_at : null,
+      intendedEffectiveAt: typeof row.intended_effective_at === 'string' ? row.intended_effective_at : null,
+      electorateSize: optionalInteger(row, 'electorate_size'),
+      requiredYesCount: optionalInteger(row, 'required_yes_count'),
+      votingThresholdKind: isGovernanceThresholdKind(row.voting_threshold_kind)
+        ? row.voting_threshold_kind
+        : null,
       basePolicyVersionId: requireString(row, 'base_contribution_policy_version_id'),
       baseMode: change.fromStyle,
       baseEqualAmountMinor: change.fromEqualAmountMinor,
@@ -381,6 +402,79 @@ export async function fetchClubContributionPolicyProposals(
       proposedEqualAmountMinor: change.toEqualAmountMinor,
     }];
   });
+}
+
+export async function createContributionPolicyProposal(input: {
+  clubId: string;
+  basePolicyVersionId: string;
+  proposedMode: ContributionPolicyMode;
+  proposedEqualAmountMinor: number | null;
+}): Promise<{ proposalId: string }> {
+  const result = await supabase.rpc('create_contribution_policy_proposal_v1', {
+    p_club_id: input.clubId,
+    p_base_contribution_policy_version_id: input.basePolicyVersionId,
+    p_proposed_mode: input.proposedMode,
+    p_proposed_equal_amount_minor: input.proposedEqualAmountMinor,
+  });
+
+  if (result.error) {
+    throw new Error(
+      mapClubError(result.error, 'Unable to create this proposal', 'create_contribution_policy_proposal_v1'),
+    );
+  }
+
+  const row = firstRpcRow(result.data);
+  if (!row) {
+    throw new Error('Unable to create this proposal');
+  }
+
+  return { proposalId: requireString(row, 'proposal_id') };
+}
+
+export async function openContributionPolicyProposal(proposalId: string): Promise<{ proposalId: string }> {
+  const result = await supabase.rpc('open_contribution_policy_proposal_v1', {
+    p_proposal_id: proposalId,
+  });
+
+  if (result.error) {
+    throw new Error(
+      mapClubError(result.error, 'Unable to open this proposal', 'open_contribution_policy_proposal_v1'),
+    );
+  }
+
+  const row = firstRpcRow(result.data);
+  if (!row) {
+    throw new Error('Unable to open this proposal');
+  }
+
+  return { proposalId: requireString(row, 'proposal_id') };
+}
+
+export async function finalizeContributionPolicyProposal(proposalId: string): Promise<{
+  proposalId: string;
+  status: string;
+  policyVersionId: string | null;
+}> {
+  const result = await supabase.rpc('finalize_contribution_policy_proposal_v1', {
+    p_proposal_id: proposalId,
+  });
+
+  if (result.error) {
+    throw new Error(
+      mapClubError(result.error, 'Unable to update this proposal', 'finalize_contribution_policy_proposal_v1'),
+    );
+  }
+
+  const row = firstRpcRow(result.data);
+  if (!row) {
+    throw new Error('Unable to update this proposal');
+  }
+
+  return {
+    proposalId: requireString(row, 'proposal_id'),
+    status: requireString(row, 'status'),
+    policyVersionId: typeof row.policy_version_id === 'string' ? row.policy_version_id : null,
+  };
 }
 
 export async function getMyContributionCommitment(clubId: string): Promise<MyContributionCommitment | null> {

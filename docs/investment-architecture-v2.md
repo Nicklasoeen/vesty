@@ -248,7 +248,7 @@ A club may have one open **strategy** proposal and one open **contribution** pro
 
 At create, open, and apply, the proposal base must equal the club's latest policy version.
 
-If another change created a newer version first, the old proposal is stale. It must not create a policy version and must not rebase onto the new version. Finalize closes a reached-threshold stale ballot as `rejected`.
+If another change created a newer version first, the old proposal is stale. It must not create a policy version and must not rebase onto the new version. Finalize closes a reached-threshold stale ballot as `rejected` with `resolution_reason = stale_base`. A failed vote writes `vote_rejected`. Clients must not infer the reason from tallies.
 
 ### Approval application
 

@@ -5,6 +5,7 @@ import type { ClubMemberIdentity } from '@/features/clubs/types';
 import { useTheme } from '@/theme';
 import { AppText, AvatarStack, Button } from '@/ui';
 
+import { presentContributionProposalListRow } from './presentContributionProposal';
 import {
   PROPOSAL_EMPTY_BODY,
   PROPOSAL_EMPTY_TITLE,
@@ -22,6 +23,7 @@ interface ClubProposalsListProps {
   error: string | null;
   onOpen: (proposalId: string) => void;
   onRetry: () => void;
+  onCreate: () => void;
 }
 
 function ProposalRow({
@@ -35,15 +37,31 @@ function ProposalRow({
 }) {
   const { colors, spacing } = useTheme();
   const proposer = findProposalMember(members, proposal.proposerMembershipId);
-  const row = presentProposalListRow({
-    allocations: proposal.allocations,
-    proposer,
-    status: proposal.status,
-    electorateSize: proposal.electorateSize,
-    votesCast: proposal.votesVisible ? proposal.votes.length : null,
-    votesVisible: proposal.votesVisible,
-    intendedEffectiveAt: proposal.intendedEffectiveAt,
-  });
+  const row =
+    proposal.kind === 'contribution' && proposal.contribution
+      ? {
+          ...presentContributionProposalListRow({
+            baseMode: proposal.contribution.baseMode,
+            proposedMode: proposal.contribution.proposedMode,
+            proposedEqualAmountMinor: proposal.contribution.proposedEqualAmountMinor,
+            proposer,
+            status: proposal.status,
+            resolutionReason: proposal.resolutionReason,
+            electorateSize: proposal.electorateSize,
+            votesCast: proposal.votesVisible ? proposal.votes.length : null,
+            votesVisible: proposal.votesVisible,
+          }),
+          effectiveLabel: null as string | null,
+        }
+      : presentProposalListRow({
+          allocations: proposal.allocations,
+          proposer,
+          status: proposal.status,
+          electorateSize: proposal.electorateSize,
+          votesCast: proposal.votesVisible ? proposal.votes.length : null,
+          votesVisible: proposal.votesVisible,
+          intendedEffectiveAt: proposal.intendedEffectiveAt,
+        });
   const portraits = orderProposalElectorate(proposal.electorateMembershipIds, members)
     .map((membershipId) => findProposalMember(members, membershipId))
     .filter((member): member is ClubMemberIdentity => member != null)
@@ -56,7 +74,7 @@ function ProposalRow({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={[row.title, row.proposedBy, row.progress, row.statusLabel]
+      accessibilityLabel={[row.eyebrow, row.title, row.proposedBy, row.progress, row.statusLabel]
         .filter(Boolean)
         .join(', ')}
       onPress={() => onOpen(proposal.id)}
@@ -67,7 +85,10 @@ function ProposalRow({
     >
       <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
         <View style={{ flex: 1, paddingRight: spacing.sm }}>
-          <AppText variant="bodyStrong">{row.title}</AppText>
+          <AppText variant="label">{row.eyebrow}</AppText>
+          <AppText variant="bodyStrong" style={{ marginTop: 2 }}>
+            {row.title}
+          </AppText>
           <AppText variant="supporting" style={{ marginTop: 2 }}>
             {row.proposedBy}
           </AppText>
@@ -89,7 +110,6 @@ function ProposalRow({
     </Pressable>
   );
 }
-
 export function ClubProposalsList({
   members,
   proposals,
@@ -97,15 +117,21 @@ export function ClubProposalsList({
   error,
   onOpen,
   onRetry,
+  onCreate,
 }: ClubProposalsListProps) {
   const { colors, spacing } = useTheme();
   const groups = splitProposalGroups(proposals);
 
   return (
     <View>
-      <AppText variant="subtitle" accessibilityRole="header">
-        Proposals
-      </AppText>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <AppText variant="subtitle" accessibilityRole="header">
+          Proposals
+        </AppText>
+        {!isLoading && !error ? (
+          <Button label="New proposal" variant="secondary" size="sm" onPress={onCreate} />
+        ) : null}
+      </View>
 
       {isLoading ? (
         <View style={{ paddingVertical: spacing.xl, alignItems: 'center' }}>

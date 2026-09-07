@@ -446,6 +446,16 @@ select extensions.is(
 
 select extensions.is(
   (
+    select resolution_reason::text
+    from public.contribution_policy_proposals
+    where id = (select proposal_id from raise_draft)
+  ),
+  'vote_approved',
+  'Approved Equal to Equal writes vote_approved'
+);
+
+select extensions.is(
+  (
     select count(*)
     from public.contribution_policy_versions
     where club_id = (select club_id from equal_club)
@@ -640,6 +650,16 @@ select extensions.is(
   (select policy_version_id from stale_apply),
   null,
   'Stale approval does not create a policy version'
+);
+
+select extensions.is(
+  (
+    select resolution_reason::text
+    from public.contribution_policy_proposals
+    where id = (select proposal_id from flex_draft)
+  ),
+  'stale_base',
+  'Reached threshold against a stale base writes stale_base'
 );
 
 select extensions.is(
@@ -1110,6 +1130,155 @@ select extensions.is(
   ),
   'vesty.not_club_member',
   'Outsiders cannot propose on another club'
+);
+
+select tests.authenticate_as('73000000-0000-4000-8000-000000000005');
+
+create temporary table other_policy as
+select *
+from public.club_contribution_policy_v1((select club_id from other_club));
+
+create temporary table cancel_draft as
+select *
+from public.create_contribution_policy_proposal_v1(
+  (select club_id from other_club),
+  (select policy_version_id from other_policy),
+  'equal',
+  180000
+);
+
+select *
+from public.cancel_contribution_policy_proposal_v1((select proposal_id from cancel_draft));
+
+select extensions.is(
+  (
+    select status::text
+    from public.contribution_policy_proposals
+    where id = (select proposal_id from cancel_draft)
+  ),
+  'cancelled',
+  'Cancelled draft keeps cancelled status'
+);
+
+select extensions.is(
+  (
+    select resolution_reason::text
+    from public.contribution_policy_proposals
+    where id = (select proposal_id from cancel_draft)
+  ),
+  'cancelled',
+  'Cancelled draft writes cancelled resolution_reason'
+);
+
+create temporary table reject_draft as
+select *
+from public.create_contribution_policy_proposal_v1(
+  (select club_id from other_club),
+  (select policy_version_id from other_policy),
+  'equal',
+  190000
+);
+
+select *
+from public.open_contribution_policy_proposal_v1((select proposal_id from reject_draft));
+
+insert into public.votes (proposal_id, membership_id, choice)
+values (
+  (select proposal_id from reject_draft),
+  (select membership_id from other_club),
+  'no'
+);
+
+create temporary table reject_result as
+select *
+from public.finalize_contribution_policy_proposal_v1((select proposal_id from reject_draft));
+
+select extensions.is(
+  (select status::text from reject_result),
+  'rejected',
+  'A failed vote closes as rejected'
+);
+
+select extensions.is(
+  (
+    select resolution_reason::text
+    from public.contribution_policy_proposals
+    where id = (select proposal_id from reject_draft)
+  ),
+  'vote_rejected',
+  'A failed vote writes vote_rejected, not stale_base'
+);
+
+select extensions.is(
+  (select policy_version_id from reject_result),
+  null,
+  'A failed vote does not create a policy version'
+);
+
+create temporary table expire_draft as
+select *
+from public.create_contribution_policy_proposal_v1(
+  (select club_id from other_club),
+  (select policy_version_id from other_policy),
+  'equal',
+  210000
+);
+
+select *
+from public.open_contribution_policy_proposal_v1((select proposal_id from expire_draft));
+
+reset role;
+
+update public.contribution_policy_proposals
+set opened_at = now() - interval '8 days',
+    deadline_at = now() - interval '1 minute'
+where id = (select proposal_id from expire_draft);
+
+set local role authenticated;
+select tests.authenticate_as('73000000-0000-4000-8000-000000000005');
+
+create temporary table expire_result as
+select *
+from public.finalize_contribution_policy_proposal_v1((select proposal_id from expire_draft));
+
+select extensions.is(
+  (select status::text from expire_result),
+  'expired',
+  'A lapsed deadline closes as expired'
+);
+
+select extensions.is(
+  (
+    select resolution_reason::text
+    from public.contribution_policy_proposals
+    where id = (select proposal_id from expire_draft)
+  ),
+  'expired',
+  'A lapsed deadline writes expired resolution_reason'
+);
+
+select extensions.isnt(
+  (
+    select resolution_reason::text
+    from public.contribution_policy_proposals
+    where id = (select proposal_id from expire_draft)
+  ),
+  (
+    select resolution_reason::text
+    from public.contribution_policy_proposals
+    where id = (select proposal_id from cancel_draft)
+  ),
+  'Expired and cancelled stay distinguishable'
+);
+
+select extensions.is(
+  (
+    select resolution_reason
+    from public.club_contribution_policy_proposals_v1((select club_id from other_club))
+    where proposal_id = (select proposal_id from reject_draft)
+  )::text,
+  'vote_rejected',
+  'Read model exposes vote_rejected without client tally math'
 );
 
 select * from extensions.finish();

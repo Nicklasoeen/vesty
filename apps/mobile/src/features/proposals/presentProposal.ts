@@ -35,14 +35,16 @@ export function isVisibleProposalStatus(status: StrategyProposalStatus): boolean
   return status !== 'draft';
 }
 
+export type ClubProposalKind = 'strategy' | 'contribution';
+
 export function presentProposalStatus(status: StrategyProposalStatus): string | null {
   switch (status) {
     case 'open':
       return 'Open';
     case 'approved':
-      return 'Passed';
+      return 'Approved';
     case 'rejected':
-      return 'Rejected';
+      return 'Not approved';
     case 'expired':
       return 'Expired';
     case 'cancelled':
@@ -255,6 +257,7 @@ export function presentProposalListRow(input: {
   votesVisible: boolean;
   intendedEffectiveAt: string | null;
 }): {
+  eyebrow: string;
   title: string;
   proposedBy: string;
   progress: string;
@@ -266,7 +269,8 @@ export function presentProposalListRow(input: {
   const effective = presentProposalEffectiveDate(input.intendedEffectiveAt);
 
   return {
-    title: title.packageName ?? title.title,
+    eyebrow: 'Strategy',
+    title: title.title,
     proposedBy: presentProposalProposedBy(input.proposer),
     progress: presentVotingProgress({
       electorateSize: input.electorateSize,

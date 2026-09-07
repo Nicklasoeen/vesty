@@ -1,6 +1,8 @@
+import type { ContributionPolicyMode } from '@/features/clubs/contributionPolicy';
+import type { ContributionProposalResolutionReason } from '@/features/clubs/contributionPolicyProposal';
 import type { GovernanceThresholdKind } from '@/features/clubs/governance';
 
-import type { StrategyProposalStatus, VoteChoice } from './presentProposal';
+import type { ClubProposalKind, StrategyProposalStatus, VoteChoice } from './presentProposal';
 
 export interface ProposalAllocationRecord {
   targetName: string;
@@ -14,11 +16,21 @@ export interface ProposalVoteRecord {
   choice: VoteChoice;
 }
 
+export interface ContributionProposalPayload {
+  basePolicyVersionId: string;
+  baseMode: ContributionPolicyMode;
+  baseEqualAmountMinor: number | null;
+  proposedMode: ContributionPolicyMode;
+  proposedEqualAmountMinor: number | null;
+}
+
 export interface ClubProposalRecord {
   id: string;
+  kind: ClubProposalKind;
   clubId: string;
   proposerMembershipId: string;
   status: StrategyProposalStatus;
+  resolutionReason: ContributionProposalResolutionReason | null;
   reason: string | null;
   votingThresholdKind: GovernanceThresholdKind | null;
   electorateSize: number;
@@ -27,7 +39,9 @@ export interface ClubProposalRecord {
   deadlineAt: string | null;
   openedAt: string | null;
   closedAt: string | null;
+  createdAt: string | null;
   allocations: ProposalAllocationRecord[];
+  contribution: ContributionProposalPayload | null;
   electorateMembershipIds: string[];
   votes: ProposalVoteRecord[];
   votesVisible: boolean;

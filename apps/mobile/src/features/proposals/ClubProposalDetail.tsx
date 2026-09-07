@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 
 import { presentClubStrategy } from '@/features/club-dashboard/presentClubDashboard';
@@ -7,6 +7,7 @@ import { useClubStrategy } from '@/features/clubs/useClubStrategy';
 import { useTheme } from '@/theme';
 import { AppText, Avatar, Button, IconButton } from '@/ui';
 
+import { presentContributionProposalDetail } from './presentContributionProposal';
 import {
   ProposalVoteError,
   presentProposalDetail,
@@ -25,6 +26,7 @@ interface ClubProposalDetailProps {
   alreadyVotedUnknownChoice: boolean;
   onBack: () => void;
   onCastVote: (choice: 'yes' | 'no') => Promise<void>;
+  onResolve?: () => Promise<void>;
 }
 
 function voteStateColor(
@@ -49,34 +51,90 @@ export function ClubProposalDetail({
   alreadyVotedUnknownChoice,
   onBack,
   onCastVote,
+  onResolve,
 }: ClubProposalDetailProps) {
   const { colors, radius, spacing } = useTheme();
   const { allocations } = useClubStrategy(clubId);
   const currentStrategy = presentClubStrategy(allocations);
   const [voteError, setVoteError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<VoteAction | null>(null);
-  const presented = presentProposalDetail({
-    allocations: proposal.allocations,
-    proposer: members.find((member) => member.membershipId === proposal.proposerMembershipId) ?? null,
-    status: proposal.status,
-    votingThresholdKind: proposal.votingThresholdKind,
-    electorateSize: proposal.electorateSize,
-    electorateMembershipIds: proposal.electorateMembershipIds,
-    votes: proposal.votes,
-    votesVisible: proposal.votesVisible,
-    viewerMembershipId,
-    sessionChoice,
-    alreadyVotedUnknownChoice,
-    deadlineAt: proposal.deadlineAt,
-    intendedEffectiveAt: proposal.intendedEffectiveAt,
-    currentStrategyName: currentStrategy.packageName,
-    members,
-  });
+  const contribution = proposal.contribution;
+  const presented =
+    proposal.kind === 'contribution' && contribution
+      ? presentContributionProposalDetail({
+          baseMode: contribution.baseMode,
+          baseEqualAmountMinor: contribution.baseEqualAmountMinor,
+          proposedMode: contribution.proposedMode,
+          proposedEqualAmountMinor: contribution.proposedEqualAmountMinor,
+          proposer: members.find((member) => member.membershipId === proposal.proposerMembershipId) ?? null,
+          status: proposal.status,
+          resolutionReason: proposal.resolutionReason,
+          votingThresholdKind: proposal.votingThresholdKind,
+          electorateSize: proposal.electorateSize,
+          electorateMembershipIds: proposal.electorateMembershipIds,
+          votes: proposal.votes,
+          votesVisible: proposal.votesVisible,
+          viewerMembershipId,
+          sessionChoice,
+          alreadyVotedUnknownChoice,
+          deadlineAt: proposal.deadlineAt,
+          members,
+        })
+      : {
+          ...presentProposalDetail({
+            allocations: proposal.allocations,
+            proposer: members.find((member) => member.membershipId === proposal.proposerMembershipId) ?? null,
+            status: proposal.status,
+            votingThresholdKind: proposal.votingThresholdKind,
+            electorateSize: proposal.electorateSize,
+            electorateMembershipIds: proposal.electorateMembershipIds,
+            votes: proposal.votes,
+            votesVisible: proposal.votesVisible,
+            viewerMembershipId,
+            sessionChoice,
+            alreadyVotedUnknownChoice,
+            deadlineAt: proposal.deadlineAt,
+            intendedEffectiveAt: proposal.intendedEffectiveAt,
+            currentStrategyName: currentStrategy.packageName,
+            members,
+          }),
+          eyebrow: 'Strategy',
+          currentSummary: null as string | null,
+          proposedSummary: null as string | null,
+          explanation: null as string | null,
+          outdatedCopy: null as string | null,
+          resultSummary: null as string | null,
+        };
   const wrapVoters = presented.voters.length > 4;
   const progressRatio =
     proposal.votesVisible && proposal.electorateSize > 0
       ? Math.min(1, proposal.votes.length / proposal.electorateSize)
       : null;
+  const currentValue =
+    'currentSummary' in presented && presented.currentSummary
+      ? presented.currentSummary
+      : 'currentStrategyName' in presented
+        ? presented.currentStrategyName
+        : null;
+  const proposedValue =
+    'proposedSummary' in presented && presented.proposedSummary
+      ? presented.proposedSummary
+      : 'proposedStrategyName' in presented
+        ? (presented.proposedStrategyName ?? presented.title)
+        : presented.title;
+
+  const resolveKey = `${proposal.id}:${proposal.status}:${proposal.deadlineAt ?? ''}`;
+  const attemptedResolveKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (proposal.kind !== 'contribution' || !onResolve) {
+      return;
+    }
+    if (attemptedResolveKey.current === resolveKey) {
+      return;
+    }
+    attemptedResolveKey.current = resolveKey;
+    void onResolve();
+  }, [onResolve, proposal.kind, resolveKey]);
 
   const submit = async (action: VoteAction) => {
     if (busyAction || !presented.canVote) {
@@ -109,7 +167,7 @@ export function ClubProposalDetail({
       >
         <IconButton icon="arrow-left" accessibilityLabel="Back to proposals" onPress={onBack} />
         <AppText variant="label" style={{ marginLeft: spacing.sm }}>
-          Proposal
+          {presented.eyebrow}
         </AppText>
       </View>
 
@@ -131,8 +189,18 @@ export function ClubProposalDetail({
           {presented.description}
         </AppText>
       ) : null}
+      {presented.outdatedCopy ? (
+        <AppText variant="supporting" style={{ marginTop: spacing.xs }}>
+          {presented.outdatedCopy}
+        </AppText>
+      ) : null}
+      {presented.resultSummary ? (
+        <AppText variant="bodyStrong" style={{ marginTop: spacing.md }}>
+          {presented.resultSummary}
+        </AppText>
+      ) : null}
 
-      {presented.currentStrategyName || presented.proposedStrategyName ? (
+      {currentValue || proposedValue ? (
         <View
           style={{
             flexDirection: 'row',
@@ -143,7 +211,7 @@ export function ClubProposalDetail({
           <View style={{ flex: 1 }}>
             <AppText variant="label">Current</AppText>
             <AppText variant="bodyStrong" style={{ marginTop: 2 }}>
-              {presented.currentStrategyName ?? '—'}
+              {currentValue ?? '—'}
             </AppText>
           </View>
           <AppText variant="supporting" style={{ marginHorizontal: spacing.sm }}>
@@ -152,13 +220,13 @@ export function ClubProposalDetail({
           <View style={{ flex: 1 }}>
             <AppText variant="label">Proposed</AppText>
             <AppText variant="bodyStrong" style={{ marginTop: 2 }}>
-              {presented.proposedStrategyName ?? presented.title}
+              {proposedValue ?? presented.title}
             </AppText>
           </View>
         </View>
       ) : null}
 
-      {presented.friendlyLines.length > 0 ? (
+      {'friendlyLines' in presented && presented.friendlyLines.length > 0 ? (
         <View style={{ marginTop: spacing.lg }}>
           {presented.friendlyLines.map((line) => (
             <AppText key={line} variant="supporting" style={{ marginTop: 2 }}>
@@ -166,6 +234,12 @@ export function ClubProposalDetail({
             </AppText>
           ))}
         </View>
+      ) : null}
+
+      {presented.explanation ? (
+        <AppText variant="supporting" style={{ marginTop: spacing.lg }}>
+          {presented.explanation}
+        </AppText>
       ) : null}
 
       <AppText variant="label" style={{ marginTop: spacing.xxl }}>

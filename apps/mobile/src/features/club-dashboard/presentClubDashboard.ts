@@ -299,7 +299,9 @@ export function presentClubProposalCapability() {
     usesDemo: false as const,
     canRead: true as const,
     canCastVote: true as const,
-    canCreate: false as const,
+    canCreate: true as const,
+    canCreateStrategy: false as const,
+    canCreateContribution: true as const,
     openVoteChoicesHidden: true as const,
     reason: 'open_vote_choices_hidden_by_rls' as const,
   };

@@ -77,8 +77,8 @@ describe('proposal presentation', () => {
 
   it('maps backend statuses to consumer labels', () => {
     assert.equal(presentProposalStatus('open'), 'Open');
-    assert.equal(presentProposalStatus('approved'), 'Passed');
-    assert.equal(presentProposalStatus('rejected'), 'Rejected');
+    assert.equal(presentProposalStatus('approved'), 'Approved');
+    assert.equal(presentProposalStatus('rejected'), 'Not approved');
     assert.equal(presentProposalStatus('expired'), 'Expired');
     assert.equal(presentProposalStatus('cancelled'), 'Cancelled');
     assert.equal(presentProposalStatus('draft'), null);
@@ -183,7 +183,8 @@ describe('proposal presentation', () => {
       intendedEffectiveAt: null,
     });
 
-    assert.equal(row.title, 'Tech Forward');
+    assert.equal(row.eyebrow, 'Strategy');
+    assert.equal(row.title, 'Change strategy to Tech Forward');
     assert.equal(row.proposedBy, 'Proposed by Nicklas');
     assert.equal(row.progress, '5 members vote');
     assert.equal(row.statusLabel, 'Open');
@@ -202,7 +203,7 @@ describe('proposal presentation', () => {
       intendedEffectiveAt: '2026-09-05T12:00:00.000Z',
     });
 
-    assert.equal(row.statusLabel, 'Passed');
+    assert.equal(row.statusLabel, 'Approved');
     assert.equal(row.progress, '4 of 5 voted');
     assert.match(row.effectiveLabel ?? '', /Effective from /);
     assert.equal(/strategy_version|31000000|ucits/i.test(row.title), false);
@@ -284,6 +285,7 @@ describe('proposal presentation', () => {
       ['Current strategy', 'Proposed strategy', 'Voting rule', 'Status', 'Effective'],
     );
     assert.equal(presented.details.find((row) => row.label === 'Status')?.value, 'Open');
+    assert.equal(presented.statusLabel, 'Open');
   });
 
   it('shows For / Against / Pending from readable closed votes', () => {

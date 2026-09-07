@@ -13,8 +13,8 @@ import { createInvitationForClub, useClubs } from '@/features/clubs/useClubs';
 import type { ClubSummary } from '@/features/clubs/types';
 import { homeScrollBottomPadding } from '@/features/home/presentHomeMoney';
 import { useMemberPortfolio } from '@/features/portfolio/useMemberPortfolio';
-import { ClubProposalDetail } from '@/features/proposals/ClubProposalDetail';
-import { ClubProposalsList } from '@/features/proposals/ClubProposalsList';
+import { useClubContribution } from '@/features/clubs/useClubContribution';
+import { ClubProposalsPane } from '@/features/proposals/ClubProposalsPane';
 import { useClubProposals } from '@/features/proposals/useClubProposals';
 import { BOTTOM_NAVIGATION_HEIGHT, BottomNavigation } from '@/navigation/BottomNavigation';
 import { useAppNavigation } from '@/navigation/useAppNavigation';
@@ -169,9 +169,8 @@ function ClubDashboard({
   const { colors, radius, spacing } = useTheme();
   const insets = useSafeAreaInsets();
   const [clubTab, setClubTab] = useState<ClubTabKey>('overview');
-  const [selectedProposalId, setSelectedProposalId] = useState<string | null>(null);
   const proposalsState = useClubProposals(club.clubId);
-  const selectedProposal = proposalsState.proposals.find((proposal) => proposal.id === selectedProposalId) ?? null;
+  const contribution = useClubContribution(club.clubId);
   const {
     summary,
     history,
@@ -189,29 +188,7 @@ function ClubDashboard({
   });
   const actions = presentClubPrimaryActions({ isOwner: club.isOwner });
   const tabs = visibleClubTabs();
-  const sessionVote = selectedProposal ? proposalsState.sessionVotes[selectedProposal.id] : undefined;
-
-  if (selectedProposal) {
-    return (
-      <Screen
-        contentContainerStyle={{
-          paddingHorizontal: spacing.lg,
-          paddingBottom: homeScrollBottomPadding(BOTTOM_NAVIGATION_HEIGHT, insets.bottom),
-        }}
-      >
-        <ClubProposalDetail
-          clubId={club.clubId}
-          proposal={selectedProposal}
-          members={club.members}
-          viewerMembershipId={club.membershipId}
-          sessionChoice={sessionVote?.choice}
-          alreadyVotedUnknownChoice={sessionVote != null && sessionVote.choice == null}
-          onBack={() => setSelectedProposalId(null)}
-          onCastVote={(choice) => proposalsState.castVote(selectedProposal.id, club.membershipId, choice)}
-        />
-      </Screen>
-    );
-  }
+  const [proposalsFocused, setProposalsFocused] = useState(false);
 
   return (
     <Screen
@@ -220,6 +197,8 @@ function ClubDashboard({
         paddingBottom: homeScrollBottomPadding(BOTTOM_NAVIGATION_HEIGHT, insets.bottom),
       }}
     >
+      {proposalsFocused ? null : (
+      <>
       <View
         style={{
           flexDirection: 'row',
@@ -325,8 +304,10 @@ function ClubDashboard({
           );
         })}
       </ScrollView>
+      </>
+      )}
 
-      {clubTab === 'overview' ? (
+      {clubTab === 'overview' && !proposalsFocused ? (
         <ClubOverview
           key={club.clubId}
           clubId={club.clubId}
@@ -341,19 +322,23 @@ function ClubDashboard({
           onOpenInvest={onOpenInvest}
         />
       ) : clubTab === 'proposals' ? (
-        <ClubProposalsList
-          members={club.members}
-          proposals={proposalsState.proposals}
-          isLoading={proposalsState.isLoading}
-          error={proposalsState.error}
-          onOpen={setSelectedProposalId}
-          onRetry={() => {
-            void proposalsState.refresh();
+        <ClubProposalsPane
+          club={club}
+          proposalsState={proposalsState}
+          policy={contribution.policy}
+          policyLoading={contribution.isLoading}
+          policyError={contribution.error}
+          onRetryPolicy={() => {
+            void contribution.refresh();
+          }}
+          onFocusChange={setProposalsFocused}
+          onPolicyMaybeChanged={() => {
+            void contribution.refresh();
           }}
         />
-      ) : (
+      ) : clubTab === 'settings' ? (
         <ClubSettingsPanel club={club} onInvite={onInvite} onEditName={onEditName} />
-      )}
+      ) : null}
     </Screen>
   );
 }

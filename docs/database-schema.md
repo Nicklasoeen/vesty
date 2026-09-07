@@ -445,8 +445,8 @@ The following require trusted transaction functions, later authorization policy,
 - `create_contribution_policy_proposal_v1` — any active member; draft only; validates supported transitions against the supplied base version
 - `open_contribution_policy_proposal_v1` — proposer; freezes electorate and voting rule; rejects a stale base
 - `cancel_contribution_policy_proposal_v1` — proposer; draft or open with zero votes
-- `finalize_contribution_policy_proposal_v1` — active member or frozen electorate member; tallies and, on approval, creates exactly one policy version. Stale bases close as rejected without a version
-- `club_contribution_policy_proposals_v1` — active members; shared payload plus base/proposed style and Equal amounts only
+- `finalize_contribution_policy_proposal_v1` — active member or frozen electorate member; tallies and writes `resolution_reason` (`vote_approved`, `vote_rejected`, `stale_base`, `expired`). Approval creates exactly one policy version. Stale bases close as rejected/`stale_base` without a version
+- `club_contribution_policy_proposals_v1` — active members; shared payload plus `resolution_reason`, base/proposed style, and Equal amounts only
 - `create_member_contribution_commitment_v1` — caller only; appends a private flexible commitment version. Rejected when the latest club policy is equal. Also writes a legacy saving-plan row when none exists so cycle FKs remain satisfied.
 - `club_contribution_policy_v1` — active members; returns latest mode/currency and a shared equal amount only when the mode is equal
 - `my_contribution_commitment_v1` — caller only; latest private commitment, never another member's amount

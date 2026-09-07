@@ -292,7 +292,9 @@ describe('unimplemented club capabilities', () => {
     assert.equal(proposals.usesDemo, false);
     assert.equal(proposals.canRead, true);
     assert.equal(proposals.canCastVote, true);
-    assert.equal(proposals.canCreate, false);
+    assert.equal(proposals.canCreate, true);
+    assert.equal(proposals.canCreateStrategy, false);
+    assert.equal(proposals.canCreateContribution, true);
     assert.equal(proposals.openVoteChoicesHidden, true);
     assert.deepEqual(presentClubChatCapability(), {
       available: false,
