@@ -20,7 +20,7 @@
     "test:db": "supabase test db --local supabase/tests",
     "test:market-data": "node --experimental-strip-types --test supabase/functions/_shared/market-data/*.test.ts",
     "test:fx": "node --experimental-strip-types --test supabase/functions/_shared/fx/*.test.ts",
-    "test:packages": "node --experimental-strip-types --test apps/mobile/src/features/auth/*.test.ts apps/mobile/src/features/club-dashboard/*.test.ts apps/mobile/src/features/clubs/*.test.ts apps/mobile/src/features/home/*.test.ts apps/mobile/src/features/invest/*.test.ts apps/mobile/src/features/investments/*.test.ts apps/mobile/src/features/portfolio/*.test.ts apps/mobile/src/features/proposals/*.test.ts apps/mobile/src/lib/*.test.ts apps/mobile/src/navigation/*.test.ts apps/mobile/src/theme/*.test.ts apps/mobile/src/ui/*.test.ts"
+    "test:packages": "node --experimental-strip-types --test apps/mobile/src/features/auth/*.test.ts apps/mobile/src/features/club-dashboard/*.test.ts apps/mobile/src/features/clubs/*.test.ts apps/mobile/src/features/group-modes/*.test.ts apps/mobile/src/features/home/*.test.ts apps/mobile/src/features/invest/*.test.ts apps/mobile/src/features/investments/*.test.ts apps/mobile/src/features/portfolio/*.test.ts apps/mobile/src/features/proposals/*.test.ts apps/mobile/src/lib/*.test.ts apps/mobile/src/navigation/*.test.ts apps/mobile/src/theme/*.test.ts apps/mobile/src/ui/*.test.ts"
   },
   "devDependencies": {
     "supabase": "2.116.0"

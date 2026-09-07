@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router';
+import { Stack, useSegments } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -9,14 +9,21 @@ import { ProfileProvider, useProfile } from '@/features/profile/ProfileProvider'
 import { ThemeProvider } from '@/theme';
 
 export default function RootLayout() {
+  const segments = useSegments();
+  const isDevelopmentGallery = __DEV__ && segments[0] === 'dev';
+
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <AuthProvider>
-          <ProfileProvider>
-            <RootNavigation />
-          </ProfileProvider>
-        </AuthProvider>
+        {isDevelopmentGallery ? (
+          <Stack screenOptions={{ headerShown: false }} />
+        ) : (
+          <AuthProvider>
+            <ProfileProvider>
+              <RootNavigation />
+            </ProfileProvider>
+          </AuthProvider>
+        )}
       </ThemeProvider>
     </SafeAreaProvider>
   );
