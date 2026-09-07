@@ -1,20 +1,14 @@
-import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 
 import { useTheme } from '@/theme';
-import { AllocationBar, AppText, Button, Screen, TextField } from '@/ui';
+import { AppText, Button, Screen, SelectableOptionCard, TextField } from '@/ui';
 
+import { CreateClubStepHeader } from './CreateClubStepHeader';
 import { InvestmentStylePicker } from './InvestmentStylePicker';
-import {
-  CURATED_INVESTMENT_PACKAGES,
-  getCuratedPackage,
-  packageExposureSlices,
-  packageHoldingLines,
-  type CuratedPackageId,
-} from './curatedInvestmentPackages';
+import { CURATED_INVESTMENT_PACKAGES, type CuratedPackageId } from './curatedInvestmentPackages';
 import type { ContributionPolicyMode } from './contributionPolicy';
 import {
   advanceCreateClubStep,
@@ -22,13 +16,17 @@ import {
   canSubmitCreateClub,
   createClubRequest,
   previousCreateClubStep,
-  reviewPackageSummary,
-  trimmedClubName,
   type CreateClubStep,
 } from './createClubWizard';
 import { CLUB_NAME_MAX_LENGTH } from './genesisStrategy';
-import { GOVERNANCE_OPTIONS, governanceLabel, type GovernanceThresholdKind } from './governance';
-import { CONTRIBUTION_STYLE_OPTIONS, contributionStyleLabel } from './presentContribution';
+import type { GovernanceThresholdKind } from './governance';
+import {
+  presentCreateClubAmountPreview,
+  presentCreateClubContributionOptions,
+  presentCreateClubContinue,
+  presentCreateClubGovernanceOptions,
+  presentCreateClubReview,
+} from './presentCreateClub';
 import { attachClub, createClub, useClubs } from './useClubs';
 
 export function CreateClubScreen() {
@@ -42,6 +40,7 @@ export function CreateClubScreen() {
   const [contributionMode, setContributionMode] = useState<ContributionPolicyMode | null>(null);
   const [equalAmountInput, setEqualAmountInput] = useState('');
   const [creatorFlexibleAmountInput, setCreatorFlexibleAmountInput] = useState('');
+  const [showReviewHoldings, setShowReviewHoldings] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const createdClubIdRef = useRef<string | null>(null);
@@ -55,8 +54,12 @@ export function CreateClubScreen() {
     equalAmountInput,
     creatorFlexibleAmountInput,
   };
-  const selectedPackage = packageId ? getCuratedPackage(packageId) : null;
-  const review = packageId ? reviewPackageSummary(packageId) : null;
+  const continueState = presentCreateClubContinue(draft);
+  const review = step === 'review' && packageId && contributionMode ? presentCreateClubReview(draft) : null;
+  const contributionOptions = presentCreateClubContributionOptions();
+  const governanceOptions = presentCreateClubGovernanceOptions();
+  const equalAmountPreview = presentCreateClubAmountPreview(equalAmountInput);
+  const flexibleAmountPreview = presentCreateClubAmountPreview(creatorFlexibleAmountInput);
 
   const goBack = () => {
     if (isSubmitting) {
@@ -72,6 +75,14 @@ export function CreateClubScreen() {
       return;
     }
     router.replace('/club');
+  };
+
+  const goNext = () => {
+    if (!canContinueCreateClub(draft)) {
+      return;
+    }
+    setError(null);
+    setStep(advanceCreateClubStep(step));
   };
 
   const onCreate = async () => {
@@ -100,34 +111,30 @@ export function CreateClubScreen() {
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Screen contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl }}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Back"
-            onPress={goBack}
-            hitSlop={10}
-            style={({ pressed }) => ({ marginTop: spacing.md, opacity: pressed ? 0.7 : 1, alignSelf: 'flex-start' })}
-          >
-            <Feather name="chevron-left" size={24} color={colors.textPrimary} />
-          </Pressable>
+          <CreateClubStepHeader
+            step={step}
+            onBack={goBack}
+            backDisabled={isSubmitting}
+            supporting={review?.clubName}
+            supportingEmphasis={step === 'review'}
+          />
 
           {step === 'name' ? (
             <View style={{ marginTop: spacing.xl }}>
-              <AppText variant="title" accessibilityRole="header">
-                Club name
-              </AppText>
-              <View style={{ marginTop: spacing.lg }}>
-                <TextField
-                  label="Name"
-                  value={name}
-                  onChangeText={setName}
-                  autoCapitalize="words"
-                  autoCorrect={false}
-                  maxLength={CLUB_NAME_MAX_LENGTH}
-                  error={Boolean(error)}
-                  editable={!isSubmitting}
-                  accessibilityLabel="Club name"
-                />
-              </View>
+              <TextField
+                label="Club name"
+                value={name}
+                onChangeText={setName}
+                autoCapitalize="words"
+                autoCorrect={false}
+                maxLength={CLUB_NAME_MAX_LENGTH}
+                error={Boolean(error)}
+                editable={!isSubmitting}
+                accessibilityLabel="Club name"
+                returnKeyType="done"
+                blurOnSubmit
+                onSubmitEditing={goNext}
+              />
               {error ? (
                 <AppText variant="meta" color="negative" style={{ marginTop: spacing.sm }}>
                   {error}
@@ -135,173 +142,125 @@ export function CreateClubScreen() {
               ) : null}
               <View style={{ marginTop: spacing.xl }}>
                 <Button
-                  label="Continue"
+                  label={continueState.label}
                   variant="primary"
                   block
-                  disabled={!canContinueCreateClub(draft)}
-                  onPress={() => {
-                    setError(null);
-                    setStep(advanceCreateClubStep('name'));
-                  }}
+                  disabled={!continueState.enabled}
+                  onPress={goNext}
                 />
               </View>
             </View>
           ) : null}
 
           {step === 'governance' ? (
-            <View style={{ marginTop: spacing.xl }}>
-              <AppText variant="title" accessibilityRole="header">
-                Governance
-              </AppText>
-              <View style={{ marginTop: spacing.lg }}>
-                {GOVERNANCE_OPTIONS.map((option) => {
-                  const selected = option.value === governance;
-                  return (
-                    <Pressable
-                      key={option.value}
-                      accessibilityRole="radio"
-                      accessibilityState={{ selected }}
-                      accessibilityLabel={option.label}
-                      onPress={() => setGovernance(option.value)}
-                      style={({ pressed }) => ({
-                        paddingVertical: spacing.md,
-                        opacity: pressed ? 0.7 : 1,
-                      })}
-                    >
-                      <AppText variant="bodyStrong" color={selected ? 'primary' : 'secondary'}>
-                        {option.label}
-                      </AppText>
-                      <AppText variant="meta" color="secondary" style={{ marginTop: 4 }}>
-                        {option.description}
-                      </AppText>
-                    </Pressable>
-                  );
-                })}
-              </View>
+            <View style={{ marginTop: spacing.lg }}>
+              {governanceOptions.map((option, index) => (
+                <View key={option.value} style={{ marginTop: index === 0 ? 0 : spacing.sm }}>
+                  <SelectableOptionCard
+                    title={option.title}
+                    description={option.description}
+                    caption={option.guidance}
+                    selected={option.value === governance}
+                    accessibilityLabel={option.title}
+                    onPress={() => {
+                      setError(null);
+                      setGovernance(option.value);
+                    }}
+                  />
+                </View>
+              ))}
               <View style={{ marginTop: spacing.xl }}>
-                <Button
-                  label="Continue"
-                  variant="primary"
-                  block
-                  onPress={() => {
-                    setError(null);
-                    setStep(advanceCreateClubStep('governance'));
-                  }}
-                />
+                <Button label={continueState.label} variant="primary" block onPress={goNext} />
               </View>
             </View>
           ) : null}
 
           {step === 'style' ? (
-            <View style={{ marginTop: spacing.xl }}>
-              <AppText variant="title" accessibilityRole="header">
-                Investment style
-              </AppText>
-              <AppText variant="body" color="secondary" style={{ marginTop: spacing.sm }}>
-                Choose how the group wants to spread its investments. These are all stock-market mixes.
-              </AppText>
-              <View style={{ marginTop: spacing.xl }}>
-                <InvestmentStylePicker
-                  packages={CURATED_INVESTMENT_PACKAGES}
-                  selectedId={packageId}
-                  onSelect={(id) => {
-                    setError(null);
-                    setPackageId(id);
-                  }}
-                  disabled={isSubmitting}
-                />
-              </View>
+            <View style={{ marginTop: spacing.lg }}>
+              <InvestmentStylePicker
+                packages={CURATED_INVESTMENT_PACKAGES}
+                selectedId={packageId}
+                onSelect={(id) => {
+                  setError(null);
+                  setPackageId(id);
+                }}
+                disabled={isSubmitting}
+              />
               <View style={{ marginTop: spacing.xl }}>
                 <Button
-                  label="Continue"
+                  label={continueState.label}
                   variant="primary"
                   block
-                  disabled={!canContinueCreateClub(draft)}
-                  onPress={() => {
-                    setError(null);
-                    setStep(advanceCreateClubStep('style'));
-                  }}
+                  disabled={!continueState.enabled}
+                  onPress={goNext}
                 />
               </View>
             </View>
           ) : null}
 
           {step === 'contribution' ? (
-            <View style={{ marginTop: spacing.xl }}>
-              <AppText variant="title" accessibilityRole="header">
-                Contribution style
-              </AppText>
-              <AppText variant="body" color="secondary" style={{ marginTop: spacing.sm }}>
-                Choose how members contribute on each Investment Day.
-              </AppText>
-              <View style={{ marginTop: spacing.lg }}>
-                {CONTRIBUTION_STYLE_OPTIONS.map((option) => {
-                  const selected = option.value === contributionMode;
-                  return (
-                    <Pressable
-                      key={option.value}
-                      accessibilityRole="radio"
-                      accessibilityState={{ selected }}
-                      accessibilityLabel={option.label}
+            <View style={{ marginTop: spacing.lg }}>
+              {contributionOptions.map((option, index) => {
+                const selected = option.value === contributionMode;
+                return (
+                  <View key={option.value} style={{ marginTop: index === 0 ? 0 : spacing.sm }}>
+                    <SelectableOptionCard
+                      title={option.title}
+                      description={option.description}
+                      selected={selected}
+                      accessibilityLabel={option.title}
                       onPress={() => {
                         setError(null);
                         setContributionMode(option.value);
                       }}
-                      style={({ pressed }) => ({
-                        paddingVertical: spacing.md,
-                        opacity: pressed ? 0.7 : 1,
-                      })}
                     >
-                      <AppText variant="bodyStrong" color={selected ? 'primary' : 'secondary'}>
-                        {option.label}
-                      </AppText>
-                      <AppText variant="meta" color="secondary" style={{ marginTop: 4 }}>
-                        {option.description}
-                      </AppText>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              {contributionMode === 'equal' ? (
-                <View style={{ marginTop: spacing.lg }}>
-                  <TextField
-                    label="Amount"
-                    value={equalAmountInput}
-                    onChangeText={setEqualAmountInput}
-                    keyboardType="number-pad"
-                    inputMode="numeric"
-                    autoCorrect={false}
-                    editable={!isSubmitting}
-                    error={Boolean(error)}
-                    accessibilityLabel="Shared amount in kroner"
-                    placeholder="2000"
-                  />
-                  <AppText variant="meta" color="secondary" style={{ marginTop: spacing.xs }}>
-                    kroner per Investment Day
-                  </AppText>
-                </View>
-              ) : null}
-
-              {contributionMode === 'flexible' ? (
-                <View style={{ marginTop: spacing.lg }}>
-                  <TextField
-                    label="Your amount"
-                    value={creatorFlexibleAmountInput}
-                    onChangeText={setCreatorFlexibleAmountInput}
-                    keyboardType="number-pad"
-                    inputMode="numeric"
-                    autoCorrect={false}
-                    editable={!isSubmitting}
-                    error={Boolean(error)}
-                    accessibilityLabel="Your amount in kroner"
-                    placeholder="2000"
-                  />
-                  <AppText variant="meta" color="secondary" style={{ marginTop: spacing.xs }}>
-                    Only you can see your amount.
-                  </AppText>
-                </View>
-              ) : null}
+                      {selected && option.value === 'equal' ? (
+                        <View>
+                          <TextField
+                            label={option.amountLabel}
+                            value={equalAmountInput}
+                            onChangeText={setEqualAmountInput}
+                            keyboardType="number-pad"
+                            inputMode="numeric"
+                            autoCorrect={false}
+                            editable={!isSubmitting}
+                            error={Boolean(error)}
+                            accessibilityLabel="Club amount in kroner"
+                          />
+                          <AppText variant="supporting" style={{ marginTop: spacing.xs }}>
+                            {equalAmountPreview
+                              ? `${equalAmountPreview} ${option.amountHint}`
+                              : option.amountHint}
+                          </AppText>
+                        </View>
+                      ) : null}
+                      {selected && option.value === 'flexible' ? (
+                        <View>
+                          <TextField
+                            label={option.amountLabel}
+                            value={creatorFlexibleAmountInput}
+                            onChangeText={setCreatorFlexibleAmountInput}
+                            keyboardType="number-pad"
+                            inputMode="numeric"
+                            autoCorrect={false}
+                            editable={!isSubmitting}
+                            error={Boolean(error)}
+                            accessibilityLabel="Your amount in kroner"
+                          />
+                          {flexibleAmountPreview ? (
+                            <AppText variant="supporting" style={{ marginTop: spacing.xs }}>
+                              {flexibleAmountPreview}
+                            </AppText>
+                          ) : null}
+                          <AppText variant="supporting" style={{ marginTop: spacing.xs }}>
+                            {option.privacy}
+                          </AppText>
+                        </View>
+                      ) : null}
+                    </SelectableOptionCard>
+                  </View>
+                );
+              })}
 
               {error ? (
                 <AppText variant="meta" color="negative" style={{ marginTop: spacing.sm }}>
@@ -311,93 +270,73 @@ export function CreateClubScreen() {
 
               <View style={{ marginTop: spacing.xl }}>
                 <Button
-                  label="Continue"
+                  label={continueState.label}
                   variant="primary"
                   block
-                  disabled={!canContinueCreateClub(draft)}
-                  onPress={() => {
-                    setError(null);
-                    setStep(advanceCreateClubStep('contribution'));
-                  }}
+                  disabled={!continueState.enabled}
+                  onPress={goNext}
                 />
               </View>
             </View>
           ) : null}
 
-          {step === 'review' && selectedPackage && review ? (
-            <View style={{ marginTop: spacing.xl }}>
-              <AppText variant="title" accessibilityRole="header">
-                Review
-              </AppText>
-              <AppText variant="body" color="secondary" style={{ marginTop: spacing.sm }}>
-                {trimmedClubName(name)} · {review.baseCurrency}
-              </AppText>
-
-              <View style={{ marginTop: spacing.xl }}>
-                <AppText variant="sectionTitle">Governance</AppText>
-                <AppText variant="body" style={{ marginTop: spacing.sm }}>
-                  {governanceLabel(governance)}
+          {step === 'review' && review ? (
+            <View style={{ marginTop: spacing.lg }}>
+              <ReviewSection
+                label={review.investmentStyleLabel}
+                value={review.investmentName}
+                details={review.exposureLines}
+              />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={showReviewHoldings ? 'Hide investments' : 'View investments'}
+                onPress={() => setShowReviewHoldings((open) => !open)}
+                hitSlop={8}
+                style={({ pressed }) => ({
+                  marginTop: spacing.sm,
+                  alignSelf: 'flex-start',
+                  opacity: pressed ? 0.7 : 1,
+                })}
+              >
+                <AppText variant="meta" color="accent">
+                  {showReviewHoldings ? 'Hide investments' : 'View investments'}
                 </AppText>
-              </View>
+              </Pressable>
+              {showReviewHoldings
+                ? review.holdings.map((holding) => (
+                    <AppText key={holding.ticker} variant="supporting" style={{ marginTop: 4 }}>
+                      {holding.line}
+                    </AppText>
+                  ))
+                : null}
 
-              <View style={{ marginTop: spacing.xl }}>
-                <AppText variant="sectionTitle">Contribution style</AppText>
-                <AppText variant="bodyStrong" style={{ marginTop: spacing.sm }}>
-                  {contributionMode ? contributionStyleLabel(contributionMode) : ''}
-                </AppText>
-                {contributionMode === 'equal' ? (
-                  <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
-                    {`${equalAmountInput} kr per Investment Day`}
-                  </AppText>
-                ) : (
-                  <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
-                    Your amount: {creatorFlexibleAmountInput} kr. Only you can see this amount.
-                  </AppText>
+              <ReviewDivider />
+
+              <ReviewSection
+                label={review.contributionStyleLabel}
+                value={review.contributionName}
+                details={[review.contributionDetail, review.contributionPrivacy].filter(
+                  (line): line is string => Boolean(line),
                 )}
-              </View>
+              />
 
-              <View style={{ marginTop: spacing.xl }}>
-                <AppText variant="sectionTitle">Investment style</AppText>
-                <AppText variant="bodyStrong" style={{ marginTop: spacing.sm }}>
-                  {selectedPackage.displayName}
-                </AppText>
-                <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
-                  {selectedPackage.shortDescription}
-                </AppText>
-                <AppText variant="meta" color="secondary" style={{ marginTop: spacing.sm }}>
-                  {review.preview}
-                </AppText>
-              </View>
+              <ReviewDivider />
 
-              <View style={{ marginTop: spacing.xl }}>
-                <AppText variant="sectionTitle">How the money is spread</AppText>
-                <View style={{ marginTop: spacing.md }}>
-                  <AllocationBar allocations={packageExposureSlices(selectedPackage)} />
-                </View>
-              </View>
-
-              <View style={{ marginTop: spacing.xl }}>
-                <AppText variant="sectionTitle">What you invest in</AppText>
-                <View style={{ marginTop: spacing.md }}>
-                  {packageHoldingLines(selectedPackage).map((holding) => (
-                    <View key={holding.id} style={{ marginBottom: spacing.sm }}>
-                      <AppText variant="body">{holding.name}</AppText>
-                      <AppText variant="meta" color="secondary">
-                        {holding.ticker}
-                      </AppText>
-                    </View>
-                  ))}
-                </View>
-              </View>
+              <ReviewSection label={review.governanceLabel} value={review.governanceName} />
 
               {error ? (
-                <AppText variant="meta" color="negative" style={{ marginTop: spacing.md }} accessibilityLiveRegion="polite">
+                <AppText
+                  variant="meta"
+                  color="negative"
+                  style={{ marginTop: spacing.md }}
+                  accessibilityLiveRegion="polite"
+                >
                   {error}
                 </AppText>
               ) : null}
               <View style={{ marginTop: spacing.xl }}>
                 <Button
-                  label={isSubmitting ? 'Creating…' : 'Create club'}
+                  label={isSubmitting ? 'Creating…' : continueState.label}
                   variant="primary"
                   block
                   disabled={isSubmitting}
@@ -412,5 +351,45 @@ export function CreateClubScreen() {
         </Screen>
       </KeyboardAvoidingView>
     </View>
+  );
+}
+
+function ReviewSection({
+  label,
+  value,
+  details = [],
+}: {
+  label: string;
+  value: string;
+  details?: readonly string[];
+}) {
+  const { spacing } = useTheme();
+
+  return (
+    <View>
+      <AppText variant="label">{label}</AppText>
+      <AppText variant="subtitle" style={{ marginTop: 4 }}>
+        {value}
+      </AppText>
+      {details.map((line) => (
+        <AppText key={line} variant="supporting" style={{ marginTop: spacing.xs }}>
+          {line}
+        </AppText>
+      ))}
+    </View>
+  );
+}
+
+function ReviewDivider() {
+  const { colors, spacing } = useTheme();
+
+  return (
+    <View
+      style={{
+        height: 1,
+        backgroundColor: colors.border,
+        marginVertical: spacing.lg,
+      }}
+    />
   );
 }

@@ -1,15 +1,15 @@
+import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { useTheme } from '@/theme';
-import { AllocationBar, AppText } from '@/ui';
+import { AllocationBar, AppText, SelectableOptionCard } from '@/ui';
 
 import {
-  compactAllocationPreview,
   packageExposureSlices,
-  packageHoldingLines,
   type CuratedInvestmentPackage,
   type CuratedPackageId,
 } from './curatedInvestmentPackages';
+import { presentCreateClubInvestmentOption } from './presentCreateClub';
 
 interface InvestmentStylePickerProps {
   packages: readonly CuratedInvestmentPackage[];
@@ -24,66 +24,67 @@ export function InvestmentStylePicker({
   onSelect,
   disabled = false,
 }: InvestmentStylePickerProps) {
-  const { colors, spacing, radius } = useTheme();
+  const { spacing } = useTheme();
+  const [holdingsOpenId, setHoldingsOpenId] = useState<CuratedPackageId | null>(null);
 
   return (
     <View>
       {packages.map((item, index) => {
         const selected = item.id === selectedId;
+        const presented = presentCreateClubInvestmentOption(item, selected);
+        const holdingsOpen = selected && holdingsOpenId === item.id;
+
         return (
-          <Pressable
-            key={item.id}
-            accessibilityRole="radio"
-            accessibilityState={{ selected, disabled }}
-            accessibilityLabel={`${item.displayName}. ${item.relativePosition}. ${item.shortDescription}`}
-            disabled={disabled}
-            onPress={() => onSelect(item.id)}
-            style={({ pressed }) => ({
-              marginTop: index === 0 ? 0 : spacing.md,
-              padding: spacing.lg,
-              borderRadius: radius.lg,
-              borderWidth: 1,
-              borderColor: selected ? colors.accent : colors.border,
-              backgroundColor: selected ? colors.accentMuted : colors.surface,
-              opacity: pressed && !disabled ? 0.85 : 1,
-            })}
-          >
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <AppText variant="bodyStrong" color={selected ? 'primary' : 'primary'} style={{ flex: 1, paddingRight: spacing.sm }}>
-                {item.displayName}
-              </AppText>
-              <AppText variant="meta" color="secondary">
-                {item.relativePosition}
-              </AppText>
-            </View>
-            <AppText variant="body" color="secondary" style={{ marginTop: spacing.sm }}>
-              {item.shortDescription}
-            </AppText>
-            <AppText variant="meta" color="secondary" style={{ marginTop: spacing.sm }}>
-              {compactAllocationPreview(item)}
-            </AppText>
-            {selected ? (
-              <View style={{ marginTop: spacing.lg }}>
-                <AppText variant="sectionTitle">How the money is spread</AppText>
-                <View style={{ marginTop: spacing.md }}>
-                  <AllocationBar allocations={packageExposureSlices(item)} />
-                </View>
-                <AppText variant="sectionTitle" style={{ marginTop: spacing.xl }}>
-                  What you invest in
-                </AppText>
-                <View style={{ marginTop: spacing.md }}>
-                  {packageHoldingLines(item).map((holding) => (
-                    <View key={holding.id} style={{ marginBottom: spacing.sm }}>
-                      <AppText variant="body">{holding.name}</AppText>
-                      <AppText variant="meta" color="secondary">
-                        {holding.ticker}
-                      </AppText>
-                    </View>
+          <View key={item.id} style={{ marginTop: index === 0 ? 0 : spacing.md }}>
+            <SelectableOptionCard
+              title={presented.title}
+              description={selected ? null : presented.description}
+              caption={selected ? null : presented.position}
+              selected={selected}
+              disabled={disabled}
+              accessibilityLabel={`${presented.title}. ${presented.position}. ${presented.description}`}
+              onPress={() => onSelect(item.id)}
+            >
+              {selected ? (
+                <View>
+                  {presented.exposureLines.map((line) => (
+                    <AppText key={line} variant="supporting" style={{ marginTop: 2 }}>
+                      {line}
+                    </AppText>
                   ))}
+                  <View style={{ marginTop: spacing.sm }}>
+                    <AllocationBar allocations={packageExposureSlices(item)} showLegend={false} />
+                  </View>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={holdingsOpen ? 'Hide investments' : 'See investments'}
+                    onPress={() => {
+                      setHoldingsOpenId(holdingsOpen ? null : item.id);
+                    }}
+                    hitSlop={8}
+                    style={({ pressed }) => ({
+                      marginTop: spacing.sm,
+                      alignSelf: 'flex-start',
+                      opacity: pressed ? 0.7 : 1,
+                    })}
+                  >
+                    <AppText variant="meta" color="accent">
+                      {holdingsOpen ? 'Hide investments' : 'See investments'}
+                    </AppText>
+                  </Pressable>
+                  {holdingsOpen
+                    ? presented.holdings.map((holding) => (
+                        <AppText key={holding.ticker} variant="supporting" style={{ marginTop: 4 }}>
+                          {holding.line}
+                        </AppText>
+                      ))
+                    : null}
                 </View>
-              </View>
-            ) : null}
-          </Pressable>
+              ) : (
+                <AppText variant="supporting">{presented.allocationPreview}</AppText>
+              )}
+            </SelectableOptionCard>
+          </View>
         );
       })}
     </View>
