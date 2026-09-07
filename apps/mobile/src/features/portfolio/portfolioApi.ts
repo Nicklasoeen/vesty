@@ -47,6 +47,7 @@ export interface EstimatedPosition {
   name: string;
   ticker: string | null;
   totalInvestedMinor: number;
+  amountProvenance: string | null;
   exactQuantity: string | null;
   quantityStatus: 'complete' | 'partial' | 'unavailable';
   valuationConfidence: PortfolioValuationConfidence;
@@ -165,7 +166,7 @@ export async function fetchEstimatedPositions(clubId: string): Promise<Estimated
   const result = await supabase
     .from('member_estimated_positions_v1')
     .select(
-      'investment_target_id, target_name, target_ticker, total_invested_minor, exact_quantity, exact_lot_count, lot_count, valuation_confidence, estimated_current_value_minor',
+      'investment_target_id, target_name, target_ticker, total_invested_minor, amount_provenance, exact_quantity, exact_lot_count, lot_count, valuation_confidence, estimated_current_value_minor',
     )
     .eq('club_id', clubId);
 
@@ -194,6 +195,7 @@ export async function fetchEstimatedPositions(clubId: string): Promise<Estimated
         name,
         ticker: typeof row.target_ticker === 'string' ? row.target_ticker : null,
         totalInvestedMinor,
+        amountProvenance: typeof row.amount_provenance === 'string' ? row.amount_provenance : null,
         exactQuantity: asDecimalString(row.exact_quantity),
         quantityStatus,
         valuationConfidence: isEstimatedPortfolioConfidence(String(row.valuation_confidence ?? ''))

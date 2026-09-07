@@ -1426,7 +1426,7 @@ select extensions.is(
 );
 
 select extensions.is(
-  tests.statement_row_count(
+  tests.statement_sqlstate(
     $statement$
       update public.member_cycle_participations
       set outcome = 'confirmed',
@@ -1435,8 +1435,8 @@ select extensions.is(
       where id = '90000000-0000-4000-8000-000000000002'
     $statement$
   ),
-  1::bigint,
-  '41. Bob can report his own open participation'
+  '42501',
+  '41. Bob cannot report his own open participation through RLS'
 );
 
 select extensions.is(
@@ -1454,19 +1454,19 @@ select extensions.is(
 );
 
 select extensions.is(
-  tests.statement_row_count(
+  tests.statement_sqlstate(
     $statement$
       update public.member_cycle_participations
       set outcome = 'failed', corrected_at = now()
       where id = '90000000-0000-4000-8000-000000000002'
     $statement$
   ),
-  1::bigint,
-  'Bob can correct his own report while the cycle remains open'
+  '42501',
+  'Bob cannot correct his own report through RLS'
 );
 
 select extensions.is(
-  tests.statement_row_count(
+  tests.statement_sqlstate(
     $statement$
       update public.member_cycle_participations
       set outcome = 'confirmed',
@@ -1475,12 +1475,12 @@ select extensions.is(
       where id = '90000000-0000-4000-8000-000000000001'
     $statement$
   ),
-  0::bigint,
+  '42501',
   '42. Bob cannot modify Alice participation'
 );
 
 select extensions.is(
-  tests.statement_row_count(
+  tests.statement_sqlstate(
     $statement$
       update public.member_cycle_participations
       set outcome = 'failed',
@@ -1489,7 +1489,7 @@ select extensions.is(
       where id = '90000000-0000-4000-8000-000000000003'
     $statement$
   ),
-  0::bigint,
+  '42501',
   '43. Bob cannot report after cycle completion'
 );
 

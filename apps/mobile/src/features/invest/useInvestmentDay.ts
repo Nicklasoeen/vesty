@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { isContributionSetupRequiredError } from '@/features/clubs/contributionPolicy';
 
-import { confirmInvestmentDay, ensureOpenInvestmentDay } from './api';
-import type { ExecutionReportInput } from './investmentDayReporting';
+import { isReportConflictError } from './investErrors';
+import { ensureOpenInvestmentDay, reportInvestmentDay } from './api';
+import { clientReportIdForCycle, type InvestmentDayReportRequest } from './investmentDayReport';
 import type { InvestmentDayPlan } from './types';
 
 export function useInvestmentDay(clubId: string | null): {
@@ -11,15 +12,22 @@ export function useInvestmentDay(clubId: string | null): {
   isLoading: boolean;
   error: string | null;
   setupRequired: boolean;
-  isConfirming: boolean;
+  isReporting: boolean;
   refresh: () => Promise<InvestmentDayPlan | null>;
-  confirm: (executionReports?: ExecutionReportInput[]) => Promise<InvestmentDayPlan>;
+  report: (
+    input: Omit<InvestmentDayReportRequest, 'clubId' | 'cycleId' | 'clientReportId'>,
+  ) => Promise<InvestmentDayPlan>;
 } {
   const [plan, setPlan] = useState<InvestmentDayPlan | null>(null);
   const [loadedClubId, setLoadedClubId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [setupRequired, setSetupRequired] = useState(false);
-  const [isConfirming, setIsConfirming] = useState(false);
+  const [isReporting, setIsReporting] = useState(false);
+  const clientReportIds = useRef<Record<string, string>>({});
+
+  const clientReportIdFor = useCallback((cycleId: string): string => {
+    return clientReportIdForCycle(clientReportIds.current, cycleId);
+  }, []);
 
   const refresh = useCallback(async (): Promise<InvestmentDayPlan | null> => {
     if (!clubId) {
@@ -81,42 +89,47 @@ export function useInvestmentDay(clubId: string | null): {
     };
   }, [clubId]);
 
-  const confirm = useCallback(async (
-    executionReports?: ExecutionReportInput[],
+  const report = useCallback(async (
+    input: Omit<InvestmentDayReportRequest, 'clubId' | 'cycleId' | 'clientReportId'>,
   ): Promise<InvestmentDayPlan> => {
     if (!plan || !clubId) {
-      throw new Error('Unable to confirm investments right now');
+      throw new Error('Unable to save this Investment Day report');
     }
 
-    setIsConfirming(true);
+    setIsReporting(true);
     setError(null);
 
     try {
-      const next = await confirmInvestmentDay({
+      const next = await reportInvestmentDay({
         clubId: plan.clubId,
         cycleId: plan.cycleId,
-        executionReports,
+        clientReportId: clientReportIdFor(plan.cycleId),
+        reportMode: input.reportMode,
+        outcome: input.outcome,
+        purchaseLines: input.purchaseLines,
       });
       setPlan(next);
       setLoadedClubId(clubId);
-      setIsConfirming(false);
+      setIsReporting(false);
       return next;
     } catch (caught) {
-      const reconciled = await ensureOpenInvestmentDay(plan.clubId).catch(() => null);
-      if (reconciled?.isCompleted) {
-        setPlan(reconciled);
-        setLoadedClubId(clubId);
-        setIsConfirming(false);
-        setError(null);
-        return reconciled;
+      if (!isReportConflictError(caught)) {
+        const reconciled = await ensureOpenInvestmentDay(plan.clubId).catch(() => null);
+        if (reconciled?.isCompleted && reconciled.cycleId === plan.cycleId) {
+          setPlan(reconciled);
+          setLoadedClubId(clubId);
+          setIsReporting(false);
+          setError(null);
+          return reconciled;
+        }
       }
 
-      setIsConfirming(false);
-      const message = caught instanceof Error ? caught.message : 'Unable to confirm investments right now';
+      setIsReporting(false);
+      const message = caught instanceof Error ? caught.message : 'Unable to save this Investment Day report';
       setError(message);
       throw new Error(message);
     }
-  }, [clubId, plan]);
+  }, [clientReportIdFor, clubId, plan]);
 
   const visiblePlan = clubId && loadedClubId === clubId ? plan : null;
   const visibleError = clubId && loadedClubId === clubId ? error : null;
@@ -128,8 +141,8 @@ export function useInvestmentDay(clubId: string | null): {
     isLoading,
     error: visibleError,
     setupRequired: visibleSetupRequired,
-    isConfirming,
+    isReporting,
     refresh,
-    confirm,
+    report,
   };
 }

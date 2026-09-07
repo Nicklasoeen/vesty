@@ -35,7 +35,7 @@ Entity and attribute names below are domain terminology, not a finalized physica
 15. Historical records are preserved when a member leaves or is removed, without preserving that person's access to the live club.
 16. Vesty records coordination intent and evidence quality honestly. A manual confirmation is a member report, not broker verification.
 17. Each electorate membership may cast at most one immutable vote. A submitted vote cannot be replaced.
-18. A participation report may be corrected by its member only while the InvestmentCycle is `OPEN`; normal member-facing edits stop when the cycle is `COMPLETED`.
+18. A completed Investment Day report is immutable through the member reporting RPC. Versioned correction of a finished report is remaining work and is not an unaudited overwrite.
 
 ## 3. Domain Map
 
@@ -577,7 +577,7 @@ CONFIRMED | SKIPPED | FAILED -> any other member-reported outcome
 UNVERIFIED -> VERIFIED
 ```
 
-V1 member actions produce `MEMBER_REPORTED` outcomes and remain unverified. While the cycle is `OPEN`, the member may correct their own outcome; the record keeps the latest report plus appropriate original-report and correction timestamps without introducing a revision ledger. Future external evidence may add verification and its own source without erasing or replacing the manual outcome.
+V1 member actions produce `MEMBER_REPORTED` outcomes and remain unverified. The member reporting RPC writes one completed report per membership and cycle. Retry with the same client report id is idempotent. A different payload is rejected. Unaudited overwrite and versioned correction are remaining work. Future external evidence may add verification and its own source without erasing or replacing the manual outcome.
 
 **Invariants:**
 
@@ -585,7 +585,7 @@ V1 member actions produce `MEMBER_REPORTED` outcomes and remain unverified. Whil
 - Expected amount and currency are frozen no later than `configuration_deadline_at`.
 - Historical expected amounts are never derived only from the member's current saving plan.
 - A member may report only their own participation.
-- Member-reported outcome corrections are allowed only while the cycle is `OPEN`.
+- A completed report cannot be overwritten with a different payload. Versioned correction is remaining work.
 - When the cycle becomes `COMPLETED`, the member-reported outcome is immutable through normal member-facing V1 flows.
 - A correction keeps `member_report_source = MEMBER_REPORTED`.
 - A manual confirmation must never set verification to `VERIFIED`.
@@ -1000,9 +1000,9 @@ A member may set their own participation outcome to `CONFIRMED`, `SKIPPED`, or `
 
 ### Member report corrections
 
-While the InvestmentCycle is `OPEN`, a member may correct their own report between `CONFIRMED`, `SKIPPED`, and `FAILED`. `MemberCycleParticipation` stores the latest report and appropriate initial-report and correction timestamps; V1 does not require event sourcing or a revision ledger.
+A completed `report_investment_day_v1` payload cannot be replaced in this round. Retry with the same client report id and fingerprint returns the existing report. A different payload raises `vesty.report_conflict` and changes no data. Versioned correction of a finished report is remaining work.
 
-When the cycle becomes `COMPLETED`, its member reports become immutable through normal member-facing flows. Post-completion support corrections or reconciliation are future concerns and are not designed in V1. A corrected report remains `MEMBER_REPORTED` and does not gain independent verification.
+When the cycle becomes `COMPLETED`, its member reports remain immutable through normal member-facing flows. Post-completion support corrections or reconciliation are future concerns. A member report remains `MEMBER_REPORTED` and does not gain independent verification.
 
 ### Future broker verification
 
@@ -1096,9 +1096,9 @@ This section defines intended authority, not RLS implementation.
 ### Readiness and cycle participation
 
 - Each active owner or member may set only their own `StrategyReadiness`.
-- Each active owner or member may report only their own `MemberCycleParticipation` and confirm only their own Investment Day transactions.
-- A member may correct their own report while the cycle is `OPEN`.
-- Normal member-facing correction ends when the cycle becomes `COMPLETED`.
+- Each active owner or member may report only their own `MemberCycleParticipation` and confirm only their own Investment Day transactions through `report_investment_day_v1`.
+- A completed report cannot be overwritten with a different payload. Versioned correction is remaining work.
+- Normal member-facing correction of a finished report is not available in this round.
 - The owner cannot report or confirm on another member's behalf.
 - Exact amounts and private notes remain visible only to the affected member, while coarse status/count aggregates may be visible to active club members.
 

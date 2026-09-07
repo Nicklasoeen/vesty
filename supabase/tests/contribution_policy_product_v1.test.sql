@@ -830,14 +830,18 @@ select extensions.is(
 
 create temporary table confirm_v1 as
 select *
-from public.confirm_investment_day_v1(
+from public.report_investment_day_v1(
   (select club_id from legacy_v1_club),
-  (select cycle_id from legacy_day)
+  (select cycle_id from legacy_day),
+  '84000000-0000-4000-8000-000000000001'::uuid,
+  'as_planned',
+  'confirmed',
+  '[]'::jsonb
 );
 
 select extensions.ok(
   exists (select 1 from confirm_v1),
-  'confirm_investment_day_v1 still succeeds'
+  'report_investment_day_v1 still succeeds'
 );
 
 select extensions.is(
@@ -868,9 +872,12 @@ from public.ensure_open_investment_day_v1((select club_id from legacy_v1_club));
 
 create temporary table confirm_v2 as
 select *
-from public.confirm_investment_day_v2(
+from public.report_investment_day_v1(
   (select club_id from legacy_v1_club),
   (select cycle_id from legacy_day_v2),
+  '84000000-0000-4000-8000-000000000002'::uuid,
+  'as_planned',
+  'confirmed',
   jsonb_build_array(
     jsonb_build_object(
       'investment_target_id', '31000000-0000-4000-8000-000000000011',
@@ -889,7 +896,7 @@ from public.confirm_investment_day_v2(
 
 select extensions.ok(
   exists (select 1 from confirm_v2),
-  'confirm_investment_day_v2 still succeeds'
+  'as_planned report with optional quantity still succeeds'
 );
 
 select extensions.is(

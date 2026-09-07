@@ -247,9 +247,9 @@ Daily NAV is delayed. Weekends and a short holiday gap are not treated as provid
 
 ## Quantity and valuation
 
-**Standard V1 Investment Day is amount-only.** The member confirms “I've invested.” Quantity is not required. `confirm_investment_day_v1` writes the planned NOK contribution with `quantity = null`.
+**Standard Investment Day reporting is explicit.** After returning from the broker, the member attests the frozen plan, reports different amounts, skips, or defers a pending order. `report_investment_day_v1` writes purchase lines only for `confirmed`. Quantity is optional and is never inferred from a later Marketstack close. The planned amount is never treated as cost when only quantity is given. Historical confirm v1/v2 amounts stay labelled `legacy_plan_assumed`.
 
-Exact holdings are an **optional** later path. `confirm_investment_day_v2` can fill member-reported quantity on those rows. Quantity is never inferred from a later Marketstack close. `amount / latest price` is forbidden.
+Quantity is never inferred from a later Marketstack close. `amount / latest price` is forbidden. There is no second write path after a completed report.
 
 Confidence states (product, not extra schema):
 

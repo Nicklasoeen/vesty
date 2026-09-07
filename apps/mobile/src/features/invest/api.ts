@@ -2,7 +2,9 @@ import { ContributionSetupRequiredError } from '@/features/clubs/contributionPol
 import { firstRpcRow, requireString } from '@/features/clubs/types';
 import { supabase } from '@/lib/supabase/client';
 
+import { asAmountProvenance, type AmountProvenance } from './amountProvenance';
 import { extractInvestErrorCode, mapInvestError } from './investErrors';
+import { isInvestmentDayClosed, toRpcPurchaseLines, type InvestmentDayReportRequest } from './investmentDayReport';
 import type {
   InvestmentDayAllocation,
   InvestmentDayPlan,
@@ -96,6 +98,7 @@ function parseTransactions(value: unknown): InvestmentDayTransaction[] {
           transactionType: requireString(row, 'transaction_type'),
           source: requireString(row, 'source'),
           verificationStatus: requireString(row, 'verification_status'),
+          amountProvenance: typeof row.amount_provenance === 'string' ? row.amount_provenance : null,
           quantity: asDecimalString(row.quantity),
           executionUnitPrice: asDecimalString(row.execution_unit_price),
           executionUnitPriceCurrency:
@@ -131,7 +134,7 @@ function parsePlan(data: unknown): InvestmentDayPlan {
     currency: requireString(row, 'currency'),
     allocations: parseAllocations(row.allocations),
     transactions: parseTransactions(row.transactions),
-    isCompleted: participationOutcome === 'confirmed',
+    isCompleted: isInvestmentDayClosed(participationOutcome),
   };
 }
 
@@ -154,57 +157,41 @@ export async function ensureOpenInvestmentDay(clubId: string): Promise<Investmen
   }
 }
 
-export interface ConfirmInvestmentDayInput {
-  clubId: string;
-  cycleId: string;
-  executionReports?: {
-    investmentTargetId: string;
-    quantity: string;
-    executionUnitPrice?: string;
-  }[];
-}
-
-export async function confirmInvestmentDay(
-  input: ConfirmInvestmentDayInput,
+export async function reportInvestmentDay(
+  input: InvestmentDayReportRequest,
 ): Promise<InvestmentDayPlan> {
-  const result = input.executionReports
-    ? await supabase.rpc('confirm_investment_day_v2', {
-        p_club_id: input.clubId,
-        p_cycle_id: input.cycleId,
-        p_execution_reports: input.executionReports.map((report) => ({
-          investment_target_id: report.investmentTargetId,
-          quantity: report.quantity,
-          ...(report.executionUnitPrice
-            ? { execution_unit_price: report.executionUnitPrice }
-            : {}),
-        })),
-      })
-    : await supabase.rpc('confirm_investment_day_v1', {
-        p_club_id: input.clubId,
-        p_cycle_id: input.cycleId,
-      });
+  const result = await supabase.rpc('report_investment_day_v1', {
+    p_club_id: input.clubId,
+    p_cycle_id: input.cycleId,
+    p_client_report_id: input.clientReportId,
+    p_report_mode: input.reportMode,
+    p_outcome: input.outcome,
+    p_purchase_lines: toRpcPurchaseLines(input.purchaseLines),
+  });
 
   if (result.error) {
     throw new Error(
-      mapInvestError(
-        result.error,
-        'Unable to confirm investments right now',
-        input.executionReports ? 'confirm_investment_day_v2' : 'confirm_investment_day_v1',
-      ),
+      mapInvestError(result.error, 'Unable to save this Investment Day report', 'report_investment_day_v1'),
     );
   }
 
   try {
     const plan = parsePlan(result.data);
-    if (!plan.isCompleted) {
-      throw new Error('Unable to confirm investments right now');
+    if (input.outcome === 'confirmed' && plan.participationOutcome !== 'confirmed') {
+      throw new Error('Unable to save this Investment Day report');
+    }
+    if (input.outcome === 'skipped' && plan.participationOutcome !== 'skipped') {
+      throw new Error('Unable to save this Investment Day report');
+    }
+    if (input.outcome === 'failed' && plan.participationOutcome !== 'failed') {
+      throw new Error('Unable to save this Investment Day report');
     }
     return plan;
   } catch (error) {
     if (error instanceof Error && error.message.startsWith('Unable to')) {
       throw error;
     }
-    throw new Error('Unable to confirm investments right now');
+    throw new Error('Unable to save this Investment Day report');
   }
 }
 
@@ -218,6 +205,7 @@ export interface OwnPosition {
   contributionCurrency: string;
   instrumentCurrency: string | null;
   totalInvestedMinor: number;
+  amountProvenance: AmountProvenance | null;
   totalQuantity: string | null;
   quantityStatus: QuantityStatus;
   latestPrice: string | null;
@@ -238,7 +226,7 @@ export async function fetchOwnPositions(clubId: string): Promise<OwnPosition[]> 
   const valuationsResult = await supabase
     .from('member_position_valuations_v1')
     .select(
-      'investment_target_id, target_name, target_kind, target_ticker, contribution_currency, instrument_currency, total_invested_minor, total_quantity, quantity_status, latest_price, latest_price_currency, current_value, current_value_currency, valuation_status',
+      'investment_target_id, target_name, target_kind, target_ticker, contribution_currency, instrument_currency, total_invested_minor, amount_provenance, total_quantity, quantity_status, latest_price, latest_price_currency, current_value, current_value_currency, valuation_status',
     )
     .eq('club_id', clubId);
 
@@ -267,6 +255,7 @@ export async function fetchOwnPositions(clubId: string): Promise<OwnPosition[]> 
         instrumentCurrency:
           typeof record.instrument_currency === 'string' ? record.instrument_currency : null,
         totalInvestedMinor,
+        amountProvenance: asAmountProvenance(record.amount_provenance),
         totalQuantity: asDecimalString(record.total_quantity),
         quantityStatus: asQuantityStatus(record.quantity_status),
         latestPrice: asDecimalString(record.latest_price),

@@ -55,9 +55,10 @@ Investment Day coordination:
 - `investment_schedules`: current active members may read; client writes are blocked.
 - `investment_cycles`: current active members may read cycle metadata; client writes are blocked.
 - `member_saving_plans`: only the owning active membership may read exact rows, insert a new active plan, or end its current active plan. Amount history cannot be updated in place and rows cannot be deleted.
-- `member_cycle_participations`: only the owning active membership may read the raw row. While its cycle is open, the owner may update only member-report fields. Creation, snapshot fields, verification fields, and deletion are blocked.
-- `member_investment_transactions`: only the owning active membership may read rows. Direct insert, update, and delete are revoked. Writes go through `confirm_investment_day_v1` or `confirm_investment_day_v2`.
-- `member_investment_positions` and `member_position_valuations_v1`: `security_invoker` read models over those transactions, so another member's cost basis, quantity, and EUR current value are not visible.
+- `member_cycle_participations`: only the owning active membership may read the raw row. Authenticated clients have no UPDATE grant. Outcome changes go through `report_investment_day_v1`. Creation, snapshot fields, verification fields, and deletion are blocked.
+- `member_investment_day_reports`: only the owning active membership may read rows. Direct insert, update, and delete are revoked. Writes go through `report_investment_day_v1`.
+- `member_investment_transactions`: only the owning active membership may read rows. Direct insert, update, and delete are revoked. Writes go through `report_investment_day_v1`. Historical v1/v2 amounts are labelled `legacy_plan_assumed` and are not upgraded.
+- `member_investment_positions` and `member_position_valuations_v1`: `security_invoker` read models over those transactions, so another member's cost basis, quantity, EUR current value, and amount provenance are not visible.
 - `member_investment_lots_v1` and `member_estimated_positions_v1`: same invoker RLS. Modelled quantity and estimated NOK value are private to the owning membership.
 - `market_data_instrument_mappings`, `market_prices`, `latest_market_prices`, and `latest_market_price_status`: any authenticated user may read shared catalog NAV/mappings and freshness metadata. Anonymous users have no access. Clients cannot INSERT, UPDATE, or DELETE mappings or prices. Ingest is the `sync-market-data` Edge Function, which requires a secret API key and writes with the service role. `TWELVE_DATA_API_KEY` is server-only and never an `EXPO_PUBLIC_*` value. Yahoo unofficial ingest is an explicit probe, not the production default.
 - `fx_rates`, `latest_fx_rates`, and `latest_fx_rate_status`: authenticated SELECT only. Clients cannot write. Ingest is `sync-fx-rates` with the secret key. Norges Bank requires no provider secret.
@@ -68,7 +69,9 @@ Investment Day coordination:
 
 Saving-plan insert policies prove that the membership is active, belongs to `auth.uid()`, belongs to the supplied club, and uses the club base currency. Updates are column-limited to ending an active plan; changed amounts require a new row so historical values are preserved.
 
-Participation updates are column-limited to `outcome`, `report_source`, `reported_at`, and `corrected_at`. Clients cannot alter expected amounts, currency, membership, cycle, saving-plan provenance, or verification fields.
+Participation updates by clients are revoked. `report_investment_day_v1` is the only authenticated write path for outcome, transactions, and the member report row.
+
+`ensure_open_investment_day_v1` may create a TestFlight schedule, an open cycle, a legacy saving-plan artifact from an already-resolved amount, and the caller's participation. It never invents a contribution amount. Flexible members without a commitment receive `vesty.contribution_commitment_required` and do not get a fake participation. It does not write transactions. Opening a broker never writes. Investment Day reporting uses `report_investment_day_v1`: explicit `as_planned` or `with_changes`, outcomes `confirmed` / `skipped` / `failed`, purchase lines only for `confirmed`, optional quantity and execution price as separate facts, and idempotent retry by `client_report_id`. `as_planned` stores the frozen plan after attestation as `member_attested_plan`. `with_changes` stores only the member's explicit amounts as `member_reported_actual`. Existing confirm v1/v2 EXECUTE is revoked from `authenticated`. Historical v1/v2 amounts stay in place as `legacy_plan_assumed`. Versioned correction is remaining work. Quantity remains private to the owning member.
 
 ## Vote Privacy
 
@@ -97,14 +100,14 @@ Direct clients cannot perform operations that require atomic cross-table validat
 - strategy and allocation snapshot mutation after genesis
 - schedule mutation and cycle generation
 - participation snapshot creation
-- member investment transaction creation (use `confirm_investment_day_v1` or `confirm_investment_day_v2`)
+- member investment transaction creation (use `report_investment_day_v1`)
 - market price ingest (use `sync-market-data`)
 - FX ingest (use `sync-fx-rates`)
 - broker verification
 
 Club creation, genesis strategy creation, owner invitation issuance, invitation acceptance, owner club rename, genesis contribution-policy version 1, private contribution commitments, opening the current Investment Day, and confirming member-reported buys are implemented as private `SECURITY DEFINER` functions with public invoker wrappers. Callers cannot supply `owner_user_id`, another member's identity, or raw genesis allocations; `auth.uid()` is authoritative and `create_club` / `create_club_v2` accept only an allowlisted package id. `create_club_v2` also requires an explicit contribution style and the matching amount. Later ContributionPolicyVersion rows are not a client-authorized write. Authenticated owners and members cannot execute a public policy-version RPC; `private.create_contribution_policy_version_v1` is reserved for trusted/internal governance (`service_role`) and for approved contribution-proposal application. Contribution proposal create/open/cancel/finalize are public invoker wrappers over private `SECURITY DEFINER` functions. Draft or open proposals never create a policy version.
 
-`ensure_open_investment_day_v1` may create a TestFlight schedule, an open cycle, a legacy saving-plan artifact from an already-resolved amount, and the caller's participation. It never invents a contribution amount. Flexible members without a commitment receive `vesty.contribution_commitment_required` and do not get a fake participation. It does not write transactions. Standard Investment Day uses `confirm_investment_day_v1`: server-derived amounts, `quantity = null`, `source = manual`, `verification_status = member_reported`. Opening a broker never writes. Optional exact holdings use `confirm_investment_day_v2` after confirmation: the client may send only target ids, quantity, and optional execution price. Amounts stay server-derived. Retry is idempotent; a stored quantity is not overwritten by a different value. Quantity remains private to the owning member.
+`ensure_open_investment_day_v1` may create a TestFlight schedule, an open cycle, a legacy saving-plan artifact from an already-resolved amount, and the caller's participation. It never invents a contribution amount. Flexible members without a commitment receive `vesty.contribution_commitment_required` and do not get a fake participation. It does not write transactions. Opening a broker never writes. `public.report_investment_day_v1` is a `SECURITY DEFINER` wrapper so `authenticated` never receives EXECUTE on `private.report_investment_day_v1`. Confirm v1/v2 EXECUTE is revoked from `authenticated`. Versioned correction of a completed report is remaining work.
 
 Email-bound invitations compare `auth.users.email` for the authenticated user and require `email_confirmed_at`. The mobile UI never accepts a typed email as proof of identity. Local Auth has `enable_confirmations = false`, so development signups are stored as confirmed. When confirmations are enabled, an unconfirmed email cannot accept an email-bound invitation.
 

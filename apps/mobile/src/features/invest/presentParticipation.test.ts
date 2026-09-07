@@ -24,10 +24,10 @@ describe('investment day participation presentation', () => {
     });
 
     assert.equal(member.firstName, 'Nicklas');
-    assert.equal(member.statusLabel, 'Invested');
+    assert.equal(member.statusLabel, 'Reported');
     assert.equal(member.streakLabel, '🔥 6');
     assert.equal(member.showStreak, true);
-    assert.equal(presentParticipationStatus(true), 'Invested');
+    assert.equal(presentParticipationStatus(true), 'Reported');
   });
 
   it('keeps pending members muted and still shows a prior streak', () => {
@@ -69,11 +69,11 @@ describe('investment day participation presentation', () => {
     });
 
     assert.equal(open.title, 'Club progress');
-    assert.equal(open.countLabel, '4 of 6 invested');
+    assert.equal(open.countLabel, '4 of 6 reported');
     assert.equal(open.allCompletedTitle, null);
-    assert.equal(done.allCompletedTitle, 'Everyone invested 🎉');
+    assert.equal(done.allCompletedTitle, 'Everyone has reported 🎉');
     assert.equal(done.allCompletedSubtitle, '6 of 6 completed');
-    assert.equal(presentParticipationCount(4, 6), '4 of 6 invested');
+    assert.equal(presentParticipationCount(4, 6), '4 of 6 reported');
   });
 
   it('keeps the Club Overview surface compact', () => {
@@ -88,9 +88,9 @@ describe('investment day participation presentation', () => {
       allCompleted: true,
     });
 
-    assert.equal(compact.countLabel, '4 of 6 invested');
+    assert.equal(compact.countLabel, '4 of 6 reported');
     assert.equal(compact.allCompletedLabel, null);
-    assert.equal(done.allCompletedLabel, 'Everyone invested');
+    assert.equal(done.allCompletedLabel, 'Everyone has reported');
     assert.equal('streakLabel' in compact, false);
   });
 
@@ -124,7 +124,7 @@ describe('investment day participation presentation', () => {
 
     assert.equal(presented.privacyInfo, PARTICIPATION_PRIVACY_INFO);
     assert.equal(presented.reportingInfo, PARTICIPATION_REPORTING_INFO);
-    assert.match(presented.privacyInfo, /not how much anyone invested/i);
+    assert.match(presented.privacyInfo, /not amounts/i);
     assert.match(presented.reportingInfo, /not verified by the broker/i);
     assert.equal(participationCopyContainsForbidden(visible), false);
     assert.equal(participationCopyContainsPrivateFinance(visible), false);

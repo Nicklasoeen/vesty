@@ -4,6 +4,7 @@ import { instrumentSecondaryLabel } from '../../lib/instrumentLabels.ts';
 import type { InvestmentDayPlan, InvestTargetRow } from './types.ts';
 
 export function rowsFromPlan(plan: InvestmentDayPlan): InvestTargetRow[] {
+  const reportClosed = plan.participationOutcome !== 'expected';
   return [...plan.allocations]
     .sort((left, right) => left.position - right.position)
     .map((allocation) => {
@@ -19,7 +20,7 @@ export function rowsFromPlan(plan: InvestmentDayPlan): InvestTargetRow[] {
         secondaryLabel: core?.shortName
           ?? instrumentSecondaryLabel(allocation.kind, allocation.instrumentCurrency),
         allocationBps: allocation.allocationBps,
-        amountMinor: transaction?.amountMinor ?? allocation.amountMinor,
+        amountMinor: transaction?.amountMinor ?? (reportClosed ? 0 : allocation.amountMinor),
         quantity: transaction?.quantity ?? null,
         executionUnitPrice: transaction?.executionUnitPrice ?? null,
       };

@@ -30,7 +30,7 @@ test('default confirmation is amount-only even for curated ETF clubs', () => {
   );
 });
 
-test('amount-only days can later add exact holdings', () => {
+test('missing quantity is still detectable after an amount-only report', () => {
   assert.equal(
     planHasMissingQuantity(
       [{ quantity: null }, { quantity: null }, { quantity: null }],

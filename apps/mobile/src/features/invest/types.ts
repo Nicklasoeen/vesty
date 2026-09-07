@@ -17,6 +17,7 @@ export interface InvestmentDayTransaction {
   transactionType: string;
   source: string;
   verificationStatus: string;
+  amountProvenance: string | null;
   quantity: string | null;
   executionUnitPrice: string | null;
   executionUnitPriceCurrency: string | null;

@@ -1,8 +1,8 @@
 export const PARTICIPATION_PRIVACY_INFO =
-  'Members can see who has completed Investment Day, but not how much anyone invested.';
+  'Members can see who has reported this Investment Day, but not amounts or whether anyone changed the plan.';
 
 export const PARTICIPATION_REPORTING_INFO =
-  'Investment status is reported by each member and is not verified by the broker.';
+  'Status is reported by each member and is not verified by the broker.';
 
 export const FORBIDDEN_PARTICIPATION_COPY = [
   'buying power',
@@ -22,7 +22,7 @@ export function participationFirstName(displayName: string | null | undefined): 
 }
 
 export function presentParticipationCount(completedCount: number, totalCount: number): string {
-  return `${completedCount} of ${totalCount} invested`;
+  return `${completedCount} of ${totalCount} reported`;
 }
 
 export function presentParticipationStreak(currentStreak: number): string | null {
@@ -32,8 +32,8 @@ export function presentParticipationStreak(currentStreak: number): string | null
   return `🔥 ${currentStreak}`;
 }
 
-export function presentParticipationStatus(completed: boolean): 'Invested' | 'Pending' {
-  return completed ? 'Invested' : 'Pending';
+export function presentParticipationStatus(completed: boolean): 'Reported' | 'Pending' {
+  return completed ? 'Reported' : 'Pending';
 }
 
 export function presentParticipationMember(input: {
@@ -42,7 +42,7 @@ export function presentParticipationMember(input: {
   currentStreak: number;
 }): {
   firstName: string;
-  statusLabel: 'Invested' | 'Pending';
+  statusLabel: 'Reported' | 'Pending';
   streakLabel: string | null;
   showStreak: boolean;
 } {
@@ -70,7 +70,7 @@ export function presentInvestmentDayParticipation(input: {
   return {
     title: 'Club progress',
     countLabel,
-    allCompletedTitle: input.allCompleted ? 'Everyone invested 🎉' : null,
+    allCompletedTitle: input.allCompleted ? 'Everyone has reported 🎉' : null,
     allCompletedSubtitle: input.allCompleted ? `${input.totalCount} of ${input.totalCount} completed` : null,
     privacyInfo: PARTICIPATION_PRIVACY_INFO,
     reportingInfo: PARTICIPATION_REPORTING_INFO,
@@ -87,7 +87,7 @@ export function presentClubOverviewParticipation(input: {
 } {
   return {
     countLabel: presentParticipationCount(input.completedCount, input.totalCount),
-    allCompletedLabel: input.allCompleted ? 'Everyone invested' : null,
+    allCompletedLabel: input.allCompleted ? 'Everyone has reported' : null,
   };
 }
 

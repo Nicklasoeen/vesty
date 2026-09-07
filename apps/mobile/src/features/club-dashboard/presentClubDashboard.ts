@@ -5,6 +5,7 @@ import {
   presentInvestmentIdentity,
   type InvestmentIdentityPresentation,
 } from '../investments/presentInvestmentIdentity.ts';
+import { presentReportedAmountLabel, type AmountProvenance } from '../invest/amountProvenance.ts';
 import { BOTTOM_NAV_SLOTS, BOTTOM_NAV_TAB_KEYS } from '../../navigation/bottomNavStructure.ts';
 import type { PortfolioValuationConfidence } from '../portfolio/valuationLabels.ts';
 
@@ -259,6 +260,7 @@ export function presentClubHoldingCard(input: {
   investedMinor: number;
   currentValueMinor: number | null;
   quantityStatus: 'complete' | 'partial' | 'unavailable';
+  amountProvenance?: AmountProvenance | null;
 }): ClubHoldingCardPresentation {
   const identity = presentInvestmentIdentity({
     ticker: input.ticker,
@@ -267,7 +269,7 @@ export function presentClubHoldingCard(input: {
   });
   const currentValue =
     input.currentValueMinor != null ? formatHomeNokFromMinor(input.currentValueMinor) : null;
-  const investedLabel = `${formatHomeNokFromMinor(input.investedMinor)} invested`;
+  const investedLabel = presentReportedAmountLabel(input.investedMinor, input.amountProvenance);
   const cardStatus = input.quantityStatus === 'complete' ? 'Exact holdings' : null;
   const parts = [
     identity.ticker,

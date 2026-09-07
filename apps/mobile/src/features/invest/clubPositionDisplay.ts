@@ -6,6 +6,7 @@ import {
   type PortfolioValuationConfidence,
 } from '../portfolio/valuationLabels.ts';
 
+import { presentReportedAmountLabel, type AmountProvenance } from './amountProvenance.ts';
 import {
   confidenceForHolding,
   exactHoldingsBadge,
@@ -34,6 +35,7 @@ export function clubPositionDisplay(input: {
   valuationStatus: string;
   estimatedCurrentValueMinor?: number | null;
   valuationConfidence?: PortfolioValuationConfidence | null;
+  amountProvenance?: AmountProvenance | null;
 }): ClubPositionDisplay {
   const confidence = confidenceForHolding({ quantityStatus: input.quantityStatus });
   const showExactValue =
@@ -50,7 +52,7 @@ export function clubPositionDisplay(input: {
   return {
     title: input.ticker ?? input.name,
     subtitle: input.ticker ? input.name : null,
-    investedLabel: `${formatNokFromMinor(input.totalInvestedMinor)} invested`,
+    investedLabel: presentReportedAmountLabel(input.totalInvestedMinor, input.amountProvenance),
     quantityLabel:
       confidence === 'exact_member_reported' && input.totalQuantity
         ? formatQuantityLabel(input.totalQuantity)

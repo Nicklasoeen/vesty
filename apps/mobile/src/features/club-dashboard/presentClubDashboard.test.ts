@@ -227,7 +227,7 @@ describe('club holdings presentation', () => {
     assert.equal(card.identity.ticker, 'VWCE');
     assert.equal(card.identity.friendlyName, 'Global equities');
     assert.equal(card.currentValue, formatHomeNokFromMinor(18_156_400));
-    assert.equal(card.investedLabel, `${formatHomeNokFromMinor(80_000)} invested`);
+    assert.equal(card.investedLabel, `${formatHomeNokFromMinor(80_000)} unverified`);
     assert.equal(card.returnLabel, null);
     assert.equal(card.usesDemo, false);
     assert.equal(card.cardStatus, null);
@@ -264,6 +264,30 @@ describe('club holdings presentation', () => {
     assert.match(card.currentValue ?? '', /mill/);
     assert.equal(card.cardStatus, 'Exact holdings');
     assert.equal(card.returnLabel, null);
+  });
+
+  it('does not call mixed or unknown holding amounts reported', () => {
+    const mixed = presentClubHoldingCard({
+      ticker: 'VWCE',
+      name: 'VWCE',
+      investedMinor: 80_000,
+      currentValueMinor: 90_000,
+      quantityStatus: 'unavailable',
+      amountProvenance: 'mixed',
+    });
+    const unknown = presentClubHoldingCard({
+      ticker: 'VWCE',
+      name: 'VWCE',
+      investedMinor: 80_000,
+      currentValueMinor: 90_000,
+      quantityStatus: 'unavailable',
+      amountProvenance: null,
+    });
+
+    assert.equal(mixed.investedLabel, `${formatHomeNokFromMinor(80_000)} mixed basis`);
+    assert.equal(unknown.investedLabel, `${formatHomeNokFromMinor(80_000)} unverified`);
+    assert.equal(/reported/i.test(mixed.investedLabel), false);
+    assert.equal(/reported/i.test(unknown.investedLabel), false);
   });
 });
 

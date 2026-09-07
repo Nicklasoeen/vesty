@@ -7,6 +7,7 @@ import {
   isChartYInsidePlot,
   mapChartY,
 } from './chartScale.ts';
+import { presentReportedAmountLabel } from '../invest/amountProvenance.ts';
 import {
   formatHomeGainLine,
   formatHomeNokFromMinor,
@@ -179,6 +180,16 @@ describe('presentHomePortfolio', () => {
     assert.equal(presented.gainLossMinor, null);
     assert.equal(presented.gainLossBps, null);
     assert.match(presented.detail, /Reported invested/i);
+  });
+
+  it('does not call mixed or unknown invested amounts reported', () => {
+    const mixed = presentReportedAmountLabel(200000, 'mixed');
+    const unknown = presentReportedAmountLabel(200000, null);
+
+    assert.equal(mixed, `${formatHomeNokFromMinor(200000)} mixed basis`);
+    assert.equal(unknown, `${formatHomeNokFromMinor(200000)} unverified`);
+    assert.equal(/reported/i.test(mixed), false);
+    assert.equal(/reported/i.test(unknown), false);
   });
 
   it('distinguishes a request failure from a known empty portfolio', () => {

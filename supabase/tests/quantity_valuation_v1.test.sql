@@ -105,6 +105,44 @@ grant execute on function tests.statement_sqlstate(text) to authenticated;
 grant execute on function tests.statement_message(text) to authenticated;
 grant execute on function tests.world_mix_reports(text, text, text, text, text, text) to authenticated;
 
+create function tests.report_as_planned(
+  p_club_id uuid,
+  p_cycle_id uuid,
+  p_client_report_id uuid,
+  p_purchase_lines jsonb default '[]'::jsonb
+)
+returns table (
+  club_id uuid,
+  club_name text,
+  membership_id uuid,
+  cycle_id uuid,
+  investment_day_at timestamptz,
+  cycle_status public.investment_cycle_status,
+  participation_id uuid,
+  participation_outcome public.participation_outcome,
+  expected_amount_minor bigint,
+  currency text,
+  allocations jsonb,
+  transactions jsonb
+)
+language sql
+volatile
+security invoker
+set search_path = ''
+as $function$
+  select *
+  from public.report_investment_day_v1(
+    p_club_id,
+    p_cycle_id,
+    p_client_report_id,
+    'as_planned',
+    'confirmed',
+    p_purchase_lines
+  );
+$function$;
+
+grant execute on function tests.report_as_planned(uuid, uuid, uuid, jsonb) to authenticated;
+
 select extensions.no_plan();
 
 insert into auth.users (
@@ -196,6 +234,15 @@ select extensions.ok(
 select extensions.ok(
   not has_function_privilege(
     'authenticated',
+    'public.confirm_investment_day_v2(uuid, uuid, jsonb)',
+    'execute'
+  ),
+  'Authenticated role cannot confirm through the retired v2 path'
+);
+
+select extensions.ok(
+  not has_function_privilege(
+    'authenticated',
     'private.parse_positive_decimal_v1(jsonb, integer, integer, text)',
     'execute'
   ),
@@ -237,9 +284,10 @@ select extensions.is(
   tests.statement_message(
     format(
       $statement$
-        select public.confirm_investment_day_v2(
+        select tests.report_as_planned(
           %L::uuid,
           %L::uuid,
+          '71000000-aaaa-4000-8000-000000000099'::uuid,
           tests.world_mix_reports('0', '1.5', '12')
         )
       $statement$,
@@ -255,9 +303,10 @@ select extensions.is(
   tests.statement_message(
     format(
       $statement$
-        select public.confirm_investment_day_v2(
+        select tests.report_as_planned(
           %L::uuid,
           %L::uuid,
+          '71000000-aaaa-4000-8000-000000000099'::uuid,
           tests.world_mix_reports('-1', '1.5', '12')
         )
       $statement$,
@@ -273,9 +322,10 @@ select extensions.is(
   tests.statement_message(
     format(
       $statement$
-        select public.confirm_investment_day_v2(
+        select tests.report_as_planned(
           %L::uuid,
           %L::uuid,
+          '71000000-aaaa-4000-8000-000000000099'::uuid,
           tests.world_mix_reports('1e-2', '1.5', '12')
         )
       $statement$,
@@ -300,9 +350,10 @@ select extensions.is(
   tests.statement_message(
     format(
       $statement$
-        select public.confirm_investment_day_v2(
+        select tests.report_as_planned(
           %L::uuid,
           %L::uuid,
+          '71000000-aaaa-4000-8000-000000000099'::uuid,
           jsonb_build_array(
             jsonb_build_object(
               'investment_target_id', '32000000-0000-4000-8000-000000000099',
@@ -331,9 +382,10 @@ select extensions.is(
   tests.statement_message(
     format(
       $statement$
-        select public.confirm_investment_day_v2(
+        select tests.report_as_planned(
           %L::uuid,
           %L::uuid,
+          '71000000-aaaa-4000-8000-000000000099'::uuid,
           jsonb_build_array(
             jsonb_build_object(
               'investment_target_id', '31000000-0000-4000-8000-000000000014',
@@ -362,9 +414,10 @@ select extensions.is(
   tests.statement_message(
     format(
       $statement$
-        select public.confirm_investment_day_v2(
+        select tests.report_as_planned(
           %L::uuid,
           %L::uuid,
+          '71000000-aaaa-4000-8000-000000000099'::uuid,
           jsonb_build_array(
             jsonb_build_object(
               'investment_target_id', '31000000-0000-4000-8000-000000000011',
@@ -390,37 +443,20 @@ select extensions.is(
 );
 
 select extensions.is(
-  tests.statement_message(
-    format(
-      $statement$
-        select public.confirm_investment_day_v2(
-          %L::uuid,
-          %L::uuid,
-          jsonb_build_array(
-            jsonb_build_object(
-              'investment_target_id', '31000000-0000-4000-8000-000000000011',
-              'quantity', '0.642381'
-            ),
-            jsonb_build_object(
-              'investment_target_id', '31000000-0000-4000-8000-000000000012',
-              'quantity', '1.5'
-            )
-          )
-        )
-      $statement$,
-      (select club_id from alice_club),
-      (select cycle_id from alice_day)
-    )
+  (
+    select participation_outcome::text
+    from public.ensure_open_investment_day_v1((select club_id from alice_club))
   ),
-  'vesty.execution_targets_incomplete',
-  'Missing required curated target is rejected'
+  'expected',
+  'Optional quantity may be omitted; incomplete quantity does not confirm this cycle'
 );
 
 create temporary table alice_confirm as
 select *
-from public.confirm_investment_day_v2(
+from tests.report_as_planned(
   (select club_id from alice_club),
   (select cycle_id from alice_day),
+  '71000000-aaaa-4000-8000-000000000001'::uuid,
   tests.world_mix_reports('0.642381', '1.5', '123.000001', '167.54000000', null, null)
 );
 
@@ -511,9 +547,10 @@ select extensions.is(
 
 create temporary table alice_retry as
 select *
-from public.confirm_investment_day_v2(
+from tests.report_as_planned(
   (select club_id from alice_club),
   (select cycle_id from alice_day),
+  '71000000-aaaa-4000-8000-000000000001'::uuid,
   tests.world_mix_reports('0.642381', '1.5', '123.000001', '167.54000000', null, null)
 );
 
@@ -537,9 +574,10 @@ select extensions.is(
   tests.statement_message(
     format(
       $statement$
-        select public.confirm_investment_day_v2(
+        select tests.report_as_planned(
           %L::uuid,
           %L::uuid,
+          '71000000-aaaa-4000-8000-000000000001'::uuid,
           tests.world_mix_reports('9.999999', '1.5', '123.000001')
         )
       $statement$,
@@ -547,7 +585,7 @@ select extensions.is(
       (select cycle_id from alice_day)
     )
   ),
-  'vesty.execution_already_reported',
+  'vesty.report_conflict',
   'A different retry payload cannot overwrite confirmed quantity'
 );
 
@@ -672,9 +710,10 @@ from public.ensure_open_investment_day_v1((select club_id from alice_club));
 
 create temporary table bob_confirm as
 select *
-from public.confirm_investment_day_v2(
+from tests.report_as_planned(
   (select club_id from alice_club),
   (select cycle_id from bob_day),
+  '71000000-aaaa-4000-8000-000000000002'::uuid,
   tests.world_mix_reports('0.123456', '2.5', '3')
 );
 
@@ -723,9 +762,10 @@ from public.ensure_open_investment_day_v1((select club_id from alice_legacy_amou
 
 create temporary table alice_legacy_amount_confirm as
 select *
-from public.confirm_investment_day_v1(
+from tests.report_as_planned(
   (select club_id from alice_legacy_amount_club),
-  (select cycle_id from alice_legacy_amount_day)
+  (select cycle_id from alice_legacy_amount_day),
+  '71000000-aaaa-4000-8000-000000000003'::uuid
 );
 
 select extensions.is(
@@ -761,12 +801,23 @@ select extensions.is(
   'Missing quantity does not invent a current value from latest price'
 );
 
-create temporary table alice_legacy_fill as
-select *
-from public.confirm_investment_day_v2(
-  (select club_id from alice_legacy_amount_club),
-  (select cycle_id from alice_legacy_amount_day),
-  tests.world_mix_reports('0.5', '1.25', '2')
+select extensions.is(
+  tests.statement_message(
+    format(
+      $statement$
+        select tests.report_as_planned(
+          %L::uuid,
+          %L::uuid,
+          '71000000-aaaa-4000-8000-000000000003'::uuid,
+          tests.world_mix_reports('0.5', '1.25', '2')
+        )
+      $statement$,
+      (select club_id from alice_legacy_amount_club),
+      (select cycle_id from alice_legacy_amount_day)
+    )
+  ),
+  'vesty.report_conflict',
+  'A later quantity payload cannot overwrite an amount-only report'
 );
 
 select extensions.is(
@@ -776,8 +827,8 @@ select extensions.is(
     where membership_id = (select membership_id from alice_legacy_amount_club)
       and investment_target_id = '31000000-0000-4000-8000-000000000012'
   ),
-  1.25::numeric,
-  'V2 can fill null quantity on an already-confirmed amount-only day'
+  null,
+  'Rejected quantity overwrite leaves amount-only quantity null'
 );
 
 select extensions.is(
@@ -787,7 +838,7 @@ select extensions.is(
     where membership_id = (select membership_id from alice_legacy_amount_club)
   ),
   3::bigint,
-  'Filling quantity does not duplicate amount-only rows'
+  'Rejected quantity overwrite does not duplicate amount-only rows'
 );
 
 reset role;
@@ -835,7 +886,8 @@ insert into public.member_investment_transactions (
   quantity,
   executed_at,
   source,
-  verification_status
+  verification_status,
+  amount_provenance
 )
 select
   club.club_id,
@@ -848,7 +900,8 @@ select
   null,
   now(),
   'manual',
-  'member_reported'
+  'member_reported',
+  'legacy_plan_assumed'
 from alice_club as club
 join public.investment_cycles as cycle
   on cycle.club_id = club.club_id
@@ -1018,24 +1071,26 @@ select extensions.is(
   tests.statement_message(
     format(
       $statement$
-        select public.confirm_investment_day_v2(
+        select tests.report_as_planned(
           '21000000-0000-4000-8000-000000000071'::uuid,
           %L::uuid,
+          '71000000-aaaa-4000-8000-000000000098'::uuid,
           tests.world_mix_reports('1', '1', '1')
         )
       $statement$,
       (select cycle_id from alice_legacy_day)
     )
   ),
-  'vesty.confirmation_mode_invalid',
-  'Quantity confirmation is rejected for legacy KLP/DNB clubs'
+  'vesty.invalid_target',
+  'World Mix target ids are rejected on a legacy KLP/DNB club'
 );
 
 create temporary table alice_legacy_confirm as
 select *
-from public.confirm_investment_day_v1(
+from tests.report_as_planned(
   '21000000-0000-4000-8000-000000000071',
-  (select cycle_id from alice_legacy_day)
+  (select cycle_id from alice_legacy_day),
+  '71000000-aaaa-4000-8000-000000000004'::uuid
 );
 
 select extensions.is(

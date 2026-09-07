@@ -145,9 +145,13 @@ from public.ensure_open_investment_day_v1((select club_id from alice_club));
 
 create temporary table alice_confirm as
 select *
-from public.confirm_investment_day_v1(
+from public.report_investment_day_v1(
   (select club_id from alice_club),
-  (select cycle_id from alice_day)
+  (select cycle_id from alice_day),
+  '82000000-0000-4000-8000-000000000001'::uuid,
+  'as_planned',
+  'confirmed',
+  '[]'::jsonb
 );
 
 reset role;
@@ -600,9 +604,13 @@ from public.ensure_open_investment_day_v1('21000000-0000-4000-8000-000000000081'
 
 create temporary table alice_legacy_confirm as
 select *
-from public.confirm_investment_day_v1(
+from public.report_investment_day_v1(
   '21000000-0000-4000-8000-000000000081',
-  (select cycle_id from alice_legacy_day)
+  (select cycle_id from alice_legacy_day),
+  '82000000-0000-4000-8000-000000000002'::uuid,
+  'as_planned',
+  'confirmed',
+  '[]'::jsonb
 );
 
 select extensions.is(
@@ -643,7 +651,8 @@ reset role;
 
 insert into public.member_investment_transactions (
   club_id, membership_id, investment_cycle_id, investment_target_id,
-  transaction_type, amount_minor, currency, quantity, executed_at, source, verification_status
+  transaction_type, amount_minor, currency, quantity, executed_at, source, verification_status,
+  amount_provenance
 )
 select
   (select club_id from alice_club),
@@ -656,7 +665,8 @@ select
   null,
   now(),
   'manual',
-  'member_reported';
+  'member_reported',
+  'legacy_plan_assumed';
 
 insert into public.club_memberships (id, club_id, profile_id, status)
 values (
@@ -668,7 +678,8 @@ values (
 
 insert into public.member_investment_transactions (
   club_id, membership_id, investment_cycle_id, investment_target_id,
-  transaction_type, amount_minor, currency, quantity, executed_at, source, verification_status
+  transaction_type, amount_minor, currency, quantity, executed_at, source, verification_status,
+  amount_provenance
 )
 select
   (select club_id from alice_club),
@@ -681,7 +692,8 @@ select
   null,
   now(),
   'manual',
-  'member_reported';
+  'member_reported',
+  'legacy_plan_assumed';
 
 set local role authenticated;
 select tests.authenticate_as('00000000-0000-4000-8000-000000000081');

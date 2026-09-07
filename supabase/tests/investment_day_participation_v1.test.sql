@@ -418,9 +418,13 @@ select extensions.is(
 
 create temporary table alice_confirm as
 select *
-from public.confirm_investment_day_v1(
+from public.report_investment_day_v1(
   (select club_id from alice_club),
-  (select cycle_id from alice_day)
+  (select cycle_id from alice_day),
+  '85000000-0000-4000-8000-000000000001'::uuid,
+  'as_planned',
+  'confirmed',
+  '[]'::jsonb
 );
 
 select extensions.is(
@@ -477,10 +481,13 @@ select extensions.is(
 
 create temporary table alice_v2 as
 select *
-from public.confirm_investment_day_v2(
+from public.report_investment_day_v1(
   (select club_id from alice_club),
   (select cycle_id from alice_day),
-  tests.world_mix_reports('1.5', '2', '3')
+  '85000000-0000-4000-8000-000000000001'::uuid,
+  'as_planned',
+  'confirmed',
+  '[]'::jsonb
 );
 
 select extensions.is(
@@ -493,7 +500,7 @@ select extensions.is(
     where membership_id = (select membership_id from alice_club)
   ),
   4,
-  'V2 exact-holdings update does not increment the streak twice'
+  'Idempotent report retry does not increment the streak twice'
 );
 
 select extensions.is(
@@ -506,7 +513,7 @@ select extensions.is(
     limit 1
   ),
   1,
-  'V2 update does not create a second participation event'
+  'Idempotent report retry does not create a second participation event'
 );
 
 create temporary table alice_late_invite as
@@ -554,9 +561,13 @@ select tests.authenticate_as('00000000-0000-4000-8000-000000000082');
 
 create temporary table bob_confirm as
 select *
-from public.confirm_investment_day_v1(
+from public.report_investment_day_v1(
   (select club_id from alice_club),
-  (select cycle_id from alice_day)
+  (select cycle_id from alice_day),
+  '85000000-0000-4000-8000-000000000001'::uuid,
+  'as_planned',
+  'confirmed',
+  '[]'::jsonb
 );
 
 select extensions.is(
@@ -580,9 +591,13 @@ from public.ensure_open_investment_day_v1((select club_id from alice_club));
 
 create temporary table cara_confirm as
 select *
-from public.confirm_investment_day_v1(
+from public.report_investment_day_v1(
   (select club_id from alice_club),
-  (select cycle_id from alice_day)
+  (select cycle_id from alice_day),
+  '85000000-0000-4000-8000-000000000001'::uuid,
+  'as_planned',
+  'confirmed',
+  '[]'::jsonb
 );
 
 select extensions.is(

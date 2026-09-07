@@ -14,7 +14,11 @@ const PRODUCT_MESSAGES: Record<string, string> = {
   'vesty.duplicate_execution_report': 'Unable to confirm investments right now',
   'vesty.execution_targets_incomplete': 'Enter the number of units you purchased for each investment',
   'vesty.confirmation_mode_invalid': 'Unable to confirm investments right now',
-  'vesty.execution_already_reported': 'These units were already reported. They cannot be changed here.',
+  'vesty.report_conflict': 'This Investment Day was already reported with different details. A versioned correction is not available yet.',
+  'vesty.purchase_lines_invalid': 'Check the amounts you entered and try again',
+  'vesty.report_mode_invalid': 'Unable to save this Investment Day report',
+  'vesty.outcome_invalid': 'Unable to save this Investment Day report',
+  'vesty.client_report_id_invalid': 'Unable to save this Investment Day report',
   'vesty.contribution_commitment_required': 'Set your contribution to continue',
   'vesty.contribution_commitment_invalid': 'Enter how much you want to contribute',
 };
@@ -36,6 +40,13 @@ export function extractInvestErrorCode(error: { message?: string } | unknown): s
   const message = typeof error.message === 'string' ? error.message : '';
   const match = /vesty\.[a-z_]+/.exec(message);
   return match?.[0] ?? null;
+}
+
+export function isReportConflictError(error: unknown): boolean {
+  if (extractInvestErrorCode(error) === 'vesty.report_conflict') {
+    return true;
+  }
+  return error instanceof Error && error.message.includes('already reported with different details');
 }
 
 export function mapInvestError(

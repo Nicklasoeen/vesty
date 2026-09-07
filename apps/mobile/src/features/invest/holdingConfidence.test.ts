@@ -39,14 +39,14 @@ test('partial quantity stays reported contribution until every buy has units', (
   assert.equal(confidenceForHolding({ quantityStatus: 'partial' }), 'reported_contribution');
 });
 
-test('exact holdings CTA is only after a completed curated day with missing quantity', () => {
+test('exact holdings cannot be added after a report; quantity is captured during reporting', () => {
   assert.equal(
     canAddExactHoldings({
       isCompleted: true,
       supportsExactHoldings: true,
       missingQuantity: true,
     }),
-    true,
+    false,
   );
   assert.equal(
     canAddExactHoldings({
@@ -72,6 +72,6 @@ test('exact holdings CTA is only after a completed curated day with missing quan
       missingQuantity: true,
       exactHoldingsOpen: true,
     }),
-    true,
+    false,
   );
 });

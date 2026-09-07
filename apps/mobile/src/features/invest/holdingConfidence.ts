@@ -47,12 +47,12 @@ export function missingExactHoldingsLabel(confidence: HoldingConfidence): string
   return null;
 }
 
-export function canAddExactHoldings(input: {
+export function canAddExactHoldings(_input: {
   isCompleted: boolean;
   supportsExactHoldings: boolean;
   missingQuantity: boolean;
 }): boolean {
-  return input.isCompleted && input.supportsExactHoldings && input.missingQuantity;
+  return false;
 }
 
 export function shouldShowExactHoldingsForm(input: {

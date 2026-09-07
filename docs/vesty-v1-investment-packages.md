@@ -18,9 +18,10 @@ Implemented in this milestone (catalog + package selection only):
 Also shipped:
 
 - Marketstack EOD ingest for the five allowlisted mappings (`VWCE.DE`, `EUNK.DE`, `IS3N.DE`, `SXR8.DE`, `SXRV.DE`).
-- Standard Investment Day is amount-only: open broker, then “I've invested.”
-- Optional exact holdings via `confirm_investment_day_v2` after completion.
-- Position-level EUR current value only when the member later adds exact units.
+- Standard Investment Day reporting: open broker, then attest the plan, report changes, skip, or keep the order pending.
+- Optional units and execution price during that same report. There is no later exact-holdings write.
+- Position-level EUR current value only when the member reported units.
+- Older confirm v1/v2 amounts remain labelled as planned/assumed.
 - Norges Bank EUR/NOK FX, modelled reference quantity for amount-only lots, and estimated NOK Home/Club totals for curated ETF clubs.
 
 Still not shipped:

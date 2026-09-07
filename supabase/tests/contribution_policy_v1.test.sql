@@ -692,12 +692,16 @@ select tests.authenticate_as('70000000-0000-4000-8000-000000000001');
 select extensions.ok(
   exists (
     select 1
-    from public.confirm_investment_day_v1(
+    from public.report_investment_day_v1(
       (select club_id from owner_club),
-      (select cycle_id from later_day)
+      (select cycle_id from later_day),
+      '83000000-0000-4000-8000-000000000001'::uuid,
+      'as_planned',
+      'confirmed',
+      '[]'::jsonb
     )
   ),
-  'confirm_investment_day_v1 still succeeds after policy freeze'
+  'report_investment_day_v1 still succeeds after policy freeze'
 );
 
 select extensions.is(

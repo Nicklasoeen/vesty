@@ -15,24 +15,35 @@ import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { useTheme } from '@/theme';
 import { AppText, Button, Screen } from '@/ui';
 
+import { asAmountProvenance } from './amountProvenance';
 import { InvestmentDayParticipationSection } from './InvestmentDayParticipation';
-import { ExactHoldingsForm } from './ExactHoldingsForm';
+import { InvestmentDayReportPanel } from './InvestmentDayReportPanel';
+import { InvestmentRow } from './InvestmentRow';
 import { rowsFromPlan } from './investRows';
 import {
-  canAddExactHoldings,
-  shouldShowExactHoldingsForm,
-} from './holdingConfidence';
-import { InvestmentRow } from './InvestmentRow';
+  buildAsPlannedPurchaseLines,
+  buildWithChangesPurchaseLines,
+  canSubmitAsPlanned,
+  canSubmitWithChanges,
+  parseReportedPurchaseKronerInput,
+  showOptionalExecutionFields,
+  sumReportedAmountMinor,
+  type InvestmentDayReportChoice,
+  type ReportedAmountField,
+} from './investmentDayReport';
 import {
-  buildExecutionReports,
-  canConfirmQuantityReports,
   parseOptionalExecutionPriceInput,
-  parseQuantityInput,
-  planHasMissingQuantity,
+  parseOptionalQuantityInput,
   quantityFieldFromRaw,
-  supportsExactHoldings,
   type QuantityFieldState,
 } from './investmentDayReporting';
+import { isReportConflictError } from './investErrors';
+import {
+  presentCompletedAmountCaption,
+  presentCompletedHeadline,
+  presentPendingBanner,
+  type InvestmentDayReportSubmitState,
+} from './presentInvestmentDayReport';
 import type { InvestmentDayPlan, InvestTargetRow } from './types';
 import { useInvestmentDay } from './useInvestmentDay';
 import { useInvestmentDayParticipation } from './useInvestmentDayParticipation';
@@ -47,7 +58,7 @@ function formatInvestmentDayShortLabel(iso: string): string {
 
 /**
  * Invest answers: what do I need to do with my investments this cycle?
- * Completion comes from persisted member-reported transactions, not local demo state.
+ * Completion comes from a member report, not from opening a broker.
  */
 export function InvestScreen() {
   const { colorScheme, colors, spacing } = useTheme();
@@ -57,7 +68,7 @@ export function InvestScreen() {
   const { selectedClub, isLoading: clubsLoading } = useClubs();
   const preferredBroker = profile?.preferredBroker ?? null;
   const selectedClubId = selectedClub?.clubId ?? null;
-  const { plan, isLoading, error, setupRequired, isConfirming, refresh, confirm } = useInvestmentDay(
+  const { plan, isLoading, error, setupRequired, isReporting, refresh, report } = useInvestmentDay(
     selectedClubId,
   );
   const contribution = useClubContribution(selectedClubId);
@@ -66,33 +77,37 @@ export function InvestScreen() {
     plan?.cycleId ?? null,
   );
   const [brokerOpened, setBrokerOpened] = useState<string | null>(null);
+  const [pendingCycleId, setPendingCycleId] = useState<string | null>(null);
   const [brokerPickerOpen, setBrokerPickerOpen] = useState(false);
-  const [confirmError, setConfirmError] = useState<{ cycleId: string; message: string } | null>(null);
-  const [exactHoldingsOpen, setExactHoldingsOpen] = useState(false);
+  const [choice, setChoice] = useState<InvestmentDayReportChoice>('as_planned');
+  const [submitState, setSubmitState] = useState<InvestmentDayReportSubmitState>('idle');
+  const [reportError, setReportError] = useState<{ cycleId: string; message: string } | null>(null);
+  const [amountFields, setAmountFields] = useState<Readonly<Record<string, ReportedAmountField>>>({});
   const [quantityFields, setQuantityFields] = useState<Readonly<Record<string, QuantityFieldState>>>({});
   const [priceFields, setPriceFields] = useState<Readonly<Record<string, QuantityFieldState>>>({});
+  const [reportStarted, setReportStarted] = useState<string | null>(null);
 
   const targets = useMemo(() => (plan ? rowsFromPlan(plan) : []), [plan]);
   const cycleId = plan?.cycleId ?? null;
-  const canReportExact = supportsExactHoldings(targets.map((target) => target.id));
-  const missingQuantity = plan
-    ? planHasMissingQuantity(plan.transactions, plan.allocations.length)
-    : false;
-  const showExactCta = canAddExactHoldings({
-    isCompleted: Boolean(plan?.isCompleted),
-    supportsExactHoldings: canReportExact,
-    missingQuantity,
-  });
-  const showExactForm = shouldShowExactHoldingsForm({
-    isCompleted: Boolean(plan?.isCompleted),
-    supportsExactHoldings: canReportExact,
-    missingQuantity,
-    exactHoldingsOpen,
-  });
+  const targetIds = targets.map((target) => target.id);
 
   const fieldKey = useCallback(
     (id: string): string | null => (cycleId ? `${cycleId}:${id}` : null),
     [cycleId],
+  );
+
+  const onAmountChange = useCallback(
+    (id: string, value: string) => {
+      const key = fieldKey(id);
+      if (!key) {
+        return;
+      }
+      setAmountFields((current) => ({
+        ...current,
+        [key]: parseReportedPurchaseKronerInput(value),
+      }));
+    },
+    [fieldKey],
   );
 
   const onQuantityChange = useCallback(
@@ -101,13 +116,9 @@ export function InvestScreen() {
       if (!key) {
         return;
       }
-      const parsed = parseQuantityInput(value);
       setQuantityFields((current) => ({
         ...current,
-        [key]: {
-          ...parsed,
-          error: value.trim() === '' ? null : parsed.error,
-        },
+        [key]: parseOptionalQuantityInput(value),
       }));
     },
     [fieldKey],
@@ -127,12 +138,20 @@ export function InvestScreen() {
     [fieldKey],
   );
 
+  const amountStateByTarget = useMemo(() => {
+    const next: Record<string, ReportedAmountField> = {};
+    for (const target of targets) {
+      const key = fieldKey(target.id);
+      next[target.id] = (key && amountFields[key]) || parseReportedPurchaseKronerInput('');
+    }
+    return next;
+  }, [amountFields, fieldKey, targets]);
+
   const quantityStateByTarget = useMemo(() => {
     const next: Record<string, QuantityFieldState> = {};
     for (const target of targets) {
       const key = fieldKey(target.id);
-      next[target.id] = (key && quantityFields[key])
-        || (target.quantity ? parseQuantityInput(target.quantity) : quantityFieldFromRaw(''));
+      next[target.id] = (key && quantityFields[key]) || quantityFieldFromRaw('');
     }
     return next;
   }, [fieldKey, quantityFields, targets]);
@@ -141,64 +160,97 @@ export function InvestScreen() {
     const next: Record<string, QuantityFieldState> = {};
     for (const target of targets) {
       const key = fieldKey(target.id);
-      next[target.id] = (key && priceFields[key]) || quantityFieldFromRaw(target.executionUnitPrice ?? '');
+      next[target.id] = (key && priceFields[key]) || quantityFieldFromRaw('');
     }
     return next;
   }, [fieldKey, priceFields, targets]);
 
-  const exactHoldingsReady = canConfirmQuantityReports(
-    targets.map((target) => target.id),
-    quantityStateByTarget,
-    priceStateByTarget,
-  );
+  const reportedTotalMinor = sumReportedAmountMinor(amountStateByTarget, targetIds);
+  const optionalReady = showOptionalExecutionFields(targetIds);
+  const canSubmit = choice === 'pending' || choice === 'skipped'
+    || (choice === 'as_planned' && canSubmitAsPlanned(targetIds, quantityStateByTarget, priceStateByTarget))
+    || (choice === 'with_changes' && canSubmitWithChanges(
+      targetIds,
+      amountStateByTarget,
+      quantityStateByTarget,
+      priceStateByTarget,
+    ));
 
   const onOpenBroker = useCallback(() => {
     if (!cycleId) {
       return;
     }
     setBrokerOpened(cycleId);
+    setPendingCycleId((current) => (current === cycleId ? null : current));
   }, [cycleId]);
 
-  const onConfirm = useCallback(async () => {
-    if (isConfirming) {
+  const onStartReport = useCallback(() => {
+    if (!cycleId) {
       return;
     }
-    setConfirmError(null);
-    try {
-      await confirm();
-      await participation.refresh();
-    } catch (caught) {
-      setConfirmError({
-        cycleId: cycleId ?? '',
-        message: caught instanceof Error ? caught.message : 'Unable to confirm investments right now',
-      });
-    }
-  }, [confirm, cycleId, isConfirming, participation.refresh]);
+    setReportStarted(cycleId);
+    setPendingCycleId((current) => (current === cycleId ? null : current));
+  }, [cycleId]);
 
-  const onSaveExactHoldings = useCallback(async () => {
-    if (isConfirming) {
+  const onSubmitReport = useCallback(async () => {
+    if (isReporting || !cycleId) {
       return;
     }
-    setConfirmError(null);
+    if (choice === 'pending') {
+      setPendingCycleId(cycleId);
+      setSubmitState('idle');
+      setReportError(null);
+      return;
+    }
+
+    setReportError(null);
+    setSubmitState('loading');
     try {
-      await confirm(
-        buildExecutionReports(
-          targets.map((target) => target.id),
-          quantityStateByTarget,
-          priceStateByTarget,
-        ),
-      );
+      await report({
+        reportMode: choice === 'skipped' ? 'with_changes' : choice,
+        outcome: choice === 'skipped' ? 'skipped' : 'confirmed',
+        purchaseLines: choice === 'as_planned'
+          ? buildAsPlannedPurchaseLines(targetIds, quantityStateByTarget, priceStateByTarget)
+          : choice === 'with_changes'
+            ? buildWithChangesPurchaseLines(
+              targetIds,
+              amountStateByTarget,
+              quantityStateByTarget,
+              priceStateByTarget,
+            )
+            : [],
+      });
+      setSubmitState('success');
       await participation.refresh();
-      setExactHoldingsOpen(false);
     } catch (caught) {
-      setConfirmError({
-        cycleId: cycleId ?? '',
-        message: caught instanceof Error ? caught.message : 'Unable to save exact holdings right now',
+      const message = caught instanceof Error ? caught.message : 'Unable to save this Investment Day report';
+      if (isReportConflictError(caught)) {
+        setSubmitState('conflict');
+      } else if (message === 'Unable to save this Investment Day report') {
+        setSubmitState('timeout');
+      } else {
+        setSubmitState('idle');
+      }
+      setReportError({
+        cycleId,
+        message,
       });
     }
-  }, [confirm, cycleId, isConfirming, participation.refresh, priceStateByTarget, quantityStateByTarget, targets]);
+  }, [
+    amountStateByTarget,
+    choice,
+    cycleId,
+    isReporting,
+    participation,
+    priceStateByTarget,
+    quantityStateByTarget,
+    report,
+    targetIds,
+  ]);
 
-  const phase = plan?.isCompleted ? 'completed' : 'today';
+  const showReport = Boolean(plan && !plan.isCompleted && reportStarted === cycleId && pendingCycleId !== cycleId);
+  const showPending = Boolean(plan && !plan.isCompleted && pendingCycleId === cycleId);
+  const phase = plan?.isCompleted ? 'completed' : showPending ? 'pending' : showReport ? 'report' : 'today';
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -259,33 +311,52 @@ export function InvestScreen() {
             targets={targets}
             preferredBroker={preferredBroker}
             brokerOpened={brokerOpened === cycleId}
-            isConfirming={isConfirming}
-            confirmError={confirmError?.cycleId === cycleId ? confirmError.message : null}
             onOpenBroker={onOpenBroker}
-            onConfirm={() => {
-              void onConfirm();
-            }}
+            onStartReport={onStartReport}
             onChooseBroker={() => setBrokerPickerOpen(true)}
+          />
+        ) : plan && phase === 'pending' ? (
+          <PendingBody
+            plan={plan}
+            onReportNow={() => {
+              if (cycleId) {
+                setReportStarted(cycleId);
+              }
+              setPendingCycleId(null);
+            }}
+          />
+        ) : plan && phase === 'report' ? (
+          <ReportBody
+            plan={plan}
+            participation={participation.participation}
+            targets={targets}
+            choice={choice}
+            amountFields={amountStateByTarget}
+            quantityFields={quantityStateByTarget}
+            priceFields={priceStateByTarget}
+            showOptionalExecution={optionalReady}
+            reportedTotalMinor={reportedTotalMinor}
+            canSubmit={canSubmit && !isReporting}
+            submitState={isReporting ? 'loading' : submitState}
+            error={reportError?.cycleId === cycleId ? reportError.message : null}
+            onChoiceChange={(next) => {
+              setChoice(next);
+              if (submitState !== 'loading') {
+                setSubmitState('idle');
+              }
+            }}
+            onAmountChange={onAmountChange}
+            onQuantityChange={onQuantityChange}
+            onPriceChange={onExecutionPriceChange}
+            onSubmit={() => {
+              void onSubmitReport();
+            }}
           />
         ) : plan ? (
           <CompletedBody
             plan={plan}
             participation={participation.participation}
             targets={targets}
-            showExactCta={showExactCta}
-            showExactForm={showExactForm}
-            quantityStateByTarget={quantityStateByTarget}
-            priceStateByTarget={priceStateByTarget}
-            exactHoldingsReady={exactHoldingsReady}
-            isSaving={isConfirming}
-            exactHoldingsError={confirmError?.cycleId === cycleId ? confirmError.message : null}
-            onOpenExactHoldings={() => setExactHoldingsOpen(true)}
-            onQuantityChange={onQuantityChange}
-            onExecutionPriceChange={onExecutionPriceChange}
-            onSaveExactHoldings={() => {
-              void onSaveExactHoldings();
-            }}
-            onCancelExactHoldings={() => setExactHoldingsOpen(false)}
             onViewActivity={() => onSelectTab('activity')}
           />
         ) : null}
@@ -303,10 +374,8 @@ function TodayBody({
   participation,
   preferredBroker,
   brokerOpened,
-  isConfirming,
-  confirmError,
   onOpenBroker,
-  onConfirm,
+  onStartReport,
   onChooseBroker,
 }: {
   plan: InvestmentDayPlan;
@@ -314,15 +383,12 @@ function TodayBody({
   participation: ReturnType<typeof useInvestmentDayParticipation>['participation'];
   preferredBroker: PreferredBroker | null;
   brokerOpened: boolean;
-  isConfirming: boolean;
-  confirmError: string | null;
   onOpenBroker: () => void;
-  onConfirm: () => void;
+  onStartReport: () => void;
   onChooseBroker: () => void;
 }) {
   const { spacing } = useTheme();
   const hasBroker = preferredBroker !== null;
-  const canConfirm = hasBroker && !isConfirming;
 
   return (
     <View>
@@ -348,7 +414,7 @@ function TodayBody({
         {formatNokFromMinor(plan.expectedAmountMinor)}
       </AppText>
       <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
-        to invest today
+        planned for today
       </AppText>
 
       <AppText variant="sectionTitle" style={{ marginTop: spacing.xxl, marginBottom: spacing.sm }}>
@@ -361,22 +427,31 @@ function TodayBody({
         <View style={{ marginTop: spacing.xl }}>
           <Button
             label={openBrokerActionLabel(preferredBroker)}
-            variant="secondary"
+            variant={brokerOpened ? 'secondary' : 'primary'}
             block
             onPress={onOpenBroker}
             accessibilityHint="Opens your broker. This does not save your Investment Day."
           />
           {brokerOpened ? (
             <AppText variant="meta" color="secondary" style={{ marginTop: spacing.sm }}>
-              Come back here when you are done.
+              Come back here when the order is placed, then report what actually happened.
             </AppText>
           ) : null}
+          <View style={{ marginTop: spacing.md }}>
+            <Button
+              label={brokerOpened ? "I'm back — report what happened" : 'Report this Investment Day'}
+              variant={brokerOpened ? 'primary' : 'secondary'}
+              block
+              onPress={onStartReport}
+              accessibilityHint="Opens the report. Opening a broker never saves purchases."
+            />
+          </View>
         </View>
       ) : (
         <View style={{ marginTop: spacing.xl }}>
           <AppText variant="bodyStrong">Choose a broker to continue</AppText>
           <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
-            Select your broker before you open it from Vesty.
+            Select your broker before you open it from Vesty. You can still report a skip without a broker.
           </AppText>
           <View style={{ marginTop: spacing.md }}>
             <Button
@@ -386,80 +461,63 @@ function TodayBody({
               accessibilityHint="Opens broker selection. Investment Day stays readable."
             />
           </View>
+          <View style={{ marginTop: spacing.md }}>
+            <Button
+              label="Report this Investment Day"
+              variant="secondary"
+              block
+              onPress={onStartReport}
+              accessibilityHint="Opens the report without saving anything yet."
+            />
+          </View>
         </View>
       )}
-
-      <View style={{ marginTop: spacing.xxl, paddingBottom: spacing.lg }}>
-        <AppText variant="meta" color="secondary">
-          Reported by you.
-        </AppText>
-        {confirmError ? (
-          <AppText variant="meta" color="negative" style={{ marginTop: spacing.sm }} accessibilityLiveRegion="polite">
-            {confirmError}
-          </AppText>
-        ) : null}
-        <View style={{ marginTop: spacing.lg }}>
-          <Button
-            label={isConfirming ? 'Saving…' : "I've invested"}
-            variant="primary"
-            block
-            disabled={!canConfirm}
-            busy={isConfirming}
-            onPress={onConfirm}
-            accessibilityHint={
-              canConfirm
-                ? "Saves that you invested today's planned amount. Opening a broker does not do this."
-                : 'Choose a broker first'
-            }
-          />
-        </View>
-      </View>
     </View>
   );
 }
 
-function CompletedBody({
+function ReportBody({
   plan,
   participation,
   targets,
-  showExactCta,
-  showExactForm,
-  quantityStateByTarget,
-  priceStateByTarget,
-  exactHoldingsReady,
-  isSaving,
-  exactHoldingsError,
-  onOpenExactHoldings,
+  choice,
+  amountFields,
+  quantityFields,
+  priceFields,
+  showOptionalExecution,
+  reportedTotalMinor,
+  canSubmit,
+  submitState,
+  error,
+  onChoiceChange,
+  onAmountChange,
   onQuantityChange,
-  onExecutionPriceChange,
-  onSaveExactHoldings,
-  onCancelExactHoldings,
-  onViewActivity,
+  onPriceChange,
+  onSubmit,
 }: {
   plan: InvestmentDayPlan;
   participation: ReturnType<typeof useInvestmentDayParticipation>['participation'];
   targets: InvestTargetRow[];
-  showExactCta: boolean;
-  showExactForm: boolean;
-  quantityStateByTarget: Readonly<Record<string, QuantityFieldState>>;
-  priceStateByTarget: Readonly<Record<string, QuantityFieldState>>;
-  exactHoldingsReady: boolean;
-  isSaving: boolean;
-  exactHoldingsError: string | null;
-  onOpenExactHoldings: () => void;
+  choice: InvestmentDayReportChoice;
+  amountFields: Readonly<Record<string, ReportedAmountField>>;
+  quantityFields: Readonly<Record<string, QuantityFieldState>>;
+  priceFields: Readonly<Record<string, QuantityFieldState>>;
+  showOptionalExecution: boolean;
+  reportedTotalMinor: number;
+  canSubmit: boolean;
+  submitState: InvestmentDayReportSubmitState;
+  error: string | null;
+  onChoiceChange: (choice: InvestmentDayReportChoice) => void;
+  onAmountChange: (id: string, value: string) => void;
   onQuantityChange: (id: string, value: string) => void;
-  onExecutionPriceChange: (id: string, value: string) => void;
-  onSaveExactHoldings: () => void;
-  onCancelExactHoldings: () => void;
-  onViewActivity: () => void;
+  onPriceChange: (id: string, value: string) => void;
+  onSubmit: () => void;
 }) {
   const { spacing } = useTheme();
-  const reportedTotal = plan.transactions.reduce((sum, item) => sum + item.amountMinor, 0);
-  const displayTotal = reportedTotal > 0 ? reportedTotal : plan.expectedAmountMinor;
 
   return (
     <View>
-      <AppText variant="sectionTitle">Investment complete</AppText>
+      <AppText variant="sectionTitle">Back from your broker</AppText>
       <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
         {plan.clubName}
         {'  \u00B7  '}
@@ -477,52 +535,129 @@ function CompletedBody({
         </View>
       ) : null}
 
-      <AppText variant="display" style={{ marginTop: spacing.lg }}>
-        {formatNokFromMinor(displayTotal)}
-      </AppText>
-      <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
-        reported
-      </AppText>
-
-      <AppText variant="sectionTitle" style={{ marginTop: spacing.xxl, marginBottom: spacing.sm }}>
-        Your investments
-      </AppText>
-
-      <View>
-        {targets.map((target) => (
-          <AppText key={target.id} variant="body" style={{ marginTop: 6 }}>
-            {target.ticker ?? target.exposureLabel ?? target.label}
-            {'  \u00B7  '}
-            {formatNokFromMinor(target.amountMinor)}
-          </AppText>
-        ))}
+      <View style={{ marginTop: spacing.xl }}>
+        <InvestmentDayReportPanel
+          expectedAmountMinor={plan.expectedAmountMinor}
+          targets={targets}
+          choice={choice}
+          amountFields={amountFields}
+          quantityFields={quantityFields}
+          priceFields={priceFields}
+          showOptionalExecution={showOptionalExecution}
+          reportedTotalMinor={reportedTotalMinor}
+          canSubmit={canSubmit}
+          submitState={submitState}
+          error={error}
+          onChoiceChange={onChoiceChange}
+          onAmountChange={onAmountChange}
+          onQuantityChange={onQuantityChange}
+          onPriceChange={onPriceChange}
+          onSubmit={onSubmit}
+        />
       </View>
+    </View>
+  );
+}
 
-      {showExactForm ? (
-        <View style={{ marginTop: spacing.xxl }}>
-          <ExactHoldingsForm
-            targets={targets}
-            quantityStateByTarget={quantityStateByTarget}
-            priceStateByTarget={priceStateByTarget}
-            canSave={exactHoldingsReady}
-            isSaving={isSaving}
-            error={exactHoldingsError}
-            onQuantityChange={onQuantityChange}
-            onExecutionPriceChange={onExecutionPriceChange}
-            onSave={onSaveExactHoldings}
-            onCancel={onCancelExactHoldings}
-          />
-        </View>
-      ) : showExactCta ? (
+function PendingBody({
+  plan,
+  onReportNow,
+}: {
+  plan: InvestmentDayPlan;
+  onReportNow: () => void;
+}) {
+  const { spacing } = useTheme();
+  const banner = presentPendingBanner();
+
+  return (
+    <View>
+      <AppText variant="sectionTitle">{banner.title}</AppText>
+      <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
+        {plan.clubName}
+        {'  \u00B7  '}
+        {formatInvestmentDayShortLabel(plan.investmentDayAt)}
+      </AppText>
+      <AppText variant="body" style={{ marginTop: spacing.lg }}>
+        {banner.body}
+      </AppText>
+      <View style={{ marginTop: spacing.xl }}>
+        <Button
+          label="Report now"
+          variant="primary"
+          block
+          onPress={onReportNow}
+          accessibilityHint="Opens the Investment Day report. Nothing has been saved yet."
+        />
+      </View>
+    </View>
+  );
+}
+
+function CompletedBody({
+  plan,
+  participation,
+  targets,
+  onViewActivity,
+}: {
+  plan: InvestmentDayPlan;
+  participation: ReturnType<typeof useInvestmentDayParticipation>['participation'];
+  targets: InvestTargetRow[];
+  onViewActivity: () => void;
+}) {
+  const { spacing } = useTheme();
+  const reportedTotal = plan.transactions.reduce((sum, item) => sum + item.amountMinor, 0);
+  const provenance = asAmountProvenance(plan.transactions[0]?.amountProvenance);
+  const purchased = targets.filter((target) => target.amountMinor > 0);
+
+  return (
+    <View>
+      <AppText variant="sectionTitle">{presentCompletedHeadline(plan.participationOutcome)}</AppText>
+      <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
+        {plan.clubName}
+        {'  \u00B7  '}
+        {formatInvestmentDayShortLabel(plan.investmentDayAt)}
+      </AppText>
+
+      {participation ? (
         <View style={{ marginTop: spacing.xl }}>
-          <Button
-            label="Add exact holdings"
-            variant="secondary"
-            onPress={onOpenExactHoldings}
-            accessibilityHint="Optional. Add the number of units you bought."
+          <InvestmentDayParticipationSection
+            completedCount={participation.completedCount}
+            totalCount={participation.totalCount}
+            allCompleted={participation.allCompleted}
+            members={participation.members}
           />
         </View>
       ) : null}
+
+      {plan.participationOutcome === 'confirmed' ? (
+        <>
+          <AppText variant="display" style={{ marginTop: spacing.lg }}>
+            {formatNokFromMinor(reportedTotal)}
+          </AppText>
+          <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
+            {presentCompletedAmountCaption(plan.participationOutcome, provenance)}
+          </AppText>
+          <AppText variant="sectionTitle" style={{ marginTop: spacing.xxl, marginBottom: spacing.sm }}>
+            Your purchases
+          </AppText>
+          <View>
+            {purchased.length === 0 ? (
+              <AppText variant="body" color="secondary">No purchase rows were stored.</AppText>
+            ) : purchased.map((target) => (
+              <AppText key={target.id} variant="body" style={{ marginTop: 6 }}>
+                {target.ticker ?? target.exposureLabel ?? target.label}
+                {'  \u00B7  '}
+                {formatNokFromMinor(target.amountMinor)}
+                {target.quantity ? `  ·  ${target.quantity} units` : ''}
+              </AppText>
+            ))}
+          </View>
+        </>
+      ) : (
+        <AppText variant="body" color="secondary" style={{ marginTop: spacing.lg }}>
+          {presentCompletedAmountCaption(plan.participationOutcome, provenance)}
+        </AppText>
+      )}
 
       <View style={{ marginTop: spacing.lg, marginBottom: spacing.lg }}>
         <Button label="View activity" variant="secondary" onPress={onViewActivity} />

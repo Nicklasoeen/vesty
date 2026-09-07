@@ -7,8 +7,7 @@ import { formatHomeInvestmentDayDate } from '@/features/home/presentHomePortfoli
 import { presentClubContributionSummary, presentContributionPolicyTiming } from '@/features/clubs/presentContribution';
 import { useClubContribution } from '@/features/clubs/useClubContribution';
 import { useClubStrategy } from '@/features/clubs/useClubStrategy';
-import { canAddExactHoldings } from '@/features/invest/holdingConfidence';
-import { supportsExactHoldings } from '@/features/invest/investmentDayReporting';
+import { asAmountProvenance } from '@/features/invest/amountProvenance';
 import { presentClubOverviewParticipation } from '@/features/invest/presentParticipation';
 import { useInvestmentDay } from '@/features/invest/useInvestmentDay';
 import { useInvestmentDayParticipation } from '@/features/invest/useInvestmentDayParticipation';
@@ -275,6 +274,7 @@ export function ClubOverview({
                 investedMinor: position.totalInvestedMinor,
                 currentValueMinor: position.estimatedCurrentValueMinor,
                 quantityStatus: position.quantityStatus,
+                amountProvenance: asAmountProvenance(position.amountProvenance),
               });
 
               return (
@@ -334,22 +334,6 @@ export function ClubOverview({
             })}
           </ScrollView>
         )}
-        {canAddExactHoldings({
-          isCompleted: true,
-          supportsExactHoldings: supportsExactHoldings(
-            positions.map((position) => position.investmentTargetId),
-          ),
-          missingQuantity: positions.some((position) => position.quantityStatus !== 'complete'),
-        }) ? (
-          <View style={{ marginTop: spacing.md }}>
-            <Button
-              label="Add exact holdings"
-              variant="secondary"
-              onPress={onOpenInvest}
-              accessibilityHint="Optional. Add the number of units you bought."
-            />
-          </View>
-        ) : null}
       </View>
       )}
     </View>

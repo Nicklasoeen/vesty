@@ -333,6 +333,15 @@ select extensions.ok(
 select extensions.ok(
   not has_function_privilege(
     'authenticated',
+    'public.confirm_investment_day_v1(uuid, uuid)',
+    'execute'
+  ),
+  'Authenticated role cannot confirm through the retired v1 path'
+);
+
+select extensions.ok(
+  not has_function_privilege(
+    'authenticated',
     'private.allocate_minor_by_bps(bigint, jsonb)',
     'execute'
   ),
@@ -425,9 +434,13 @@ select extensions.is(
 
 create temporary table alice_confirm as
 select *
-from public.confirm_investment_day_v1(
+from public.report_investment_day_v1(
   (select club_id from alice_club),
-  (select cycle_id from alice_day)
+  (select cycle_id from alice_day),
+  '81000000-0000-4000-8000-000000000001'::uuid,
+  'as_planned',
+  'confirmed',
+  '[]'::jsonb
 );
 
 select extensions.is(
@@ -477,9 +490,13 @@ select extensions.is(
 
 create temporary table alice_retry as
 select *
-from public.confirm_investment_day_v1(
+from public.report_investment_day_v1(
   (select club_id from alice_club),
-  (select cycle_id from alice_day)
+  (select cycle_id from alice_day),
+  '81000000-0000-4000-8000-000000000001'::uuid,
+  'as_planned',
+  'confirmed',
+  '[]'::jsonb
 );
 
 select extensions.is(
@@ -575,7 +592,14 @@ select extensions.is(
   tests.statement_message(
     format(
       $statement$
-        select public.confirm_investment_day_v1(%L::uuid, %L::uuid)
+        select public.report_investment_day_v1(
+          %L::uuid,
+          %L::uuid,
+          '81000000-0000-4000-8000-000000000099'::uuid,
+          'as_planned',
+          'confirmed',
+          '[]'::jsonb
+        )
       $statement$,
       (select club_id from alice_club),
       (select cycle_id from alice_second_day)
@@ -647,9 +671,13 @@ select extensions.is(
 
 create temporary table bob_confirm as
 select *
-from public.confirm_investment_day_v1(
+from public.report_investment_day_v1(
   (select club_id from alice_club),
-  (select cycle_id from bob_day)
+  (select cycle_id from bob_day),
+  '81000000-0000-4000-8000-000000000002'::uuid,
+  'as_planned',
+  'confirmed',
+  '[]'::jsonb
 );
 
 select extensions.is(
@@ -693,7 +721,14 @@ select extensions.is(
   tests.statement_message(
     format(
       $statement$
-        select public.confirm_investment_day_v1(%L::uuid, %L::uuid)
+        select public.report_investment_day_v1(
+          %L::uuid,
+          %L::uuid,
+          '81000000-0000-4000-8000-000000000097'::uuid,
+          'as_planned',
+          'confirmed',
+          '[]'::jsonb
+        )
       $statement$,
       (select club_id from alice_club),
       (select cycle_id from alice_day)
@@ -748,9 +783,13 @@ select tests.authenticate_as('00000000-0000-4000-8000-000000000021');
 select extensions.is(
   tests.statement_message(
     $statement$
-      select public.confirm_investment_day_v1(
+      select public.report_investment_day_v1(
         (select club_id from alice_club),
-        '33000000-0000-4000-8000-000000000001'
+        '33000000-0000-4000-8000-000000000001',
+        '81000000-0000-4000-8000-000000000098'::uuid,
+        'as_planned',
+        'confirmed',
+        '[]'::jsonb
       )
     $statement$
   ),
@@ -773,7 +812,8 @@ select extensions.is(
         currency,
         executed_at,
         source,
-        verification_status
+        verification_status,
+        amount_provenance
       )
       values (
         (select club_id from alice_club),
@@ -785,7 +825,8 @@ select extensions.is(
         'NOK',
         now(),
         'manual',
-        'member_reported'
+        'member_reported',
+        'legacy_plan_assumed'
       )
     $statement$
   ),
@@ -806,7 +847,8 @@ select extensions.is(
         currency,
         executed_at,
         source,
-        verification_status
+        verification_status,
+        amount_provenance
       )
       values (
         (select club_id from alice_club),
@@ -818,7 +860,8 @@ select extensions.is(
         'NOK',
         now(),
         'manual',
-        'member_reported'
+        'member_reported',
+        'legacy_plan_assumed'
       )
     $statement$
   ),
@@ -839,7 +882,8 @@ select extensions.is(
         currency,
         executed_at,
         source,
-        verification_status
+        verification_status,
+        amount_provenance
       )
       values (
         (select club_id from alice_club),
@@ -851,7 +895,8 @@ select extensions.is(
         'nok',
         now(),
         'manual',
-        'member_reported'
+        'member_reported',
+        'legacy_plan_assumed'
       )
     $statement$
   ),
@@ -899,9 +944,13 @@ from public.ensure_open_investment_day_v1((select club_id from alice_remainder_c
 
 create temporary table alice_remainder_confirm as
 select *
-from public.confirm_investment_day_v1(
+from public.report_investment_day_v1(
   (select club_id from alice_remainder_club),
-  (select cycle_id from alice_remainder_day)
+  (select cycle_id from alice_remainder_day),
+  '81000000-0000-4000-8000-000000000003'::uuid,
+  'as_planned',
+  'confirmed',
+  '[]'::jsonb
 );
 
 select extensions.is(
@@ -960,7 +1009,14 @@ select extensions.is(
   tests.statement_message(
     format(
       $statement$
-        select public.confirm_investment_day_v1(%L::uuid, %L::uuid)
+        select public.report_investment_day_v1(
+          %L::uuid,
+          %L::uuid,
+          '81000000-0000-4000-8000-000000000096'::uuid,
+          'as_planned',
+          'confirmed',
+          '[]'::jsonb
+        )
       $statement$,
       (select club_id from alice_club),
       (select cycle_id from bob_day)

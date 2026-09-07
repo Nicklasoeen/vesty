@@ -208,22 +208,33 @@ Money uses signed PostgreSQL `bigint` columns with positive-value checks. Alloca
   - References the exact cycle, membership, and source saving plan
   - Snapshots expected positive `bigint` amount and currency
   - Keeps member outcome/source/timestamps separate from verification state/source/time
+  - Authenticated clients cannot UPDATE this table; outcome changes go through `report_investment_day_v1`
+
+- `member_investment_day_reports`
+  - Primary key: `id`
+  - Unique `(membership_id, investment_cycle_id)` and `(membership_id, client_report_id)`
+  - Stores report mode (`as_planned` / `with_changes`), outcome, and payload fingerprint
+  - Retry with the same client id and fingerprint is idempotent; a different payload is `vesty.report_conflict`
+  - Clients have SELECT on their own active membership rows only; writes go through `report_investment_day_v1`
+  - Versioned correction is remaining work
 
 - `member_investment_transactions`
   - Primary key: `id`
   - Member-reported investment event for one membership, club, cycle, and target
   - V1 writes `buy` only, `source = manual`, `verification_status = member_reported`
   - `amount_minor` is a positive bigint contribution in the club base currency
+  - `amount_provenance` is `member_attested_plan`, `member_reported_actual`, `legacy_plan_assumed`, or reserved `broker_verified`
+  - Existing confirm v1/v2 rows are labelled `legacy_plan_assumed` and are not upgraded
   - `quantity numeric(28, 8)` is nullable and is never fabricated from amount or from a later market price
   - `unit_price_minor` is legacy same-currency minor units and is not used for EUR ETF execution prints
   - `execution_unit_price numeric(20, 8)` plus `execution_unit_price_currency` store optional instrument-currency execution prices
-  - Unique `(membership_id, investment_cycle_id, investment_target_id, transaction_type)` makes one-buy-per-target-per-cycle idempotent
-  - Clients cannot insert, update, or delete rows; standard confirm uses `confirm_investment_day_v1` (amount-only). Optional exact holdings use `confirm_investment_day_v2`
+  - Unique `(membership_id, investment_cycle_id, investment_target_id, transaction_type)` makes one-buy-per-target-per-cycle idempotent; two real trades of the same instrument in one period (S27) is remaining work
+  - Clients cannot insert, update, or delete rows; reporting uses `report_investment_day_v1`
   - A before-insert trigger rejects targets that are not in the cycle's strategy version
 
 - `member_investment_positions`
   - `security_invoker` view aggregating the caller's readable buy transactions
-  - Exposes membership, club, target, contribution currency, `total_invested_minor`, `total_quantity`, and `quantity_status` (`complete` / `partial` / `unavailable`)
+  - Exposes membership, club, target, contribution currency, `total_invested_minor`, `total_quantity`, `quantity_status` (`complete` / `partial` / `unavailable`), and `amount_provenance` (`mixed` when lots disagree)
   - `total_quantity` sums only rows that have quantity
   - Stores no market value and does not bypass transaction RLS
 
@@ -245,10 +256,12 @@ Money uses signed PostgreSQL `bigint` columns with positive-value checks. Alloca
 
 - `member_investment_lots_v1`
   - `security_invoker` per-buy lot. `exact_quantity` is the stored member-reported units. `modelled_quantity` is derived and never written back
+  - `amount_provenance` is the stored trust of that lot's `amount_minor`
   - Reference date is the cycle Investment Day
 
 - `member_estimated_positions_v1`
   - Own-position estimated NOK value and `valuation_confidence` (`exact` / `mixed` / `estimated` / `unavailable`)
+  - `amount_provenance` is mixed when lots disagree
 
 - `member_estimated_portfolio_v1` / `member_estimated_portfolios_v1` / `member_portfolio_history_v1`
   - Caller-owned curated ETF totals and history. Legacy clubs return `modelling_scope = legacy`
@@ -430,7 +443,7 @@ The following require trusted transaction functions, later authorization policy,
 - saving-plan effective periods not overlapping beyond the current-state uniqueness constraint
 - saving-plan and participation currencies matching the club base currency
 - currency text naming an actual ISO 4217 currency
-- participation report correction only while its cycle is open and report immutability after completion
+- participation report is written only through `report_investment_day_v1`; unaudited client correction is closed. Versioned correction is remaining work
 - removal of club-wide monetary aggregate projections, safe club-level status projections, and authorization inside deferred trusted operations
 
 ## Trusted write paths
@@ -452,8 +465,7 @@ The following require trusted transaction functions, later authorization policy,
 - `my_contribution_commitment_v1` — caller only; latest private commitment, never another member's amount
 - `accept_club_invitation` — authenticates via `auth.uid()`, validates token/expiry/recipient, creates one active membership, and marks the invitation accepted without changing ownership
 - `ensure_open_investment_day_v1` — authenticates via `auth.uid()`, opens or reuses the caller's current TestFlight cycle/participation. A **new** cycle may select the latest ContributionPolicyVersion. An **existing** cycle always uses `investment_cycles.contribution_policy_version_id` and never re-resolves "latest". An existing participation is returned as stored and is never recalculated. Flexible members without a commitment receive `vesty.contribution_commitment_required`. Never writes transactions
-- `confirm_investment_day_v1` — authenticates via `auth.uid()`, inserts missing member-reported amount-only buys for the caller only, and is idempotent on retry
-- `confirm_investment_day_v2` — same membership/cycle checks, requires the exact allocated CORE V1 ETF set, stores member-reported quantity and optional execution price, fills null quantity on retry, and rejects a different quantity once stored
+- `report_investment_day_v1` — authenticates via `auth.uid()`, writes one member report plus matching transactions and participation outcome atomically. `as_planned` attests the frozen plan. `with_changes` stores only explicit purchase amounts. Retry with the same `client_report_id` and fingerprint is idempotent. A different payload is `vesty.report_conflict`. Authenticated clients cannot execute the private implementation or the retired confirm v1/v2 functions.
 
 Implementations live in the unexposed `private` schema. Direct client writes to clubs, memberships, invitations, strategy, and transaction tables remain blocked.
 

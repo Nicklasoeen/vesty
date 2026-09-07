@@ -95,6 +95,14 @@ export function parseQuantityInput(raw: string): QuantityFieldState {
   return { raw, error: null, canonical: parsed.canonical };
 }
 
+export function parseOptionalQuantityInput(raw: string): QuantityFieldState {
+  if (raw.trim() === '') {
+    return { raw, error: null, canonical: null };
+  }
+
+  return parseQuantityInput(raw);
+}
+
 export function parseOptionalExecutionPriceInput(raw: string): QuantityFieldState {
   const trimmed = raw.trim();
   if (trimmed === '') {

@@ -210,7 +210,7 @@ Do not imply Vesty collects or holds the money.
 ### Compatibility
 
 - `create_club` remains as a legacy path. It still writes Flexible policy v1 and does **not** invent a creator amount. New mobile uses `create_club_v2`.
-- `confirm_investment_day_v1` / `v2` still confirm from frozen `expected_amount_minor`
+- `report_investment_day_v1` records `as_planned` or `with_changes` from frozen `expected_amount_minor` without treating that plan as an automatic actual
 - participation / streak completion remains `outcome = confirmed`
 - existing migrated historical amounts are not recalculated
 - no broker execution, stocks, or drift logic are introduced

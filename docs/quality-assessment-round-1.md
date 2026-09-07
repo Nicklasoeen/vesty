@@ -16,8 +16,8 @@ Denne runden endret bare F05–F07 og tilhørende tester og dokumentasjon.
 
 | Funn | Status etter kontroll og retting | Bevis og avgrensning |
 | --- | --- | --- |
-| F01 | Fortsatt til stede; ikke endret | `confirm_investment_day_v1` fordeler fortsatt hele `expected_amount_minor` og skriver planavledede kjøp. V2 kan legge til antall, men beløpet er fortsatt planavledet. |
-| F02 | Fortsatt til stede; ikke endret | Egen deltagelse kan fortsatt oppdateres direkte gjennom RLS, uavhengig av kjøpsradene. Confirm returnerer tidlig når utfallet allerede er `confirmed`. |
+| F01 | Fortsatt til stede etter runde 1; lukket i runde 2 | Se `docs/quality-assessment-round-2.md`. |
+| F02 | Fortsatt til stede etter runde 1; lukket i runde 2 | Se `docs/quality-assessment-round-2.md`. |
 | F03 | Fortsatt til stede; ikke endret | `ensure_open_investment_day_v1` kan gjenbruke en vilkårlig åpen periode. Confirm kontrollerer `status = open`, men ikke rapporteringsfristen. |
 | F04 | Delvis rettet før denne runden; ikke endret her | Nyere kode fryser policyreferansen og et eksisterende medlemsbeløp, og sen Flexible-deltagelse er dokumentert. Deltagere opprettes fortsatt per innringer, og historisk sosial projeksjon bruker dagens aktive medlemsliste. |
 | F05 | Rettet i denne runden | Den nye migreringen fjerner `club_estimated_portfolio_v1` og `club_portfolio_history_v1`, inkludert private implementasjoner. Tre bidragsytere åpner derfor ikke lenger en direkte API-bane til klubbens pengesummer eller avledede avkastning. Egne medlemsprojeksjoner og sosial deltagelse består. |
@@ -125,7 +125,6 @@ presentasjonsregresjoner, lint og typecheck dekker den lokale kontrollen.
   gjør hele totalverdien og avkastningen utilgjengelig.
 - En eventuell fremtidig delingsmodell for klubbverdi, også for Equal-klubber,
   krever en separat produkt- og personvernbeslutning.
-- F01–F04, planleggeren, grafens 400-dagersgrense og komplett visuell/enhetsbasert
-  brukerreise står igjen til senere runder.
+- F01/F02 er lukket i rettingsrunde 2. F03/F04, planleggeren, grafens 400-dagersgrense og komplett visuell/enhetsbasert brukerreise står igjen til senere runder.
 
 Ingen commit, push, ekstern migrering eller deploy ble utført.
