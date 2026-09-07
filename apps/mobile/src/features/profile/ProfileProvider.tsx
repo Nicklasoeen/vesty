@@ -158,6 +158,23 @@ export function ProfileProvider({ children }: PropsWithChildren) {
   return <ProfileContext.Provider value={value}>{children}</ProfileContext.Provider>;
 }
 
+export function InertProfileProvider({ children }: PropsWithChildren) {
+  const value = useMemo<ProfileContextValue>(
+    () => ({
+      profile: null,
+      isOnboarded: false,
+      isLoading: false,
+      error: null,
+      initials: '',
+      refresh: async () => null,
+      setPreferredBroker: async () => undefined,
+    }),
+    [],
+  );
+
+  return <ProfileContext.Provider value={value}>{children}</ProfileContext.Provider>;
+}
+
 export function useProfile(): ProfileContextValue {
   const value = useContext(ProfileContext);
   if (!value) {

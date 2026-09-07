@@ -1,55 +1,66 @@
-import { CORE_V1_TARGETS } from '../clubs/curatedInvestmentPackages.ts';
 import {
-  INITIAL_GROUP_MODE_DRAFT,
-  type CatalogState,
-  type GroupModeDraft,
-  type PrototypeSubmitState,
-} from './groupModePrototype.ts';
+  createEmptyCreateClubDraft,
+  type CreateClubDraft,
+} from '../clubs/createClubWizard.ts';
+import type { CreateClubSubmitState } from '../clubs/createClubSubmission.ts';
+import {
+  DNB_GLOBAL_INDEKS_A,
+  DNB_GLOBAL_INDEKS_A_PRODUCT_ID,
+  type CatalogLoadState,
+  type SingleFundProduct,
+} from '../clubs/singleFundCatalog.ts';
 
 export interface GroupModeGalleryScenario {
   id: string;
   label: string;
-  draft: GroupModeDraft;
-  catalogState: CatalogState;
-  submitState: PrototypeSubmitState;
+  draft: CreateClubDraft;
+  products: readonly SingleFundProduct[];
+  catalogState: CatalogLoadState;
+  submitState: CreateClubSubmitState;
+  catalogMessage?: string | null;
+  submitMessage?: string | null;
   fundDetailOpen?: boolean;
   compact?: boolean;
   largeText?: boolean;
 }
 
-const simpleDraft: GroupModeDraft = {
-  ...INITIAL_GROUP_MODE_DRAFT,
-  clubName: 'Sammen hver måned',
-  mode: 'simple_saving',
-  simpleFundSelected: true,
-  brokerPreference: 'dnb',
-  contributionMode: 'equal',
-  equalAmountInput: '1000',
+const CREATION_ID = '86000000-0000-4000-8000-000000000001';
+
+const longFund: SingleFundProduct = {
+  ...DNB_GLOBAL_INDEKS_A,
+  id: '32000000-0000-4000-8000-000000000099',
+  legalName: 'DNB Global Indeks A with an unusually long legal share-class name for stress',
+  displayName: 'DNB Global Indeks A with an unusually long legal share-class name for stress',
 };
 
-const customDraft: GroupModeDraft = {
-  ...INITIAL_GROUP_MODE_DRAFT,
-  clubName: 'Vår investeringsklubb',
-  mode: 'custom_strategy',
-  customAllocations: [
-    { targetId: CORE_V1_TARGETS[0]!.id, percent: 60 },
-    { targetId: CORE_V1_TARGETS[1]!.id, percent: 40 },
-  ],
-  contributionMode: 'flexible',
-  flexibleAmountInput: '1500',
-  governance: 'supermajority',
+const inactiveFund: SingleFundProduct = {
+  ...DNB_GLOBAL_INDEKS_A,
+  status: 'inactive',
 };
+
+function baseDraft(overrides: Partial<CreateClubDraft> = {}): CreateClubDraft {
+  return {
+    ...createEmptyCreateClubDraft(CREATION_ID),
+    name: 'Sammen hver måned',
+    mode: 'single_fund',
+    catalogProductId: DNB_GLOBAL_INDEKS_A_PRODUCT_ID,
+    contributionMode: 'equal',
+    equalAmountInput: '1000',
+    ...overrides,
+  };
+}
 
 function scenario(
   id: string,
   label: string,
-  draft: GroupModeDraft,
+  draft: CreateClubDraft,
   overrides: Partial<Omit<GroupModeGalleryScenario, 'id' | 'label' | 'draft'>> = {},
 ): GroupModeGalleryScenario {
   return {
     id,
     label,
     draft,
+    products: [DNB_GLOBAL_INDEKS_A],
     catalogState: 'ready',
     submitState: 'idle',
     ...overrides,
@@ -57,63 +68,61 @@ function scenario(
 }
 
 export const GROUP_MODE_GALLERY_SCENARIOS: readonly GroupModeGalleryScenario[] = [
-  scenario('name', 'Step · club name', { ...INITIAL_GROUP_MODE_DRAFT, step: 'name' }),
-  scenario('mode-empty', 'Mode · unselected', { ...INITIAL_GROUP_MODE_DRAFT, step: 'mode', clubName: 'Sammen' }),
-  scenario('mode-simple', 'Mode · Simple selected', { ...simpleDraft, step: 'mode' }),
-  scenario('mode-custom', 'Mode · Strategy selected', { ...customDraft, step: 'mode' }),
-  scenario('simple-normal', 'Simple · normal', { ...simpleDraft, step: 'investment' }),
-  scenario('simple-detail', 'Simple · detail open', { ...simpleDraft, step: 'investment' }, { fundDetailOpen: true }),
-  scenario('simple-broker-unknown', 'Simple · broker unknown', {
-    ...simpleDraft,
-    step: 'investment',
-    brokerPreference: 'unknown',
+  scenario('name', 'Step · club name', baseDraft({ step: 'name', mode: null, catalogProductId: null })),
+  scenario('mode-empty', 'Mode · unselected', baseDraft({ step: 'mode', mode: null, catalogProductId: null })),
+  scenario('mode-simple', 'Mode · Simple selected', baseDraft({ step: 'mode' })),
+  scenario('mode-locked', 'Mode · Build your strategy locked', baseDraft({ step: 'mode' })),
+  scenario('catalog-loading', 'Catalog · loading', baseDraft({ step: 'fund' }), { catalogState: 'loading' }),
+  scenario('catalog-error', 'Catalog · error', baseDraft({ step: 'fund' }), { catalogState: 'error' }),
+  scenario('catalog-empty', 'Catalog · empty', baseDraft({ step: 'fund', catalogProductId: null }), {
+    catalogState: 'empty',
+    products: [],
   }),
-  scenario('simple-unavailable', 'Simple · unavailable', { ...simpleDraft, step: 'investment' }, { catalogState: 'unavailable' }),
-  scenario('catalog-loading', 'Catalog · loading', { ...simpleDraft, step: 'investment' }, { catalogState: 'loading' }),
-  scenario('catalog-empty', 'Catalog · empty', { ...simpleDraft, step: 'investment' }, { catalogState: 'empty' }),
-  scenario('catalog-error', 'Catalog · error', { ...simpleDraft, step: 'investment' }, { catalogState: 'error' }),
-  scenario('custom-empty', 'Strategy · no selection', {
-    ...customDraft,
-    step: 'investment',
-    customAllocations: [],
+  scenario('fund-deactivated', 'Fund · deactivated', baseDraft({ step: 'fund', catalogProductId: null }), {
+    products: [inactiveFund],
+    catalogState: 'ready',
+    catalogMessage: 'This fund is no longer available for new clubs. Choose another fund to continue.',
   }),
-  scenario('custom-valid', 'Strategy · valid 100%', { ...customDraft, step: 'investment' }),
-  scenario('custom-under', 'Strategy · under 100%', {
-    ...customDraft,
-    step: 'investment',
-    customAllocations: [
-      { targetId: CORE_V1_TARGETS[0]!.id, percent: 50 },
-      { targetId: CORE_V1_TARGETS[1]!.id, percent: 30 },
-    ],
+  scenario('fund-selected', 'Fund · selected', baseDraft({ step: 'fund' })),
+  scenario('fund-detail', 'Fund · details', baseDraft({ step: 'fund' }), { fundDetailOpen: true }),
+  scenario('contribution-equal', 'Contribution · Equal', baseDraft({ step: 'contribution' })),
+  scenario('contribution-flexible', 'Contribution · Flexible', baseDraft({
+    step: 'contribution',
+    contributionMode: 'flexible',
+    equalAmountInput: '',
+    creatorFlexibleAmountInput: '1500',
+  })),
+  scenario('governance', 'Step · governance', baseDraft({ step: 'governance' })),
+  scenario('review', 'Review', baseDraft({ step: 'review' })),
+  scenario('submit-loading', 'Submit · loading', baseDraft({ step: 'review' }), { submitState: 'loading' }),
+  scenario('submit-timeout', 'Submit · timeout', baseDraft({ step: 'review' }), { submitState: 'timeout' }),
+  scenario('submit-conflict', 'Submit · conflict', baseDraft({ step: 'review' }), { submitState: 'conflict' }),
+  scenario('submit-idempotent', 'Submit · idempotent success', baseDraft({ step: 'review' }), {
+    submitState: 'success',
+    submitMessage: 'This club was already created. Opening it now.',
   }),
-  scenario('custom-over', 'Strategy · over 100%', {
-    ...customDraft,
-    step: 'investment',
-    customAllocations: [
-      { targetId: CORE_V1_TARGETS[0]!.id, percent: 70 },
-      { targetId: CORE_V1_TARGETS[1]!.id, percent: 50 },
-    ],
-  }),
-  scenario('contribution', 'Step · contribution', { ...simpleDraft, step: 'contribution' }),
-  scenario('governance', 'Step · governance', { ...simpleDraft, step: 'governance' }),
-  scenario('simple-review', 'Review · Simple', { ...simpleDraft, step: 'review' }),
-  scenario('custom-review', 'Review · Strategy', { ...customDraft, step: 'review' }),
-  scenario('submit-loading', 'Submit · loading', { ...simpleDraft, step: 'review' }, { submitState: 'loading' }),
-  scenario('submit-error', 'Submit · error', { ...simpleDraft, step: 'review' }, { submitState: 'error' }),
-  scenario('submit-success', 'Submit · success', { ...simpleDraft, step: 'review' }, { submitState: 'success' }),
+  scenario('submit-success', 'Submit · success', baseDraft({ step: 'review' }), { submitState: 'success' }),
   scenario(
     'long-name',
-    'Stress · long name',
-    {
-      ...customDraft,
+    'Stress · long club name',
+    baseDraft({
       step: 'review',
-      clubName: 'Den langsiktige investeringsklubben for familie og gode venner',
-    },
+      name: 'Den langsiktige investeringsklubben for familie og gode venner',
+    }),
     { compact: true },
   ),
-  scenario('large-text', 'Stress · large text', { ...simpleDraft, step: 'review' }, { compact: true, largeText: true }),
-] as const;
+  scenario('long-fund', 'Stress · long fund name', baseDraft({
+    step: 'fund',
+    catalogProductId: longFund.id,
+  }), { products: [longFund], compact: true, fundDetailOpen: true }),
+  scenario('large-text', 'Stress · large text', baseDraft({ step: 'review' }), { compact: true, largeText: true }),
+  scenario('small-iphone', 'Stress · 375 iPhone', baseDraft({ step: 'mode' }), { compact: true }),
+];
 
 export function getGroupModeGalleryScenario(id: string): GroupModeGalleryScenario {
   return GROUP_MODE_GALLERY_SCENARIOS.find((item) => item.id === id) ?? GROUP_MODE_GALLERY_SCENARIOS[0]!;
+}
+
+export function galleryFixtureSendsServerCall(_scenario: GroupModeGalleryScenario): false {
+  return false;
 }

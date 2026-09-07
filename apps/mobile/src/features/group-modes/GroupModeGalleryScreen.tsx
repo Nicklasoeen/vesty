@@ -1,14 +1,23 @@
 import { useState } from 'react';
 import { Pressable, ScrollView } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
 
+import { CreateClubJourney } from '@/features/clubs/CreateClubJourney';
 import { useTheme } from '@/theme';
 import { AppText, Screen, Surface } from '@/ui';
 
-import { GroupModePrototypeFlow } from './GroupModePrototypeFlow';
 import {
   GROUP_MODE_GALLERY_SCENARIOS,
+  galleryFixtureSendsServerCall,
   getGroupModeGalleryScenario,
 } from './groupModeGalleryFixtures';
+
+function galleryScenarioId(value: string | undefined): string | null {
+  if (!value || !GROUP_MODE_GALLERY_SCENARIOS.some((item) => item.id === value)) {
+    return null;
+  }
+  return value;
+}
 
 /**
  * Development-only gallery. It owns fixture state, imports no data client,
@@ -16,8 +25,24 @@ import {
  */
 export function GroupModeGalleryScreen() {
   const { colors, spacing } = useTheme();
-  const [scenarioId, setScenarioId] = useState(GROUP_MODE_GALLERY_SCENARIOS[0]!.id);
+  const params = useLocalSearchParams<{ scenario?: string }>();
+  const requestedScenarioId = galleryScenarioId(
+    typeof params.scenario === 'string' ? params.scenario : undefined,
+  );
+  const [scenarioId, setScenarioId] = useState(
+    requestedScenarioId ?? GROUP_MODE_GALLERY_SCENARIOS[0]!.id,
+  );
   const [retryCount, setRetryCount] = useState(0);
+  const [draft, setDraft] = useState(() => getGroupModeGalleryScenario(scenarioId).draft);
+  const [appliedQueryScenario, setAppliedQueryScenario] = useState(requestedScenarioId);
+
+  if (requestedScenarioId && requestedScenarioId !== appliedQueryScenario) {
+    setAppliedQueryScenario(requestedScenarioId);
+    setScenarioId(requestedScenarioId);
+    setDraft(getGroupModeGalleryScenario(requestedScenarioId).draft);
+    setRetryCount(0);
+  }
+
   const scenario = getGroupModeGalleryScenario(scenarioId);
 
   return (
@@ -54,6 +79,7 @@ export function GroupModeGalleryScreen() {
                 accessibilityState={{ selected: active }}
                 onPress={() => {
                   setScenarioId(item.id);
+                  setDraft(item.draft);
                   setRetryCount(0);
                 }}
                 style={{
@@ -77,15 +103,27 @@ export function GroupModeGalleryScreen() {
         ) : null}
       </Surface>
 
-      <GroupModePrototypeFlow
+      <CreateClubJourney
         key={`${scenario.id}-${retryCount}`}
-        initialDraft={scenario.draft}
+        draft={draft}
+        onDraftChange={setDraft}
+        products={scenario.products}
         catalogState={scenario.catalogState}
+        catalogMessage={scenario.catalogMessage}
+        onRetryCatalog={() => setRetryCount((count) => count + 1)}
         submitState={scenario.submitState}
-        fundDetailInitiallyOpen={scenario.fundDetailOpen}
+        submitMessage={scenario.submitMessage}
+        onSubmit={() => {
+          if (galleryFixtureSendsServerCall(scenario)) {
+            throw new Error('Gallery must not send a server call');
+          }
+        }}
+        onGoToClubs={() => undefined}
+        onStartNewSetup={() => undefined}
+        fundDetailOpen={scenario.fundDetailOpen}
         compact={scenario.compact}
         largeText={scenario.largeText}
-        onRetryCatalog={() => setRetryCount((count) => count + 1)}
+        onLeave={() => undefined}
       />
     </Screen>
   );

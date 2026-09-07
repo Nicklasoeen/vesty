@@ -30,6 +30,7 @@ import {
 
 interface ClubOverviewProps {
   clubId: string;
+  investmentMode?: 'legacy_package' | 'single_fund' | 'custom_portfolio';
   summary: MemberPortfolioSummary | null;
   history: PortfolioHistoryPoint[];
   positions: EstimatedPosition[];
@@ -41,6 +42,7 @@ interface ClubOverviewProps {
 
 export function ClubOverview({
   clubId,
+  investmentMode,
   summary,
   history,
   positions,
@@ -73,7 +75,7 @@ export function ClubOverview({
       })
     : null;
   const finance = presentClubViewerFinance(summary);
-  const strategy = presentClubStrategy(allocations);
+  const strategy = presentClubStrategy(allocations, investmentMode);
   const chartHistory = historyByRange(history);
   const hasChart = finance.presentation === 'estimated' && chartHistory.ALL.length >= 2;
   const returnColor =
@@ -243,10 +245,10 @@ export function ClubOverview({
                 />
                 <View style={{ flex: 1, minWidth: 0, marginLeft: spacing.sm }}>
                   <AppText variant="bodyStrong" numberOfLines={1}>
-                    {line.ticker}
+                    {investmentMode === 'single_fund' ? line.friendlyName : line.ticker}
                   </AppText>
                   <AppText variant="supporting" numberOfLines={1}>
-                    {line.friendlyName}
+                    {investmentMode === 'single_fund' ? 'Simple saving · one fund' : line.friendlyName}
                   </AppText>
                 </View>
                 <AppText variant="bodyStrong">{`${line.percentage}%`}</AppText>

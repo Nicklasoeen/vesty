@@ -7,48 +7,43 @@ import type { ContributionPolicyMode } from './contributionPolicy.ts';
 import {
   compactAllocationPreview,
   getCoreV1Target,
-  getCuratedPackage,
   type CuratedInvestmentPackage,
 } from './curatedInvestmentPackages.ts';
 import {
+  CREATE_CLUB_STEPS,
   canContinueCreateClub,
-  parsedCreatorFlexibleAmountMinor,
-  parsedEqualAmountMinor,
-  trimmedClubName,
+  createClubStepIndex,
   type CreateClubDraft,
   type CreateClubStep,
 } from './createClubWizard.ts';
-import { GOVERNANCE_OPTIONS, governanceLabel, type GovernanceThresholdKind } from './governance.ts';
-import { contributionStyleLabel } from './presentContribution.ts';
+import type { SingleFundProduct } from './singleFundCatalog.ts';
+import { presentCreateClubReviewAgreement } from './presentSingleFund.ts';
+import { GOVERNANCE_OPTIONS, type GovernanceThresholdKind } from './governance.ts';
 
-export const CREATE_CLUB_STEP_ORDER: readonly CreateClubStep[] = [
-  'name',
-  'governance',
-  'style',
-  'contribution',
-  'review',
-];
+export const CREATE_CLUB_STEP_ORDER: readonly CreateClubStep[] = CREATE_CLUB_STEPS;
 
 const STEP_TITLES: Record<CreateClubStep, string> = {
   name: 'Club name',
-  governance: 'Governance',
-  style: 'Investment style',
-  contribution: 'Contribution style',
+  mode: 'How do you want to invest?',
+  fund: 'Choose a fund',
+  contribution: 'Monthly contribution',
+  governance: 'How decisions are made',
   review: 'Review',
 };
 
 const STEP_SUPPORTING: Record<CreateClubStep, string | null> = {
   name: 'What should your club be called?',
-  governance: 'Choose how many members must agree before a proposal passes.',
-  style: 'Choose a starting portfolio for the club.',
-  contribution: 'Choose how your club contributes on each Investment Day.',
-  review: null,
+  mode: 'Choose the routine that fits your group.',
+  fund: 'One fund. One purchase in each member’s own account.',
+  contribution: 'Choose how members contribute.',
+  governance: 'Choose how future proposals pass.',
+  review: 'Confirm what your group has chosen.',
 };
 
 const LEGAL_INSTRUMENT_NAME = /ucits|\betf\b|vanguard ftse|ishares core|ishares nasdaq|\(usd\)|\(acc\)/i;
 
 export function presentCreateClubProgress(step: CreateClubStep) {
-  const index = CREATE_CLUB_STEP_ORDER.indexOf(step);
+  const index = createClubStepIndex(step);
 
   return {
     eyebrow: 'Create club',
@@ -103,7 +98,7 @@ export function presentCreateClubContributionOptions() {
       title: 'Same amount',
       description: 'Everyone contributes the same amount.',
       amountLabel: 'Club amount',
-      amountHint: 'per Investment Day',
+      amountHint: 'per month, shared with members',
       privacy: null,
     },
     {
@@ -112,7 +107,7 @@ export function presentCreateClubContributionOptions() {
       description: 'Each member privately chooses their own amount.',
       amountLabel: 'Your amount',
       amountHint: null,
-      privacy: 'Only you can see your amount.',
+      privacy: 'Only you can see your amount. Other members will not see it.',
     },
   ] as const;
 }
@@ -123,7 +118,7 @@ export function presentCreateClubContributionSelection(mode: ContributionPolicyM
     revealsYourAmount: mode === 'flexible',
     clubAmountLabel: 'Club amount',
     yourAmountLabel: 'Your amount',
-    privacy: mode === 'flexible' ? 'Only you can see your amount.' : null,
+    privacy: mode === 'flexible' ? 'Only you can see your amount. Other members will not see it.' : null,
     ...presentSelectableOptionAppearance(mode != null),
   };
 }
@@ -164,51 +159,51 @@ export function presentCreateClubAmountPreview(input: string): string | null {
   return amountMinor == null ? null : formatNokFromMinor(amountMinor);
 }
 
-export function presentCreateClubContinue(draft: CreateClubDraft) {
+export function presentCreateClubCatalogPanel(state: 'idle' | 'loading' | 'ready' | 'empty' | 'error' | 'unavailable') {
+  if (state === 'loading' || state === 'idle') {
+    return {
+      title: 'Loading funds…',
+      body: null,
+      retry: false,
+    };
+  }
+  if (state === 'empty') {
+    return {
+      title: 'No funds are available right now',
+      body: 'There are no verified funds for this setup.',
+      retry: false,
+    };
+  }
+  if (state === 'error') {
+    return {
+      title: 'Unable to load funds',
+      body: 'Try again in a moment.',
+      retry: true,
+    };
+  }
   return {
-    enabled: canContinueCreateClub(draft),
+    title: 'This fund cannot be selected for a new club right now.',
+    body: null,
+    retry: false,
+  };
+}
+
+export function presentCreateClubContinue(
+  draft: CreateClubDraft,
+  products: readonly SingleFundProduct[] = [],
+) {
+  return {
+    enabled: canContinueCreateClub(draft, products),
     label: draft.step === 'review' ? 'Create club' : 'Continue',
   };
 }
 
-export function presentCreateClubReview(draft: CreateClubDraft) {
-  if (!draft.packageId || !draft.contributionMode) {
+export function presentCreateClubReview(draft: CreateClubDraft, product: SingleFundProduct) {
+  if (!draft.contributionMode) {
     throw new Error('Create club review requires a complete draft');
   }
 
-  const selected = getCuratedPackage(draft.packageId);
-  const amountMinor =
-    draft.contributionMode === 'equal'
-      ? parsedEqualAmountMinor(draft)
-      : parsedCreatorFlexibleAmountMinor(draft);
-  const amountLabel = amountMinor == null ? '' : formatNokFromMinor(amountMinor);
-  const exposureLines = selected.allocations.map(
-    (allocation) => `${allocation.allocationBps / 100}% ${allocation.exposureLabel}`,
-  );
-  const holdings = packageFriendlyHoldings(selected);
-
-  return {
-    clubName: trimmedClubName(draft.name),
-    investmentStyleLabel: 'Investment style',
-    investmentName: selected.displayName,
-    exposureLines,
-    holdings,
-    contributionStyleLabel: 'Contribution style',
-    contributionName: contributionStyleLabel(draft.contributionMode),
-    contributionDetail:
-      draft.contributionMode === 'equal' ? `${amountLabel} per Investment Day` : amountLabel,
-    contributionPrivacy: draft.contributionMode === 'flexible' ? 'Only you can see your amount.' : null,
-    governanceLabel: 'Governance',
-    governanceName: governanceLabel(draft.governance),
-    primaryLines: [
-      trimmedClubName(draft.name),
-      selected.displayName,
-      ...exposureLines,
-      contributionStyleLabel(draft.contributionMode),
-      draft.contributionMode === 'equal' ? `${amountLabel} per Investment Day` : amountLabel,
-      governanceLabel(draft.governance),
-    ],
-  };
+  return presentCreateClubReviewAgreement(draft, product);
 }
 
 export function createClubReviewContainsLegalInstrumentNames(text: string): boolean {

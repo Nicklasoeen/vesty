@@ -26,7 +26,7 @@ Entity and attribute names below are domain terminology, not a finalized physica
 6. A strategy is a complete allocation snapshot whose integer basis points total exactly `10000`.
 7. Vesty curates the V1 InvestmentTarget catalog. Targets represent concrete purchasable products (funds, ETFs, stocks) without coupling their core identity to a broker. Generic exposure categories are not instruments.
 8. Planned amounts, member reports, and future broker verification are different facts and must never be conflated.
-9. The owner chooses an allowlisted curated investment package at club creation. The server resolves that package into immutable StrategyVersion 1. Every later strategy change requires a proposal and vote, and approval creates a new immutable version. Clients cannot invent targets or percentages.
+9. The owner chooses the club investment method at creation. It is stored explicitly and cannot change in v1. Simple saving clubs resolve one allowlisted catalog fund into StrategyVersion 1 with exactly 10000 basis points. Legacy package clubs still resolve a curated multi-ETF package. `custom_portfolio` is reserved and not creatable in this release. Clients cannot invent targets or percentages.
 10. Proposal rules, electorate, votes, results, strategy history, ownership transfers, and membership tenures must remain auditable.
 11. Each active club has exactly one active owner. The only V1 membership roles are `OWNER` and `MEMBER`.
 12. A club's voting mode is selected at creation and remains locked for V1.
@@ -98,7 +98,7 @@ Broker adapter / import
 
 **Responsibility:** Be the private collaboration and authorization boundary for one investment club.
 
-**Important attributes:** Stable identity, name, lifecycle status, creation time, one base currency, and the governance rule set selected at creation.
+**Important attributes:** Stable identity, name, lifecycle status, creation time, one base currency, the immutable investment method selected at creation (`legacy_package`, `single_fund`, or reserved `custom_portfolio`), and the governance rule set selected at creation.
 
 **Relationships:** Owns memberships, invitations, ownership transfers, strategy history, proposals, schedule history, and investment cycles. Strategy allocations reference Vesty-managed InvestmentTargets.
 
@@ -117,6 +117,7 @@ Archiving stops new operational activity but preserves history. A club with mean
 - All authoritative member saving-plan and cycle expectation amounts use the club base currency.
 - The club name may be changed after creation by the active owner. Members cannot rename the club.
 - The governance rule set is chosen when the club is created and is not editable in V1.
+- The investment method is chosen when the club is created and is not editable in V1. Existing clubs keep `legacy_package`. New Simple saving clubs are `single_fund`. The method is never inferred from allocation count.
 - At most one ownership transfer is pending at a time.
 - At most one strategy version is effective at a given instant.
 - At most one schedule revision is effective at a given instant.

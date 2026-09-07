@@ -35,23 +35,6 @@ export interface GroupModeDraft {
   governance: GovernanceThresholdKind;
 }
 
-export const STOREBRAND_FUND_CANDIDATE = {
-  id: 'storebrand-indeks-alle-markeder-n',
-  friendlyName: 'Global market',
-  legalName: 'Storebrand Indeks – Alle Markeder N',
-  isin: 'NO0010817893',
-  description: 'One fund across developed and emerging markets.',
-  risk: '4 of 7',
-  horizon: 'At least 6 years',
-  minimumDnb: '100 kr',
-  checkedDate: '7 September 2026',
-  costs: {
-    dnb: '0.20% annual price at DNB',
-    nordnet: '0.25% total annual price at Nordnet',
-  },
-  candidateNotice: 'Catalog candidate · not available for real club creation',
-} as const;
-
 export const INITIAL_GROUP_MODE_DRAFT: GroupModeDraft = {
   step: 'name',
   clubName: '',
@@ -114,6 +97,9 @@ export function validateCustomAllocations(
 }
 
 export function selectGroupMode(draft: GroupModeDraft, mode: GroupMode): GroupModeDraft {
+  if (mode !== 'simple_saving') {
+    return draft;
+  }
   if (draft.mode === mode) {
     return draft;
   }

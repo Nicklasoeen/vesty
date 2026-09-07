@@ -1,28 +1,30 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { CURATED_INVESTMENT_PACKAGES, getCuratedPackage } from './curatedInvestmentPackages.ts';
-import { INITIAL_CREATE_CLUB_DRAFT, type CreateClubDraft } from './createClubWizard.ts';
+import { createEmptyCreateClubDraft, type CreateClubDraft } from './createClubWizard.ts';
 import {
-  createClubReviewContainsLegalInstrumentNames,
-  packageFriendlyHoldings,
   presentCreateClubAmountPreview,
+  presentCreateClubCatalogPanel,
   presentCreateClubContinue,
   presentCreateClubContributionChoice,
   presentCreateClubContributionOptions,
   presentCreateClubContributionSelection,
   presentCreateClubGovernanceChoice,
   presentCreateClubGovernanceOptions,
-  presentCreateClubInvestmentOption,
   presentCreateClubProgress,
   presentCreateClubReview,
 } from './presentCreateClub.ts';
+import { formatCheckedOn, presentGroupTypeOptions, presentSingleFundCard, presentSingleFundDetails } from './presentSingleFund.ts';
+import { DNB_GLOBAL_INDEKS_A, DNB_GLOBAL_INDEKS_A_PRODUCT_ID } from './singleFundCatalog.ts';
+
+const CREATION_ID = '86000000-0000-4000-8000-000000000001';
 
 function completeDraft(overrides: Partial<CreateClubDraft> = {}): CreateClubDraft {
   return {
-    ...INITIAL_CREATE_CLUB_DRAFT,
+    ...createEmptyCreateClubDraft(CREATION_ID),
     name: 'Den Beste Klubben',
-    packageId: 'world_mix',
+    mode: 'single_fund',
+    catalogProductId: DNB_GLOBAL_INDEKS_A_PRODUCT_ID,
     contributionMode: 'equal',
     equalAmountInput: '1000',
     step: 'review',
@@ -31,166 +33,157 @@ function completeDraft(overrides: Partial<CreateClubDraft> = {}): CreateClubDraf
 }
 
 describe('presentCreateClubProgress', () => {
-  it('numbers the real wizard order without reordering steps', () => {
+  it('numbers the Simple saving wizard order', () => {
     assert.deepEqual(presentCreateClubProgress('name'), {
       eyebrow: 'Create club',
-      progressLabel: '1 of 5',
+      progressLabel: '1 of 6',
       title: 'Club name',
       supporting: 'What should your club be called?',
       stepIndex: 1,
-      stepCount: 5,
+      stepCount: 6,
     });
-    assert.equal(presentCreateClubProgress('governance').progressLabel, '2 of 5');
-    assert.equal(presentCreateClubProgress('governance').title, 'Governance');
-    assert.equal(presentCreateClubProgress('style').progressLabel, '3 of 5');
-    assert.equal(presentCreateClubProgress('style').title, 'Investment style');
+    assert.equal(presentCreateClubProgress('mode').title, 'How do you want to invest?');
+    assert.equal(presentCreateClubProgress('fund').progressLabel, '3 of 6');
     assert.equal(
-      presentCreateClubProgress('style').supporting,
-      'Choose a starting portfolio for the club.',
+      presentCreateClubProgress('fund').supporting,
+      'One fund. One purchase in each member’s own account.',
     );
-    assert.equal(presentCreateClubProgress('contribution').progressLabel, '4 of 5');
-    assert.equal(presentCreateClubProgress('review').progressLabel, '5 of 5');
-    assert.equal(presentCreateClubProgress('review').title, 'Review');
+    assert.equal(presentCreateClubProgress('contribution').title, 'Monthly contribution');
+    assert.equal(presentCreateClubProgress('governance').title, 'How decisions are made');
+    assert.equal(presentCreateClubProgress('review').progressLabel, '6 of 6');
   });
 });
 
-describe('investment style options', () => {
-  it('keeps unselected packages compact and visually selectable', () => {
-    const worldMix = getCuratedPackage('world_mix');
-    const presented = presentCreateClubInvestmentOption(worldMix, false);
+describe('group type options', () => {
+  it('keeps Simple saving active and Build your strategy locked', () => {
+    const options = presentGroupTypeOptions(null);
+    assert.equal(options[0]?.title, 'Simple saving');
+    assert.equal(options[0]?.locked, false);
+    assert.equal(options[1]?.title, 'Build your strategy');
+    assert.equal(options[1]?.locked, true);
+    assert.equal(options[1]?.lockReason, 'Available after initial testing');
+    assert.equal(options[1]?.selected, false);
+    assert.match(options[1]?.accessibilityLabel ?? '', /Available after initial testing/);
+  });
+});
 
-    assert.equal(presented.title, 'World Mix');
-    assert.equal(presented.position, 'Broadest mix');
-    assert.equal(presented.selected, false);
-    assert.equal(presented.tappable, true);
-    assert.equal(presented.indicator, 'empty');
-    assert.equal(presented.surfaceToken, 'surface');
-    assert.equal(presented.borderToken, 'border');
-    assert.match(presented.allocationPreview, /60% World/);
+describe('fund card', () => {
+  it('explains the DNB fund without advice or live NAV', () => {
+    const card = presentSingleFundCard(DNB_GLOBAL_INDEKS_A, true);
+    const details = presentSingleFundDetails(DNB_GLOBAL_INDEKS_A);
+    const visible = [card.title, card.description, ...card.facts, ...details.notes, ...details.costs.map((row) => row.label)].join('\n');
+
+    assert.equal(card.title, 'DNB Global Indeks A');
+    assert.match(card.description, /developed markets/);
+    assert.equal(card.facts.some((fact) => fact.includes('One fund')), true);
+    assert.equal(card.facts.some((fact) => fact.includes('Nordnet') && fact.includes('DNB')), true);
+    assert.match(visible, /0\.20%/);
+    assert.match(visible, /0\.25%/);
+    assert.doesNotMatch(visible, /live NAV|expected return|best fund|recommended for you/i);
+    assert.equal(details.notes.some((note) => note.includes('unknown NAV')), true);
+    assert.equal(details.notes.some((note) => note.includes('does not execute')), true);
+    assert.equal(details.links.every((link) => link.url.startsWith('https://www.')), true);
   });
 
-  it('shows friendly percentages for the selected package, not legal ETF names', () => {
-    const worldMix = getCuratedPackage('world_mix');
-    const presented = presentCreateClubInvestmentOption(worldMix, true);
-    const visible = [presented.title, ...presented.exposureLines, ...presented.holdings.map((row) => row.line)].join('\n');
+  it('formats any valid checked-on date, not only the first catalog day', () => {
+    assert.equal(formatCheckedOn('2026-09-07'), '7 September 2026');
+    assert.equal(formatCheckedOn('2026-10-12'), '12 October 2026');
+    assert.equal(formatCheckedOn('2027-01-01'), '1 January 2027');
+    assert.equal(formatCheckedOn('not-a-date'), 'not-a-date');
+  });
 
-    assert.equal(presented.selected, true);
-    assert.equal(presented.indicator, 'filled');
-    assert.equal(presented.surfaceToken, 'mintSoft');
-    assert.equal(presented.borderToken, 'accent');
-    assert.deepEqual(presented.exposureLines, ['60% World', '25% Europe', '15% Emerging Markets']);
-    assert.equal(presented.holdings[0]?.line, 'VWCE · Global equities');
-    assert.equal(createClubReviewContainsLegalInstrumentNames(visible), false);
+  it('hides lookalike or userinfo broker URLs from the details panel', () => {
+    const details = presentSingleFundDetails({
+      ...DNB_GLOBAL_INDEKS_A,
+      brokers: DNB_GLOBAL_INDEKS_A.brokers.map((listing) => ({
+        ...listing,
+        productUrl: 'https://nordnet.no.example.com/fond/liste/dnb-global-indeks-a',
+      })),
+    });
+    assert.equal(details.links.length, 0);
+  });
+});
+
+describe('catalog panel copy', () => {
+  it('uses natural fund copy and a retryable catalog error', () => {
+    assert.equal(presentCreateClubCatalogPanel('loading').title, 'Loading funds…');
+    assert.equal(presentCreateClubCatalogPanel('empty').title, 'No funds are available right now');
+    assert.equal(presentCreateClubCatalogPanel('error').title, 'Unable to load funds');
+    assert.equal(presentCreateClubCatalogPanel('error').retry, true);
+    assert.doesNotMatch(
+      JSON.stringify([
+        presentCreateClubCatalogPanel('loading'),
+        presentCreateClubCatalogPanel('empty'),
+        presentCreateClubCatalogPanel('error'),
+      ]),
+      /checked funds/i,
+    );
   });
 });
 
 describe('contribution style options', () => {
   it('renders two tappable choices and reveals the matching amount field', () => {
     const options = presentCreateClubContributionOptions();
-    assert.equal(options.length, 2);
     assert.equal(options[0]?.title, 'Same amount');
-    assert.equal(options[0]?.description, 'Everyone contributes the same amount.');
     assert.equal(options[1]?.title, 'Flexible amounts');
-    assert.equal(options[1]?.description, 'Each member privately chooses their own amount.');
+    assert.match(options[1]?.privacy ?? '', /Other members will not see it/);
 
     const same = presentCreateClubContributionSelection('equal');
     assert.equal(same.revealsClubAmount, true);
-    assert.equal(same.revealsYourAmount, false);
-    assert.equal(same.clubAmountLabel, 'Club amount');
-    assert.equal(same.indicator, 'filled');
-
     const flexible = presentCreateClubContributionSelection('flexible');
-    assert.equal(flexible.revealsClubAmount, false);
     assert.equal(flexible.revealsYourAmount, true);
-    assert.equal(flexible.yourAmountLabel, 'Your amount');
-    assert.equal(flexible.privacy, 'Only you can see your amount.');
-
     const unselected = presentCreateClubContributionChoice('equal', null);
     assert.equal(unselected.selected, false);
-    assert.equal(unselected.indicator, 'empty');
     assert.equal(unselected.tappable, true);
   });
 
   it('formats the typed amount and only then enables Continue', () => {
     assert.match(presentCreateClubAmountPreview('2000') ?? '', /2\s?000 kr/);
-    assert.equal(presentCreateClubAmountPreview(''), null);
-
-    const empty = presentCreateClubContinue({
-      ...completeDraft({
-        step: 'contribution',
-        contributionMode: 'equal',
-        equalAmountInput: '',
-      }),
-    });
-    const valid = presentCreateClubContinue({
-      ...completeDraft({
-        step: 'contribution',
-        contributionMode: 'equal',
-        equalAmountInput: '2000',
-      }),
-    });
-
+    const empty = presentCreateClubContinue(completeDraft({
+      step: 'contribution',
+      equalAmountInput: '',
+    }), [DNB_GLOBAL_INDEKS_A]);
+    const valid = presentCreateClubContinue(completeDraft({
+      step: 'contribution',
+      equalAmountInput: '2000',
+    }), [DNB_GLOBAL_INDEKS_A]);
     assert.equal(empty.enabled, false);
     assert.equal(valid.enabled, true);
-    assert.equal(valid.label, 'Continue');
   });
 });
 
 describe('governance options', () => {
-  it('exposes three tappable radios with a distinct selected state', () => {
+  it('exposes three tappable radios', () => {
     const options = presentCreateClubGovernanceOptions();
     assert.equal(options.length, 3);
-    assert.equal(options.every((option) => option.tappable && option.accessibilityRole === 'radio'), true);
-    assert.equal(options[0]?.title, 'Simple majority');
-    assert.equal(options[0]?.guidance, 'Good for most clubs');
-    assert.equal(options[1]?.title, '75% majority');
-    assert.equal(options[2]?.title, 'Unanimous');
-
     const selected = presentCreateClubGovernanceChoice('simple_majority', 'simple_majority');
-    const unselected = presentCreateClubGovernanceChoice('unanimous', 'simple_majority');
-
     assert.equal(selected.selected, true);
-    assert.equal(selected.indicator, 'filled');
-    assert.equal(selected.surfaceToken, 'mintSoft');
-    assert.equal(selected.borderToken, 'accent');
-    assert.equal(selected.tappable, true);
-    assert.equal(unselected.selected, false);
-    assert.equal(unselected.indicator, 'empty');
-    assert.equal(unselected.surfaceToken, 'surface');
   });
 });
 
 describe('create club review', () => {
-  it('uses a short friendly summary instead of legal instrument names', () => {
-    const review = presentCreateClubReview(completeDraft());
+  it('reads as a Simple saving agreement', () => {
+    const review = presentCreateClubReview(completeDraft(), DNB_GLOBAL_INDEKS_A);
     const primary = review.primaryLines.join('\n');
 
     assert.equal(review.clubName, 'Den Beste Klubben');
-    assert.equal(review.investmentName, 'World Mix');
-    assert.deepEqual(review.exposureLines, ['60% World', '25% Europe', '15% Emerging Markets']);
+    assert.equal(review.groupTypeName, 'Simple saving');
+    assert.match(review.groupTypeDetail, /DNB Global Indeks A/);
     assert.equal(review.contributionName, 'Same amount');
-    assert.match(review.contributionDetail, /1\s?000 kr per Investment Day/);
-    assert.equal(review.governanceName, 'Simple majority');
-    assert.equal(review.holdings[0]?.line, 'VWCE · Global equities');
-    assert.equal(createClubReviewContainsLegalInstrumentNames(primary), false);
-    assert.equal(
-      createClubReviewContainsLegalInstrumentNames(review.holdings.map((row) => row.line).join('\n')),
-      false,
-    );
+    assert.equal('customLocked' in review, false);
+    assert.doesNotMatch(primary, /Build your strategy is not enabled/);
+    assert.match(primary, /does not hold money/);
+    assert.doesNotMatch(primary, /recommended for you|live NAV|best fund/i);
   });
 
-  it('never promotes official ETF names from the catalog into review', () => {
-    for (const item of CURATED_INVESTMENT_PACKAGES) {
-      const review = presentCreateClubReview(completeDraft({ packageId: item.id }));
-      const visible = [...review.primaryLines, ...review.holdings.map((row) => row.line)].join('\n');
-      const official = packageFriendlyHoldings(item);
-
-      assert.equal(createClubReviewContainsLegalInstrumentNames(visible), false);
-      assert.equal(official.every((row) => row.friendlyName.length > 0 && !LEGAL_FRAGMENT(row.friendlyName)), true);
-    }
+  it('keeps Flexible amounts private in review', () => {
+    const review = presentCreateClubReview(
+      completeDraft({
+        contributionMode: 'flexible',
+        creatorFlexibleAmountInput: '1500',
+      }),
+      DNB_GLOBAL_INDEKS_A,
+    );
+    assert.match(review.contributionPrivacy ?? '', /Other members will not see it/);
   });
 });
-
-function LEGAL_FRAGMENT(value: string): boolean {
-  return createClubReviewContainsLegalInstrumentNames(value);
-}

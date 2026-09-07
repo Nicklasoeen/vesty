@@ -202,6 +202,18 @@ describe('club strategy', () => {
     assert.equal(named.lines.some((line) => /UCITS|ETF · EUR/i.test(line.friendlyName)), false);
     assert.equal(named.lines.some((line) => line.friendlyName === line.legalName), false);
   });
+
+  it('shows Simple saving and the same fund name as Create Club review', () => {
+    const presentation = presentClubStrategy(
+      [{ label: 'DNB Global Indeks A', percentage: 100 }],
+      'single_fund',
+    );
+
+    assert.equal(presentation.packageName, 'Simple saving');
+    assert.equal(presentation.description, 'DNB Global Indeks A');
+    assert.equal(presentation.lines[0]?.friendlyName, 'DNB Global Indeks A');
+    assert.equal(presentation.allocationSummary, '100% DNB Global Indeks A');
+  });
 });
 
 describe('club holdings presentation', () => {

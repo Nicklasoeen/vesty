@@ -200,7 +200,38 @@ function matchCuratedPackage(slices: readonly ClubStrategySliceInput[]) {
   );
 }
 
-export function presentClubStrategy(slices: readonly ClubStrategySliceInput[]): ClubStrategyPresentation {
+export function presentClubStrategy(
+  slices: readonly ClubStrategySliceInput[],
+  investmentMode?: 'legacy_package' | 'single_fund' | 'custom_portfolio' | null,
+): ClubStrategyPresentation {
+  if (investmentMode === 'single_fund') {
+    const lines = slices.map((slice) => {
+      const identity = presentInvestmentIdentity({
+        ticker: slice.ticker,
+        name: slice.label,
+      });
+
+      return {
+        ticker: identity.ticker === '—' ? slice.label : identity.ticker,
+        friendlyName: slice.label,
+        legalName: slice.label,
+        issuer: identity.issuer,
+        markKey: identity.markKey,
+        fallbackInitials: identity.fallbackInitials,
+        percentage: slice.percentage,
+        name: slice.label,
+      };
+    });
+
+    return {
+      readOnly: true,
+      packageName: 'Simple saving',
+      description: slices[0]?.label ?? 'One fund',
+      lines,
+      allocationSummary: slices[0] ? `100% ${slices[0].label}` : null,
+    };
+  }
+
   const matched = matchCuratedPackage(slices);
   const lines = slices.map((slice) => {
     const identity = presentInvestmentIdentity({

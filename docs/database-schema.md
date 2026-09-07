@@ -24,6 +24,8 @@ The schema is created by:
 - `supabase/migrations/20260906223000_contribution_policy_proposals_v1.sql`
 - `supabase/migrations/20260906223100_contribution_policy_proposals_rls_fix_v1.sql`
 - `supabase/migrations/20260906223200_contribution_policy_proposals_create_base_v1.sql`
+- `supabase/migrations/20260907192616_single_fund_club_v1.sql`
+- `supabase/migrations/20260907203455_single_fund_club_rectification_v1.sql`
 
 It uses the Supabase-managed `auth.users` table only as the authentication identity boundary. It does not duplicate credentials, sessions, or authentication state.
 
@@ -48,6 +50,8 @@ The constraint remains active after club archival: an archived club retains its 
 Lifecycle and closed-choice values use tightly scoped PostgreSQL enums:
 
 - `club_status`: `active`, `archived`
+- `club_investment_mode`: `legacy_package`, `single_fund`, `custom_portfolio`
+- `single_fund_product_status`: `active`, `inactive`
 - `governance_threshold_kind`: `simple_majority`, `supermajority`, `unanimous`
 - `membership_status`: `active`, `left`, `removed`
 - `club_invitation_status`: `pending`, `accepted`, `declined`, `revoked`, `expired`
@@ -90,7 +94,10 @@ Money uses signed PostgreSQL `bigint` columns with positive-value checks. Alloca
 
 - `clubs`
   - Primary key: `id`
-  - Stores lifecycle, base currency, locked governance mode, and current owner membership
+  - Stores lifecycle, base currency, locked governance mode, immutable `investment_mode`, and current owner membership
+  - Existing clubs and `create_club` / `create_club_v2` clubs are `legacy_package`
+  - New Simple saving clubs are `single_fund`. `custom_portfolio` is reserved and not creatable in this release
+  - `investment_mode` cannot change after insert. A before-update trigger raises `vesty.investment_mode_immutable`
   - Club names are trimmed non-empty text up to 80 characters
   - The owner foreign key is deferred so initial club and membership creation can be atomic
 
@@ -124,7 +131,8 @@ Money uses signed PostgreSQL `bigint` columns with positive-value checks. Alloca
   - Identifier fields stay null unless a verified value exists in project data
   - Contains no live prices. Provider symbols live on `market_data_instrument_mappings`, not on `provider_symbol`
   - Four legacy fixture IDs (`31000000-0000-4000-8000-00000000000{1-4}`) are verified NOK mutual-fund share classes: KLP AksjeGlobal Indeks P (`NO0010776040`), DNB Teknologi A (`NO0010337678`), KLP AksjeNorge Indeks P (`NO0010455694`), KLP AksjeFremvoksende Markeder Indeks P (`NO0010611809`). Ticker/exchange/`provider_symbol` stay null. Existing clubs may still snapshot these names.
-  - Five CORE V1 ETF IDs (`31000000-0000-4000-8000-00000000001{1-5}`) are Xetra accumulating UCITS listings (VWCE, EUNK, IS3N, SXR8, SXRV), currency EUR, official ISINs stored, `provider_symbol` null. New clubs resolve genesis allocations from curated packages, not from the KLP/DNB mix. See `docs/vesty-v1-investment-packages.md`.
+  - Five CORE V1 ETF IDs (`31000000-0000-4000-8000-00000000001{1-5}`) are Xetra accumulating UCITS listings (VWCE, EUNK, IS3N, SXR8, SXRV), currency EUR, official ISINs stored, `provider_symbol` null. Legacy package clubs resolve genesis allocations from curated packages. See `docs/vesty-v1-investment-packages.md`.
+  - Simple saving target `31000000-0000-4000-8000-000000000021` is DNB Global Indeks A (`NO0010582984`), kind `fund`, currency `NOK`. Ticker, exchange, `provider_symbol`, NAV, and return series are not seeded.
 
 - `strategy_versions`
   - Primary key: `id`
@@ -142,6 +150,19 @@ Money uses signed PostgreSQL `bigint` columns with positive-value checks. Alloca
   - Server-owned V1 package catalog. Not on the Data API. RLS enabled and forced, with no client grants
   - Three active packages: `world_mix`, `world_america`, `tech_forward`. Allocations are integer basis points totaling `10000`
   - `public.create_club` resolves `p_package_id` through `private.resolve_curated_package_allocations`
+  - These multi-ETF packages are not Simple saving alternatives
+
+- `private.single_fund_products` / `private.single_fund_broker_listings`
+  - Server-owned Simple saving catalog. Not on the Data API. RLS enabled and forced, with no client grants
+  - First active product: DNB Global Indeks A, catalog id `32000000-0000-4000-8000-000000000001`, checked 7 September 2026
+  - Broker listings store sourced DNB/Nordnet URLs and platform-specific costs. Costs are not a universal fund fee
+  - Product and cost source URLs must be HTTPS on the exact hosts `www.dnb.no` or `www.nordnet.no`. HTTP, lookalike hosts, and userinfo disguises are rejected
+  - `public.single_fund_catalog_v1` returns active products only and never exposes `investment_target_id`
+
+- `private.club_creation_requests`
+  - Idempotency ledger for `create_club_v3`. Unique `(profile_id, client_creation_id)`
+  - Same fingerprint returns the stored club. A different payload raises `vesty.creation_conflict`
+  - Clients have no table privileges
 
 - `club_proposals`
   - Primary key: `id`
@@ -450,13 +471,15 @@ The following require trusted transaction functions, later authorization policy,
 
 ## Trusted write paths
 
-`supabase/migrations/20260904110626_add_club_create_join_v1.sql`, `supabase/migrations/20260905075952_add_instruments_transactions_v1.sql`, `supabase/migrations/20260905121758_curated_investment_packages_v1.sql`, `supabase/migrations/20260906150144_rename_club_v1.sql`, `supabase/migrations/20260906194634_contribution_policy_v1.sql`, `supabase/migrations/20260906215200_contribution_policy_product_v1.sql`, `supabase/migrations/20260906221000_contribution_policy_hardening_v1.sql`, `supabase/migrations/20260906223000_contribution_policy_proposals_v1.sql`, `supabase/migrations/20260907101905_investment_day_reporting_v1.sql`, and `supabase/migrations/20260907123709_investment_day_cycle_lifecycle_v1.sql` add public invoker wrappers over private `SECURITY DEFINER` functions:
+`supabase/migrations/20260904110626_add_club_create_join_v1.sql`, `supabase/migrations/20260905075952_add_instruments_transactions_v1.sql`, `supabase/migrations/20260905121758_curated_investment_packages_v1.sql`, `supabase/migrations/20260906150144_rename_club_v1.sql`, `supabase/migrations/20260906194634_contribution_policy_v1.sql`, `supabase/migrations/20260906215200_contribution_policy_product_v1.sql`, `supabase/migrations/20260906221000_contribution_policy_hardening_v1.sql`, `supabase/migrations/20260906223000_contribution_policy_proposals_v1.sql`, `supabase/migrations/20260907101905_investment_day_reporting_v1.sql`, `supabase/migrations/20260907123709_investment_day_cycle_lifecycle_v1.sql`, `supabase/migrations/20260907192616_single_fund_club_v1.sql`, and `supabase/migrations/20260907203455_single_fund_club_rectification_v1.sql` add public wrappers over private `SECURITY DEFINER` functions:
 
-- `create_club` — legacy path. Authenticates via `auth.uid()`, resolves an allowlisted `p_package_id` to canonical allocations, then creates the club, owner membership, owner pointer, genesis StrategyVersion 1, a complete 10000-bps snapshot, and Flexible ContributionPolicyVersion 1. It does not invent a creator amount. New mobile clients use `create_club_v2`.
-- `create_club_v2` — same club/strategy creation plus an explicit Equal or Flexible genesis policy. Equal requires `p_equal_amount_minor` and forbids a creator private amount. Flexible requires `p_creator_flexible_amount_minor` and forbids a shared amount. The transaction is atomic.
+- `create_club` — legacy path. Authenticates via `auth.uid()`, resolves an allowlisted `p_package_id` to canonical allocations, then creates the club, owner membership, owner pointer, genesis StrategyVersion 1, a complete 10000-bps snapshot, and Flexible ContributionPolicyVersion 1. It does not invent a creator amount. Clubs created here are `legacy_package`.
+- `create_club_v2` — same club/strategy creation plus an explicit Equal or Flexible genesis policy. Equal requires `p_equal_amount_minor` and forbids a creator private amount. Flexible requires `p_creator_flexible_amount_minor` and forbids a shared amount. The transaction is atomic. Meaning unchanged. Clubs created here are `legacy_package`.
+- `create_club_v3` — Simple saving path. Authenticates via `auth.uid()`, requires `single_fund` and an allowlisted catalog product id, then atomically creates the club as `single_fund`, owner membership, StrategyVersion 1 with exactly one 10000-bps allocation, ContributionPolicyVersion 1, an optional private Flexible commitment, the club's default Investment Day schedule (day 5, `last_day_of_month`, `Europe/Oslo`, three-day lead), and the first valid server-clock occurrence. Clients cannot send a clock, basis points, or `investment_target_id`. Idempotent on `(caller, client_creation_id)`.
+- `single_fund_catalog_v1` — authenticated read of active Simple saving products. Sourced product facts only. Broker and cost source URLs are stored only when the host is exactly `www.dnb.no` or `www.nordnet.no` over HTTPS.
 - `create_club_invitation` — current owner only, after StrategyVersion 1 exists; returns a one-time plaintext token and stores only `token_hash`
 - `update_club_name` — current owner only, active club; trims the name and rejects empty or over-80-character values with `vesty.club_name_invalid`
-- There is no public `create_contribution_policy_version_v1` RPC. After club creation, authenticated owners and members cannot append policy versions. `private.create_contribution_policy_version_v1` remains trusted/internal (`service_role` / approved contribution finalize). `create_club` / `create_club_v2` still write policy version 1 in the same club-creation transaction.
+- There is no public `create_contribution_policy_version_v1` RPC. After club creation, authenticated owners and members cannot append policy versions. `private.create_contribution_policy_version_v1` remains trusted/internal (`service_role` / approved contribution finalize). `create_club` / `create_club_v2` / `create_club_v3` still write policy version 1 in the same club-creation transaction.
 - `create_contribution_policy_proposal_v1` — any active member; draft only; validates supported transitions against the supplied base version
 - `open_contribution_policy_proposal_v1` — proposer; freezes electorate and voting rule; rejects a stale base
 - `cancel_contribution_policy_proposal_v1` — proposer; draft or open with zero votes
@@ -467,7 +490,18 @@ The following require trusted transaction functions, later authorization policy,
 - `my_contribution_commitment_v1` — caller only; latest private commitment, never another member's amount
 - `accept_club_invitation` — authenticates via `auth.uid()`, validates token/expiry/recipient, creates one active membership, and marks the invitation accepted without changing ownership
 - `current_investment_day_v1` — authenticated read of the current or next Investment Day. Never creates cycles, freezes policy, or writes participations. Returns `viewer_state` (`missing`, `upcoming`, `open`, `closed`, `not_in_snapshot`, `setup_next`, `setup_required`, `unavailable`) and `reporting_allowed`. Flexible members without a frozen participation see `setup_next` or `setup_required` instead of an invented amount.
-- `advance_investment_cycles_v1` — trusted lifecycle. Authenticated clients have no EXECUTE; `service_role` does. Idempotently generates occurrences from the stored schedule (local noon, `day_of_month` / `last_day_of_month`, timezone, `configuration_lead_days`), freezes eligible participations at the configuration deadline, opens the reporting window, and completes elapsed cycles without reopening it. Identifies a period by club and occurrence key, never by “latest open row”.
+- `advance_investment_cycles_v1` — trusted lifecycle. Authenticated clients have no EXECUTE; `service_role` does. Idempotently generates occurrences from the stored schedule (local noon, `day_of_month` / `last_day_of_month`, timezone, `configuration_lead_days`), skips months whose configuration deadline has already passed without a historically valid strategy, freezes eligible participations at the configuration deadline, opens the reporting window, and completes elapsed cycles without reopening it. Identifies a period by club and occurrence key, never by “latest open row”. `create_club_v3` calls this trusted path with the server clock after writing the default schedule.
+
+## PostgREST deploy order
+
+After a migration that adds or replaces RPC signatures:
+
+1. Apply the migration.
+2. Confirm or reload the PostgREST schema cache (`NOTIFY pgrst, 'reload schema'` is included in `20260907203455_single_fund_club_rectification_v1.sql`).
+3. Verify `single_fund_catalog_v1` and `create_club_v3`.
+4. Ship the client.
+
+The client still shows a retryable error if an RPC is temporarily unavailable (`PGRST202` or a transport failure).
 - `ensure_open_investment_day_v1` — retired from the authenticated API. EXECUTE is revoked from `anon` and `authenticated`. The function body remains for history; clients must not call it.
 - `report_investment_day_v1` — authenticates via `auth.uid()`, writes one member report plus matching transactions and participation outcome atomically. In the same locked operation it requires a frozen participation, `status = open`, and `reporting_opens_at <= now < reporting_closes_at`. Before open: `vesty.reporting_not_open`. At or after close: `vesty.reporting_closed`, even if status is still `open`. The public wrapper does not accept a client clock. `as_planned` attests the frozen plan. `with_changes` stores only explicit purchase amounts. Retry with the same `client_report_id` and fingerprint is idempotent. A different payload is `vesty.report_conflict`. Authenticated clients cannot execute the private implementation, the clock-parameter reporter, or the retired confirm v1/v2 functions.
 - `club_investment_day_participation_v1` — authenticated social read. Counts and roster come from frozen `member_cycle_participations`, including members who later left. It does not use the live active membership list and does not return amounts, quantities, prices, or private contribution choices.

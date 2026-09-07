@@ -1,45 +1,67 @@
-import { Stack, useSegments } from 'expo-router';
+import { Stack, usePathname } from 'expo-router';
+import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthLoadingScreen } from '@/features/auth/AuthLoadingScreen';
-import { AuthProvider, useAuth } from '@/features/auth/AuthProvider';
+import { AuthProvider, InertAuthProvider, useAuth } from '@/features/auth/AuthProvider';
 import { presentAuthBootGate } from '@/features/auth/restoreAuthSession';
-import { ProfileProvider, useProfile } from '@/features/profile/ProfileProvider';
+import { InertProfileProvider, ProfileProvider, useProfile } from '@/features/profile/ProfileProvider';
+import { shouldMountAuthenticatedAppProviders } from '@/navigation/presentRootSessionIsolation';
 import { ThemeProvider } from '@/theme';
 
 export default function RootLayout() {
-  const segments = useSegments();
-  const isDevelopmentGallery = __DEV__ && segments[0] === 'dev';
-
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        {isDevelopmentGallery ? (
-          <Stack screenOptions={{ headerShown: false }} />
-        ) : (
-          <AuthProvider>
-            <ProfileProvider>
-              <RootNavigation />
-            </ProfileProvider>
-          </AuthProvider>
-        )}
+        <RootProviders>
+          <RootNavigation />
+        </RootProviders>
       </ThemeProvider>
     </SafeAreaProvider>
   );
 }
 
+function RootProviders({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  if (
+    !shouldMountAuthenticatedAppProviders({
+      isDev: __DEV__,
+      pathname,
+    })
+  ) {
+    return (
+      <InertAuthProvider>
+        <InertProfileProvider>{children}</InertProfileProvider>
+      </InertAuthProvider>
+    );
+  }
+
+  return (
+    <AuthProvider>
+      <ProfileProvider>{children}</ProfileProvider>
+    </AuthProvider>
+  );
+}
+
 function RootNavigation() {
+  const pathname = usePathname();
+  const isolated = !shouldMountAuthenticatedAppProviders({
+    isDev: __DEV__,
+    pathname,
+  });
   const { isInitializing, profileError, retryProfileSetup, session } = useAuth();
   const { isLoading: profileLoading, error: profileLoadError, profile, refresh } = useProfile();
-  const gate = presentAuthBootGate({
-    isInitializing,
-    profileError,
-    hasSession: Boolean(session),
-    profileLoading,
-    profileLoadError,
-    hasProfile: Boolean(profile),
-  });
+  const gate = isolated
+    ? { blocking: false, error: null, identityBlocked: false }
+    : presentAuthBootGate({
+        isInitializing,
+        profileError,
+        hasSession: Boolean(session),
+        profileLoading,
+        profileLoadError,
+        hasProfile: Boolean(profile),
+      });
 
   return (
     <View style={styles.fill}>

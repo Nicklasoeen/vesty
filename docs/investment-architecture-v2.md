@@ -80,7 +80,7 @@ Creating a `ContributionPolicyVersion` means activating it for the **next eligib
 
 Open or draft proposals must **not** create policy versions. Only successful approved application calls trusted/internal `private.create_contribution_policy_version_v1`. That helper is not executable by `authenticated` clients. There is no public owner RPC to append policy versions. UI hiding is not the security boundary.
 
-`create_club` / `create_club_v2` may still write policy version 1 in the same club-creation transaction. That is initial creation, not a post-creation policy change.
+`create_club` / `create_club_v2` / `create_club_v3` may still write policy version 1 in the same club-creation transaction. That is initial creation, not a post-creation policy change.
 
 Ordinary Settings UI cannot switch Equal ↔ Flexible or edit an existing equal amount. Contribution style is a shared club decision.
 
@@ -204,18 +204,20 @@ User-facing language uses:
 
 Do not show domain terms such as ContributionPolicyVersion, commitment, immutable, or minor units.
 
-Flexible privacy: "Only you can see your amount."
+Flexible privacy: "Only you can see your amount. Other members will not see it."
 
 Do not imply Vesty collects or holds the money.
 
 ### Compatibility
 
-- `create_club` remains as a legacy path. It still writes Flexible policy v1 and does **not** invent a creator amount. New mobile uses `create_club_v2`.
+- `create_club` remains as a legacy path. It still writes Flexible policy v1 and does **not** invent a creator amount. Clubs created here are `legacy_package`.
+- `create_club_v2` remains the package-based Create Club path with explicit Equal or Flexible setup. Meaning unchanged. Clubs created here are `legacy_package`.
+- New mobile Create Club uses `create_club_v3` for Simple saving. The client sends a catalog product id and a `client_creation_id`, never allocations, an investment target id, or a clock. The trusted create writes the default Investment Day schedule and the first valid server-clock occurrence in the same transaction. If this month's configuration deadline has already passed, the dashboard shows the next valid month instead of an expired period. Build your strategy / `custom_portfolio` is visible in the UI and rejected by the server.
 - `report_investment_day_v1` records `as_planned` or `with_changes` from frozen `expected_amount_minor` without treating that plan as an automatic actual
 - participation / streak completion remains `outcome = confirmed`
 - existing migrated historical amounts are not recalculated
 - no broker execution, stocks, or drift logic are introduced
-- contribution-policy **governance** exists; the creation UI is still Prompt 3B
+- contribution-policy **governance** exists; Create Club still chooses Equal or Flexible independently of group type
 
 ## Contribution Policy governance
 

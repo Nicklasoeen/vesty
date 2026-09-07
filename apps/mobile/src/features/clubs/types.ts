@@ -8,12 +8,15 @@ export interface ClubMemberIdentity extends AvatarPerson {
   displayName: string | null;
 }
 
+export type ClubInvestmentMode = 'legacy_package' | 'single_fund' | 'custom_portfolio';
+
 export interface ClubSummary {
   clubId: string;
   membershipId: string;
   name: string;
   baseCurrency: string;
   governanceThresholdKind: GovernanceThresholdKind;
+  investmentMode: ClubInvestmentMode;
   currentOwnerMembershipId: string;
   isOwner: boolean;
   members: ClubMemberIdentity[];
@@ -69,6 +72,10 @@ export function requireString(row: Record<string, unknown>, key: string): string
 
 export function isGovernanceThresholdKind(value: unknown): value is GovernanceThresholdKind {
   return value === 'simple_majority' || value === 'supermajority' || value === 'unanimous';
+}
+
+export function isClubInvestmentMode(value: unknown): value is ClubInvestmentMode {
+  return value === 'legacy_package' || value === 'single_fund' || value === 'custom_portfolio';
 }
 
 export function allocationsToSlices(

@@ -11,7 +11,8 @@ Implemented in this milestone (catalog + package selection only):
 - Five CORE UCITS ETFs are seeded as active `investment_targets` (`31000000-0000-4000-8000-000000000011`–`015`). Official names, ISINs, Xetra tickers, and EUR currency match the confirmed table in §4. `provider_symbol` stays null.
 - Canonical packages live in `private.curated_strategy_packages` / `private.curated_strategy_package_allocations`. Clients cannot read those tables.
 - `public.create_club(p_name, p_governance_threshold_kind, p_package_id, p_base_currency)` resolves an allowlisted package id server-side. Callers cannot supply allocations.
-- Create Club is **Name → Governance → Investment style → Review → Create**. The client sends the stable id (`world_mix`, `world_america`, `tech_forward`), never a display name.
+- Legacy `create_club` / `create_club_v2` still send a stable package id (`world_mix`, `world_america`, `tech_forward`), never a display name. Those clubs stay `legacy_package`.
+- New mobile Create Club is **Name → How do you want to invest? → Choose a fund → Monthly contribution → How decisions are made → Review**. Simple saving uses `create_club_v3` and the single-fund catalog. The three multi-ETF packages are not Simple saving alternatives.
 - UI copy uses relative language (broadest mix / more US / more tech). No Low/Medium/High risk, Recommended, Safe, or projected returns.
 - Legacy KLP/DNB fixture targets (`…000001`–`004`) stay active. Existing StrategyVersion snapshots are not rewritten.
 

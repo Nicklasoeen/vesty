@@ -311,6 +311,7 @@ function ClubDashboard({
         <ClubOverview
           key={club.clubId}
           clubId={club.clubId}
+          investmentMode={club.investmentMode}
           summary={summary}
           history={history}
           positions={positions}

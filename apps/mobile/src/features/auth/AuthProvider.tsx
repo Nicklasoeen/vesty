@@ -10,7 +10,10 @@ import {
 } from 'react';
 import type { AuthError, Session, User } from '@supabase/supabase-js';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import { supabase } from '@/lib/supabase/client';
+import { clearSignedOutUserStorage } from './clearSignedOutUserStorage';
 import { ensureOwnProfile } from './ensureOwnProfile';
 import { mapAuthError } from './mapAuthError';
 import { restoreAuthSession } from './restoreAuthSession';
@@ -58,6 +61,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const submittingRef = useRef(false);
 
   const clearInvalidSession = useCallback(async () => {
+    const profileId = sessionRef.current?.user.id ?? null;
     const { error } = await supabase.auth.signOut({ scope: 'local' });
     if (error) {
       logAuthIssue('local signOut after invalid session', error);
@@ -66,6 +70,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     sessionRef.current = null;
     setSession(null);
     setProfileError(null);
+    await clearSignedOutUserStorage(AsyncStorage, profileId);
   }, []);
 
   const applyAuthenticatedSession = useCallback(async (next: Session | null): Promise<boolean> => {
@@ -264,6 +269,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   );
 
   const signOut = useCallback(async () => {
+    const profileId = sessionRef.current?.user.id ?? session?.user.id ?? null;
     const { error } = await supabase.auth.signOut();
     if (error) {
       logAuthIssue('signOut failed', error);
@@ -272,7 +278,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     sessionRef.current = null;
     setSession(null);
     setProfileError(null);
-  }, []);
+    await clearSignedOutUserStorage(AsyncStorage, profileId);
+  }, [session]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -287,6 +294,25 @@ export function AuthProvider({ children }: PropsWithChildren) {
       signOut,
     }),
     [isInitializing, isSubmitting, profileError, retryProfileSetup, session, signIn, signOut, signUp],
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function InertAuthProvider({ children }: PropsWithChildren) {
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      session: null,
+      user: null,
+      isInitializing: false,
+      isSubmitting: false,
+      profileError: null,
+      retryProfileSetup: async () => undefined,
+      signIn: async () => ({ ok: false, message: 'Unavailable in the development gallery' }),
+      signUp: async () => ({ ok: false, message: 'Unavailable in the development gallery' }),
+      signOut: async () => undefined,
+    }),
+    [],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

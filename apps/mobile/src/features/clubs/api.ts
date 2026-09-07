@@ -17,12 +17,15 @@ import {
 } from './contributionPolicyProposal';
 import { isVisibleProposalStatus } from '../proposals/presentProposal';
 import { isCuratedPackageId, type CuratedPackageId } from './curatedInvestmentPackages';
+import type { CreateClubRequest } from './createClubWizard';
 import { V1_BASE_CURRENCY } from './genesisStrategy';
 import type { GovernanceThresholdKind } from './governance';
 import { initialsFromIdentity } from './initials';
+import { parseSingleFundCatalog, type SingleFundProduct } from './singleFundCatalog';
 import {
   allocationsToSlices,
   firstRpcRow,
+  isClubInvestmentMode,
   isGovernanceThresholdKind,
   requireString,
   type AcceptedInvitationResult,
@@ -44,6 +47,7 @@ interface MembershipClubRow {
         name: string;
         base_currency: string;
         governance_threshold_kind: string;
+        investment_mode: string;
         current_owner_membership_id: string;
         status: string;
       }
@@ -52,6 +56,7 @@ interface MembershipClubRow {
         name: string;
         base_currency: string;
         governance_threshold_kind: string;
+        investment_mode: string;
         current_owner_membership_id: string;
         status: string;
       }[]
@@ -89,6 +94,7 @@ export async function fetchActiveClubs(userId: string, userEmail: string | null)
           name,
           base_currency,
           governance_threshold_kind,
+          investment_mode,
           current_owner_membership_id,
           status
         )
@@ -157,7 +163,12 @@ export async function fetchActiveClubs(userId: string, userEmail: string | null)
 
   return memberships.flatMap((row) => {
     const club = unwrapRelation(row.clubs);
-    if (!club || club.status !== 'active' || !isGovernanceThresholdKind(club.governance_threshold_kind)) {
+    if (
+      !club
+      || club.status !== 'active'
+      || !isGovernanceThresholdKind(club.governance_threshold_kind)
+      || !isClubInvestmentMode(club.investment_mode)
+    ) {
       return [];
     }
 
@@ -178,6 +189,7 @@ export async function fetchActiveClubs(userId: string, userEmail: string | null)
         name: club.name,
         baseCurrency: club.base_currency,
         governanceThresholdKind: club.governance_threshold_kind,
+        investmentMode: club.investment_mode,
         currentOwnerMembershipId: club.current_owner_membership_id,
         isOwner: row.id === club.current_owner_membership_id,
         members,
@@ -255,6 +267,47 @@ function optionalInteger(row: Record<string, unknown>, key: string): number | nu
     return requireInteger(row, key);
   } catch {
     return null;
+  }
+}
+
+export async function fetchSingleFundCatalog(): Promise<SingleFundProduct[]> {
+  const result = await supabase.rpc('single_fund_catalog_v1');
+  if (result.error) {
+    throw new Error(mapClubError(result.error, 'Unable to load funds right now', 'single_fund_catalog_v1'));
+  }
+  return parseSingleFundCatalog(result.data);
+}
+
+export async function createSingleFundClub(input: CreateClubRequest): Promise<CreatedClubResult> {
+  const result = await supabase.rpc('create_club_v3', {
+    p_name: input.name,
+    p_investment_mode: input.investmentMode,
+    p_catalog_product_id: input.catalogProductId,
+    p_governance_threshold_kind: input.governanceThresholdKind,
+    p_contribution_mode: input.contributionMode,
+    p_client_creation_id: input.clientCreationId,
+    p_equal_amount_minor: input.equalAmountMinor,
+    p_creator_flexible_amount_minor: input.creatorFlexibleAmountMinor,
+    p_base_currency: input.baseCurrency,
+  });
+
+  if (result.error) {
+    throw new Error(mapClubError(result.error, 'Unable to create club right now', 'create_club_v3'));
+  }
+
+  const row = firstRpcRow(result.data);
+  if (!row) {
+    throw new Error('Unable to create club right now');
+  }
+
+  try {
+    return {
+      clubId: requireString(row, 'club_id'),
+      membershipId: requireString(row, 'membership_id'),
+      strategyVersionId: requireString(row, 'strategy_version_id'),
+    };
+  } catch {
+    throw new Error('Unable to create club right now');
   }
 }
 

@@ -16,6 +16,14 @@ export async function createClub(input: {
   return clubsApi.createClub(input);
 }
 
+export async function createSingleFundClub(input: Parameters<typeof clubsApi.createSingleFundClub>[0]) {
+  return clubsApi.createSingleFundClub(input);
+}
+
+export async function fetchSingleFundCatalog() {
+  return clubsApi.fetchSingleFundCatalog();
+}
+
 export async function joinClub(token: string) {
   return clubsApi.joinClub(token);
 }

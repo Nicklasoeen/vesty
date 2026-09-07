@@ -1,7 +1,7 @@
 /**
- * Shared Create Club constants. New clubs use curated packages, not a
- * hardcoded genesis mix. Existing clubs may still hold the previous
- * KLP/DNB fixture names in StrategyVersion snapshots.
+ * Shared Create Club constants. New Simple saving clubs use the
+ * server-owned single-fund catalog. Legacy package clubs may still
+ * hold curated ETF snapshots or earlier KLP/DNB fixture names.
  */
 
 export const CLUB_NAME_MAX_LENGTH = 80;

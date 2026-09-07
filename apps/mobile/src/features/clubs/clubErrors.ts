@@ -31,6 +31,11 @@ const PRODUCT_MESSAGES: Record<string, string> = {
   'vesty.contribution_proposal_not_open': 'This proposal is no longer open',
   'vesty.contribution_proposal_has_votes': 'This proposal can no longer be cancelled',
   'vesty.not_club_member': "You don't have permission to view this club",
+  'vesty.investment_mode_unavailable': 'Build your strategy is available after initial testing',
+  'vesty.catalog_product_unavailable': 'This fund is no longer available for new clubs',
+  'vesty.creation_conflict': 'This creation request no longer matches the saved club',
+  'vesty.client_creation_id_invalid': 'Unable to create club right now',
+  'vesty.investment_mode_immutable': 'This club’s investment method cannot be changed',
 };
 
 function logClubIssue(context: string, error: { code?: string; message?: string } | unknown): void {
