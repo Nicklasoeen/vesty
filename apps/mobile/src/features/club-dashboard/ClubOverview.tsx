@@ -2,8 +2,7 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, View } from 'react-nat
 
 import { HomeNextInvestmentDay } from '@/features/home/HomeNextInvestmentDay';
 import { HomePerformanceChart } from '@/features/home/HomePerformanceChart';
-import { presentInvestmentDayHeading } from '@/features/home/presentInvestmentDay';
-import { formatHomeInvestmentDayDate } from '@/features/home/presentHomePortfolio';
+import { presentInvestmentDayHeading, formatInvestmentDayWhen, presentInvestmentDayPlannedMinor } from '@/features/home/presentInvestmentDay';
 import { presentClubContributionSummary, presentContributionPolicyTiming } from '@/features/clubs/presentContribution';
 import { useClubContribution } from '@/features/clubs/useClubContribution';
 import { useClubStrategy } from '@/features/clubs/useClubStrategy';
@@ -160,19 +159,26 @@ export function ClubOverview({
         <HomeNextInvestmentDay
           title={presentInvestmentDayHeading({
             setupRequired: investmentDay.setupRequired,
+            viewerState: investmentDay.plan?.viewerState ?? null,
             cycleStatus: investmentDay.plan?.cycleStatus ?? null,
             investmentDayAt: investmentDay.plan?.investmentDayAt ?? null,
           })}
           dateLabel={
             investmentDay.setupRequired
               ? 'Set your contribution'
-              : investmentDay.plan
-                ? formatHomeInvestmentDayDate(investmentDay.plan.investmentDayAt)
+              : investmentDay.plan?.viewerState === 'setup_next'
+                ? 'Applies from your next Investment Day'
+                : investmentDay.plan
+                  ? formatInvestmentDayWhen(investmentDay.plan.reportingOpensAt ?? investmentDay.plan.investmentDayAt)
                 : investmentDay.error
                   ? 'Date unavailable'
                   : 'Loading…'
           }
-          plannedMinor={investmentDay.setupRequired ? null : investmentDay.plan?.expectedAmountMinor ?? null}
+          plannedMinor={presentInvestmentDayPlannedMinor({
+            viewerState: investmentDay.plan?.viewerState,
+            setupRequired: investmentDay.setupRequired,
+            expectedAmountMinor: investmentDay.plan?.expectedAmountMinor,
+          })}
           setupRequired={investmentDay.setupRequired}
           participationLabel={compactParticipation?.allCompletedLabel ?? compactParticipation?.countLabel}
           participants={participation.participation?.members.map((member) => ({

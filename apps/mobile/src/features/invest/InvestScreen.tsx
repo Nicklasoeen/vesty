@@ -3,7 +3,6 @@ import { ActivityIndicator, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { FlexibleContributionForm } from '@/features/clubs/FlexibleContributionForm';
 import { useClubContribution } from '@/features/clubs/useClubContribution';
 import { useClubs } from '@/features/clubs/useClubs';
 import { BrokerPickerSheet } from '@/features/profile/BrokerPickerSheet';
@@ -16,6 +15,7 @@ import { useTheme } from '@/theme';
 import { AppText, Button, Screen } from '@/ui';
 
 import { asAmountProvenance } from './amountProvenance';
+import { InvestmentDayCycleStateView } from './InvestmentDayCycleStateView';
 import { InvestmentDayParticipationSection } from './InvestmentDayParticipation';
 import { InvestmentDayReportPanel } from './InvestmentDayReportPanel';
 import { InvestmentRow } from './InvestmentRow';
@@ -45,10 +45,14 @@ import {
   type InvestmentDayReportSubmitState,
 } from './presentInvestmentDayReport';
 import type { InvestmentDayPlan, InvestTargetRow } from './types';
+import { isReportableInvestmentDay } from './presentInvestmentDayCycle';
 import { useInvestmentDay } from './useInvestmentDay';
 import { useInvestmentDayParticipation } from './useInvestmentDayParticipation';
 
-function formatInvestmentDayShortLabel(iso: string): string {
+function formatInvestmentDayShortLabel(iso: string | null): string {
+  if (!iso) {
+    return 'Date unavailable';
+  }
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) {
     return 'Today';
@@ -248,8 +252,18 @@ export function InvestScreen() {
     targetIds,
   ]);
 
-  const showReport = Boolean(plan && !plan.isCompleted && reportStarted === cycleId && pendingCycleId !== cycleId);
-  const showPending = Boolean(plan && !plan.isCompleted && pendingCycleId === cycleId);
+  const showReport = Boolean(
+    isReportableInvestmentDay(plan) && !plan?.isCompleted && reportStarted === cycleId && pendingCycleId !== cycleId,
+  );
+  const showPending = Boolean(
+    isReportableInvestmentDay(plan) && !plan?.isCompleted && pendingCycleId === cycleId,
+  );
+  const showCycleState = Boolean(
+    plan
+    && !plan.isCompleted
+    && !isReportableInvestmentDay(plan)
+    && plan.viewerState !== 'open',
+  );
   const phase = plan?.isCompleted ? 'completed' : showPending ? 'pending' : showReport ? 'report' : 'today';
 
   return (
@@ -274,21 +288,37 @@ export function InvestScreen() {
           <AppText variant="body" color="secondary">
             Create or join a club to record an Investment Day.
           </AppText>
+        ) : plan && showCycleState ? (
+          <InvestmentDayCycleStateView
+            viewerState={plan.viewerState}
+            clubName={plan.clubName}
+            investmentDayAt={plan.investmentDayAt}
+            reportingOpensAt={plan.reportingOpensAt}
+            reportingClosesAt={plan.reportingClosesAt}
+            reportingAllowed={plan.reportingAllowed}
+            onRetry={() => {
+              void refresh();
+            }}
+            onSaveContribution={
+              plan.viewerState === 'setup_required' || plan.viewerState === 'setup_next'
+                ? async (amountMinor) => {
+                    await contribution.saveFlexibleAmount(amountMinor);
+                    await refresh();
+                  }
+                : undefined
+            }
+          />
         ) : selectedClub && setupRequired && !plan ? (
-          <View>
-            <AppText variant="title" accessibilityRole="header">
-              Set your contribution
-            </AppText>
-            <View style={{ marginTop: spacing.lg }}>
-              <FlexibleContributionForm
-                submitLabel="Set amount"
-                onSubmit={async (amountMinor) => {
-                  await contribution.saveFlexibleAmount(amountMinor);
-                  await refresh();
-                }}
-              />
-            </View>
-          </View>
+          <InvestmentDayCycleStateView
+            viewerState="setup_required"
+            onRetry={() => {
+              void refresh();
+            }}
+            onSaveContribution={async (amountMinor) => {
+              await contribution.saveFlexibleAmount(amountMinor);
+              await refresh();
+            }}
+          />
         ) : error && !plan ? (
           <View>
             <AppText variant="body" color="secondary">
@@ -304,7 +334,7 @@ export function InvestScreen() {
               />
             </View>
           </View>
-        ) : plan && phase === 'today' ? (
+        ) : plan && isReportableInvestmentDay(plan) && phase === 'today' ? (
           <TodayBody
             participation={participation.participation}
             plan={plan}
@@ -315,7 +345,7 @@ export function InvestScreen() {
             onStartReport={onStartReport}
             onChooseBroker={() => setBrokerPickerOpen(true)}
           />
-        ) : plan && phase === 'pending' ? (
+        ) : plan && isReportableInvestmentDay(plan) && phase === 'pending' ? (
           <PendingBody
             plan={plan}
             onReportNow={() => {
@@ -325,7 +355,7 @@ export function InvestScreen() {
               setPendingCycleId(null);
             }}
           />
-        ) : plan && phase === 'report' ? (
+        ) : plan && isReportableInvestmentDay(plan) && phase === 'report' ? (
           <ReportBody
             plan={plan}
             participation={participation.participation}
@@ -411,7 +441,7 @@ function TodayBody({
       ) : null}
 
       <AppText variant="display" style={{ marginTop: spacing.lg }}>
-        {formatNokFromMinor(plan.expectedAmountMinor)}
+        {formatNokFromMinor(plan.expectedAmountMinor ?? 0)}
       </AppText>
       <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
         planned for today
@@ -537,7 +567,7 @@ function ReportBody({
 
       <View style={{ marginTop: spacing.xl }}>
         <InvestmentDayReportPanel
-          expectedAmountMinor={plan.expectedAmountMinor}
+          expectedAmountMinor={plan.expectedAmountMinor ?? 0}
           targets={targets}
           choice={choice}
           amountFields={amountFields}

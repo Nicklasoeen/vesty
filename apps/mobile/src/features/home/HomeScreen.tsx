@@ -22,9 +22,8 @@ import { HomePinnedClubCard } from './HomePinnedClubCard';
 import { HomePortfolioCard } from './HomePortfolioCard';
 import { presentHomeClubs } from './presentHomeClubs';
 import { homeScrollBottomPadding } from './presentHomeMoney';
-import { presentInvestmentDayHeading } from './presentInvestmentDay';
+import { formatInvestmentDayWhen, presentInvestmentDayHeading, presentInvestmentDayPlannedMinor } from './presentInvestmentDay';
 import {
-  formatHomeInvestmentDayDate,
   homeGreeting,
   presentHomePortfolio,
 } from './presentHomePortfolio';
@@ -124,19 +123,26 @@ export function HomeScreen() {
             <HomeNextInvestmentDay
               title={presentInvestmentDayHeading({
                 setupRequired: investmentDay.setupRequired,
+                viewerState: investmentDay.plan?.viewerState ?? null,
                 cycleStatus: investmentDay.plan?.cycleStatus ?? null,
                 investmentDayAt: investmentDay.plan?.investmentDayAt ?? null,
               })}
               dateLabel={
                 investmentDay.setupRequired
                   ? 'Set your contribution'
-                  : investmentDay.plan
-                    ? formatHomeInvestmentDayDate(investmentDay.plan.investmentDayAt)
+                  : investmentDay.plan?.viewerState === 'setup_next'
+                    ? 'Applies from your next Investment Day'
+                    : investmentDay.plan
+                      ? formatInvestmentDayWhen(investmentDay.plan.reportingOpensAt ?? investmentDay.plan.investmentDayAt)
                     : investmentDay.error
                       ? 'Date unavailable'
                       : 'Loading…'
               }
-              plannedMinor={investmentDay.setupRequired ? null : investmentDay.plan?.expectedAmountMinor ?? null}
+              plannedMinor={presentInvestmentDayPlannedMinor({
+                viewerState: investmentDay.plan?.viewerState,
+                setupRequired: investmentDay.setupRequired,
+                expectedAmountMinor: investmentDay.plan?.expectedAmountMinor,
+              })}
               setupRequired={investmentDay.setupRequired}
               onPress={() => onSelectTab('invest')}
             />

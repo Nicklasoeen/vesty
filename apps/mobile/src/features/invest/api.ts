@@ -9,7 +9,9 @@ import type {
   InvestmentDayAllocation,
   InvestmentDayPlan,
   InvestmentDayTransaction,
+  InvestmentDayViewerState,
 } from './types';
+import { INVESTMENT_DAY_VIEWER_STATES } from './types';
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -113,33 +115,68 @@ function parseTransactions(value: unknown): InvestmentDayTransaction[] {
   });
 }
 
+function asBoolean(value: unknown): boolean | null {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  return null;
+}
+
+function asViewerState(value: unknown, cycleStatus: string | null): InvestmentDayViewerState {
+  if (typeof value === 'string' && (INVESTMENT_DAY_VIEWER_STATES as readonly string[]).includes(value)) {
+    return value as InvestmentDayViewerState;
+  }
+  if (cycleStatus === 'open') {
+    return 'open';
+  }
+  if (cycleStatus === 'upcoming') {
+    return 'upcoming';
+  }
+  if (cycleStatus === 'completed' || cycleStatus === 'cancelled') {
+    return 'closed';
+  }
+  return 'unavailable';
+}
+
 function parsePlan(data: unknown): InvestmentDayPlan {
   const row = firstRpcRow(data);
   if (!row) {
     throw new Error('Unable to load this Investment Day');
   }
 
-  const participationOutcome = requireString(row, 'participation_outcome');
+  const participationOutcome = typeof row.participation_outcome === 'string'
+    ? row.participation_outcome
+    : '';
+  const cycleStatus = typeof row.cycle_status === 'string' ? row.cycle_status : null;
+  const viewerState = asViewerState(row.viewer_state, cycleStatus);
+  const expectedAmountMinor = asNumber(row.expected_amount_minor);
+  const cycleId = typeof row.cycle_id === 'string' ? row.cycle_id : null;
+  const reportingAllowed = asBoolean(row.reporting_allowed)
+    ?? (viewerState === 'open' && participationOutcome === 'expected');
 
   return {
     clubId: requireString(row, 'club_id'),
     clubName: requireString(row, 'club_name'),
     membershipId: requireString(row, 'membership_id'),
-    cycleId: requireString(row, 'cycle_id'),
-    investmentDayAt: requireString(row, 'investment_day_at'),
-    cycleStatus: requireString(row, 'cycle_status'),
-    participationId: requireString(row, 'participation_id'),
+    cycleId,
+    investmentDayAt: typeof row.investment_day_at === 'string' ? row.investment_day_at : null,
+    cycleStatus,
+    viewerState,
+    reportingAllowed,
+    reportingOpensAt: typeof row.reporting_opens_at === 'string' ? row.reporting_opens_at : null,
+    reportingClosesAt: typeof row.reporting_closes_at === 'string' ? row.reporting_closes_at : null,
+    participationId: typeof row.participation_id === 'string' ? row.participation_id : null,
     participationOutcome,
-    expectedAmountMinor: requireNumber(row, 'expected_amount_minor'),
-    currency: requireString(row, 'currency'),
+    expectedAmountMinor,
+    currency: typeof row.currency === 'string' ? row.currency : null,
     allocations: parseAllocations(row.allocations),
     transactions: parseTransactions(row.transactions),
     isCompleted: isInvestmentDayClosed(participationOutcome),
   };
 }
 
-export async function ensureOpenInvestmentDay(clubId: string): Promise<InvestmentDayPlan> {
-  const result = await supabase.rpc('ensure_open_investment_day_v1', {
+export async function fetchCurrentInvestmentDay(clubId: string): Promise<InvestmentDayPlan> {
+  const result = await supabase.rpc('current_investment_day_v1', {
     p_club_id: clubId,
   });
 
@@ -147,7 +184,7 @@ export async function ensureOpenInvestmentDay(clubId: string): Promise<Investmen
     if (extractInvestErrorCode(result.error) === 'vesty.contribution_commitment_required') {
       throw new ContributionSetupRequiredError();
     }
-    throw new Error(mapInvestError(result.error, 'Unable to load this Investment Day', 'ensure_open_investment_day_v1'));
+    throw new Error(mapInvestError(result.error, 'Unable to load this Investment Day', 'current_investment_day_v1'));
   }
 
   try {

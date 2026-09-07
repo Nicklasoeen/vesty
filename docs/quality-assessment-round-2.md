@@ -60,4 +60,4 @@ Migreringen `20260907101905_investment_day_reporting_v1.sql` er brukt lokalt. In
 - `client_report_id` lever i minnet for syklusen. Dobbelttrykk i samme økt er trygt; prosesskille kan gi ny ID.
 - `failed` er serverstøttet, ikke et primærvalg i UI.
 - `ExactHoldingsForm.tsx` er død kode og ikke en andreskrivesti.
-- F03/F04, planleggeren og nye gruppetyper står igjen.
+- F03/F04 er lukket i runde 3. Se `docs/quality-assessment-round-3.md`.

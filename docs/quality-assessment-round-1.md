@@ -18,8 +18,8 @@ Denne runden endret bare F05–F07 og tilhørende tester og dokumentasjon.
 | --- | --- | --- |
 | F01 | Fortsatt til stede etter runde 1; lukket i runde 2 | Se `docs/quality-assessment-round-2.md`. |
 | F02 | Fortsatt til stede etter runde 1; lukket i runde 2 | Se `docs/quality-assessment-round-2.md`. |
-| F03 | Fortsatt til stede; ikke endret | `ensure_open_investment_day_v1` kan gjenbruke en vilkårlig åpen periode. Confirm kontrollerer `status = open`, men ikke rapporteringsfristen. |
-| F04 | Delvis rettet før denne runden; ikke endret her | Nyere kode fryser policyreferansen og et eksisterende medlemsbeløp, og sen Flexible-deltagelse er dokumentert. Deltagere opprettes fortsatt per innringer, og historisk sosial projeksjon bruker dagens aktive medlemsliste. |
+| F03 | Lukket i runde 3 | Se `docs/quality-assessment-round-3.md`. |
+| F04 | Lukket i runde 3 | Se `docs/quality-assessment-round-3.md`. |
 | F05 | Rettet i denne runden | Den nye migreringen fjerner `club_estimated_portfolio_v1` og `club_portfolio_history_v1`, inkludert private implementasjoner. Tre bidragsytere åpner derfor ikke lenger en direkte API-bane til klubbens pengesummer eller avledede avkastning. Egne medlemsprojeksjoner og sosial deltagelse består. |
 | F06 | Rettet innenfor tilgjengelige projeksjoner | Egen medlemsprojeksjon hadde allerede all-or-nothing-verdsetting. Ny regresjon bekrefter at én manglende nødvendig kurs gir ukjent totalverdi og avkastning, mens rapportert investert beholdes separat. Den feilaktige klubbtotalbanen ble fjernet som del av F05. |
 | F07 | Rettet i denne runden | Hook, presentasjon og UI skiller loading, kjent tom portefølje, tilgjengelig verdi, utilgjengelig verdi og forespørselsfeil med retry. Ukjent markedsverdi faller ikke lenger tilbake til investert beløp. |
@@ -125,6 +125,6 @@ presentasjonsregresjoner, lint og typecheck dekker den lokale kontrollen.
   gjør hele totalverdien og avkastningen utilgjengelig.
 - En eventuell fremtidig delingsmodell for klubbverdi, også for Equal-klubber,
   krever en separat produkt- og personvernbeslutning.
-- F01/F02 er lukket i rettingsrunde 2. F03/F04, planleggeren, grafens 400-dagersgrense og komplett visuell/enhetsbasert brukerreise står igjen til senere runder.
+- F01/F02 er lukket i rettingsrunde 2. F03/F04 er lukket i rettingsrunde 3. Planleggeren, grafens 400-dagersgrense og komplett visuell/enhetsbasert brukerreise står igjen til senere runder.
 
 Ingen commit, push, ekstern migrering eller deploy ble utført.

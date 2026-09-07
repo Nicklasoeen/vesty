@@ -16,7 +16,7 @@ import type { InvestTargetRow } from './types.ts';
 export interface InvestmentDayReportGalleryScenario {
   id: string;
   label: string;
-  view: 'report' | 'pending' | 'completed' | 'legacy';
+  view: 'report' | 'pending' | 'completed' | 'legacy' | 'cycle';
   choice: InvestmentDayReportChoice;
   submitState: InvestmentDayReportSubmitState;
   error: string | null;
@@ -25,6 +25,15 @@ export interface InvestmentDayReportGalleryScenario {
   outcome: 'expected' | 'confirmed' | 'skipped';
   amountProvenance: 'member_attested_plan' | 'member_reported_actual' | 'legacy_plan_assumed' | null;
   compact?: boolean;
+  viewerState?: 'upcoming' | 'open' | 'closed' | 'missing' | 'not_in_snapshot' | 'setup_next' | 'setup_required' | 'unavailable';
+  clubName?: string;
+  investmentDayAt?: string;
+  reportingOpensAt?: string;
+  reportingClosesAt?: string;
+  longName?: boolean;
+  longFundName?: boolean;
+  largeText?: boolean;
+  contributionSaveResult?: 'success' | 'error';
 }
 
 const WORLD_MIX_TARGETS: readonly InvestTargetRow[] = [
@@ -63,7 +72,23 @@ const WORLD_MIX_TARGETS: readonly InvestTargetRow[] = [
   },
 ];
 
-export function galleryPlanTargets(): readonly InvestTargetRow[] {
+export function galleryPlanTargets(
+  scenario?: InvestmentDayReportGalleryScenario,
+): readonly InvestTargetRow[] {
+  if (scenario?.longFundName) {
+    return WORLD_MIX_TARGETS.map((target, index) => (
+      index === 0
+        ? {
+            ...target,
+            label: 'Vanguard FTSE All-World UCITS ETF Accumulating — exceptionally long fund name',
+            exposureLabel: null,
+            ticker: null,
+            secondaryLabel: 'Globally diversified equity exposure with a deliberately long description',
+          }
+        : target
+    ));
+  }
+
   return WORLD_MIX_TARGETS;
 }
 
@@ -127,6 +152,11 @@ function scenario(
     reportedTotalMinor: 200000,
     outcome: 'expected',
     amountProvenance: null,
+    viewerState: 'open',
+    clubName: 'Friday Club',
+    investmentDayAt: '2026-09-05T10:00:00.000Z',
+    reportingOpensAt: '2026-09-05T10:00:00.000Z',
+    reportingClosesAt: '2026-09-12T10:00:00.000Z',
     ...overrides,
   };
 }
@@ -156,6 +186,55 @@ export const INVESTMENT_DAY_REPORT_GALLERY_SCENARIOS: readonly InvestmentDayRepo
     amountProvenance: 'legacy_plan_assumed',
   }),
   scenario('compact', 'Compact phone', 'report', { compact: true }),
+  scenario('long-fund-name', 'Long fund name', 'report', {
+    choice: 'with_changes',
+    longFundName: true,
+  }),
+  scenario('upcoming', 'Upcoming noon', 'cycle', {
+    viewerState: 'upcoming',
+    investmentDayAt: '2026-09-05T10:00:00.000Z',
+    reportingOpensAt: '2026-09-05T10:00:00.000Z',
+  }),
+  scenario('closed', 'Closed window', 'cycle', {
+    viewerState: 'closed',
+    investmentDayAt: '2026-09-05T10:00:00.000Z',
+    reportingClosesAt: '2026-09-12T10:00:00.000Z',
+  }),
+  scenario('missing', 'Missing period', 'cycle', { viewerState: 'missing' }),
+  scenario('not-in-snapshot', 'Not in snapshot', 'cycle', {
+    viewerState: 'not_in_snapshot',
+    clubName: 'Friday Club with a very long coordinated savings name',
+    longName: true,
+  }),
+  scenario('long-club-name', 'Long club name', 'cycle', {
+    viewerState: 'upcoming',
+    clubName: 'Friday Club with an exceptionally long coordinated monthly investment name',
+  }),
+  scenario('large-text', 'Large text', 'cycle', {
+    viewerState: 'setup_required',
+    compact: true,
+    largeText: true,
+    contributionSaveResult: 'success',
+  }),
+  scenario('setup-next', 'Flexible next day', 'cycle', {
+    viewerState: 'setup_next',
+    clubName: 'Friday Club',
+    contributionSaveResult: 'success',
+  }),
+  scenario('setup-required', 'Flexible setup now', 'cycle', {
+    viewerState: 'setup_required',
+    clubName: 'Friday Club',
+    contributionSaveResult: 'success',
+  }),
+  scenario('setup-save-success', 'Flexible save success', 'cycle', {
+    viewerState: 'setup_required',
+    contributionSaveResult: 'success',
+  }),
+  scenario('setup-save-error', 'Flexible save error', 'cycle', {
+    viewerState: 'setup_required',
+    contributionSaveResult: 'error',
+  }),
+  scenario('request-error', 'Request error', 'cycle', { viewerState: 'unavailable' }),
 ];
 
 export function getInvestmentDayReportGalleryScenario(id: string): InvestmentDayReportGalleryScenario {

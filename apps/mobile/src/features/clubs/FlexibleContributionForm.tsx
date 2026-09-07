@@ -5,6 +5,10 @@ import { useTheme } from '@/theme';
 import { AppText, Button, TextField } from '@/ui';
 
 import { parseContributionKronerInput } from './contributionAmount';
+import {
+  presentFlexibleContributionSubmitLabel,
+  runFlexibleContributionSubmission,
+} from './flexibleContributionSubmission';
 import { presentOwnFlexibleContribution } from './presentContribution';
 
 interface FlexibleContributionFormProps {
@@ -35,14 +39,10 @@ export function FlexibleContributionForm({
       return;
     }
 
-    setIsSubmitting(true);
-    setError(null);
-    try {
-      await onSubmit(amountMinor);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Unable to save your contribution');
-      setIsSubmitting(false);
-    }
+    await runFlexibleContributionSubmission(amountMinor, onSubmit, {
+      onSubmittingChange: setIsSubmitting,
+      onErrorChange: setError,
+    });
   };
 
   return (
@@ -85,7 +85,7 @@ export function FlexibleContributionForm({
 
       <View style={{ marginTop: spacing.xl }}>
         <Button
-          label={isSubmitting || busy ? 'Saving…' : submitLabel}
+          label={presentFlexibleContributionSubmitLabel(isSubmitting, busy, submitLabel)}
           variant="primary"
           block
           disabled={!canSubmit}

@@ -73,6 +73,197 @@ as $function$
 $function$;
 
 grant execute on function tests.authenticate_as(uuid) to authenticated;
+
+create function tests.open_investment_day_v1(
+  p_club_id uuid,
+  p_now timestamptz default '2026-09-05 10:00:00+00'::timestamptz
+)
+returns table (
+  club_id uuid,
+  club_name text,
+  membership_id uuid,
+  cycle_id uuid,
+  investment_day_at timestamptz,
+  reporting_opens_at timestamptz,
+  reporting_closes_at timestamptz,
+  cycle_status public.investment_cycle_status,
+  viewer_state text,
+  reporting_allowed boolean,
+  participation_id uuid,
+  participation_outcome public.participation_outcome,
+  expected_amount_minor bigint,
+  currency text,
+  allocations jsonb,
+  transactions jsonb
+)
+language plpgsql
+volatile
+security definer
+set search_path = ''
+set row_security = off
+as $function$
+begin
+  update public.club_memberships as membership
+  set joined_at = least(membership.joined_at, p_now - interval '120 days')
+  where membership.club_id = p_club_id
+    and membership.status = 'active';
+
+  update public.member_contribution_commitment_versions as commitment
+  set created_at = least(commitment.created_at, p_now - interval '90 days')
+  from public.club_memberships as membership
+  where membership.id = commitment.membership_id
+    and membership.club_id = p_club_id
+    and membership.status = 'active';
+
+  perform private.ensure_club_investment_schedule_v1(p_club_id);
+
+  update public.investment_schedules as schedule
+  set effective_from = least(schedule.effective_from, p_now - interval '120 days')
+  where schedule.club_id = p_club_id
+    and schedule.status in ('active', 'paused');
+
+  update public.strategy_versions as strategy
+  set
+    created_at = least(strategy.created_at, p_now - interval '90 days'),
+    approved_at = case
+      when strategy.approved_at is null then null
+      else least(strategy.approved_at, p_now - interval '90 days')
+    end,
+    effective_at = least(strategy.effective_at, p_now - interval '90 days')
+  where strategy.club_id = p_club_id;
+
+  update public.contribution_policy_versions as policy
+  set created_at = least(policy.created_at, p_now - interval '90 days')
+  where policy.club_id = p_club_id;
+
+  perform public.advance_investment_cycles_v1(p_now, p_club_id);
+
+  return query
+  select *
+  from private.current_investment_day_v1(p_club_id, p_now);
+end;
+$function$;
+
+create function tests.current_investment_day_v1(
+  p_club_id uuid,
+  p_now timestamptz default '2026-09-05 10:00:00+00'::timestamptz
+)
+returns table (
+  club_id uuid,
+  club_name text,
+  membership_id uuid,
+  cycle_id uuid,
+  investment_day_at timestamptz,
+  reporting_opens_at timestamptz,
+  reporting_closes_at timestamptz,
+  cycle_status public.investment_cycle_status,
+  viewer_state text,
+  reporting_allowed boolean,
+  participation_id uuid,
+  participation_outcome public.participation_outcome,
+  expected_amount_minor bigint,
+  currency text,
+  allocations jsonb,
+  transactions jsonb
+)
+language sql
+stable
+security definer
+set search_path = ''
+as $function$
+  select *
+  from private.current_investment_day_v1(p_club_id, p_now);
+$function$;
+
+create function tests.advance_investment_cycles_v1(
+  p_club_id uuid,
+  p_now timestamptz default '2026-09-05 10:00:00+00'::timestamptz
+)
+returns integer
+language sql
+volatile
+security definer
+set search_path = ''
+set row_security = off
+as $function$
+  select public.advance_investment_cycles_v1(p_now, p_club_id);
+$function$;
+
+create function tests.report_investment_day_at_v1(
+  p_club_id uuid,
+  p_cycle_id uuid,
+  p_client_report_id uuid,
+  p_report_mode public.investment_day_report_mode,
+  p_outcome public.participation_outcome,
+  p_purchase_lines jsonb,
+  p_now timestamptz default '2026-09-05 10:00:00+00'::timestamptz
+)
+returns table (
+  club_id uuid,
+  club_name text,
+  membership_id uuid,
+  cycle_id uuid,
+  investment_day_at timestamptz,
+  cycle_status public.investment_cycle_status,
+  participation_id uuid,
+  participation_outcome public.participation_outcome,
+  expected_amount_minor bigint,
+  currency text,
+  allocations jsonb,
+  transactions jsonb
+)
+language sql
+volatile
+security definer
+set search_path = ''
+as $function$
+  select *
+  from private.report_investment_day_at_v1(
+    p_club_id,
+    p_cycle_id,
+    p_client_report_id,
+    p_report_mode,
+    p_outcome,
+    p_purchase_lines,
+    p_now
+  );
+$function$;
+
+create function tests.club_investment_day_participation_at_v1(
+  p_club_id uuid,
+  p_cycle_id uuid,
+  p_now timestamptz default '2026-09-05 10:00:00+00'::timestamptz
+)
+returns table (
+  membership_id uuid,
+  profile_id uuid,
+  display_name text,
+  avatar_path text,
+  cycle_id uuid,
+  completed boolean,
+  completed_at timestamptz,
+  verification_level text,
+  current_streak integer,
+  member_count integer,
+  completed_count integer,
+  pending_count integer,
+  all_completed boolean
+)
+language sql
+stable
+security definer
+set search_path = ''
+as $function$
+  select *
+  from private.club_investment_day_participation_at_v1(p_club_id, p_cycle_id, p_now);
+$function$;
+
+grant execute on function tests.open_investment_day_v1(uuid, timestamptz) to authenticated;
+grant execute on function tests.current_investment_day_v1(uuid, timestamptz) to authenticated;
+grant execute on function tests.advance_investment_cycles_v1(uuid, timestamptz) to authenticated;
+grant execute on function tests.report_investment_day_at_v1(uuid, uuid, uuid, public.investment_day_report_mode, public.participation_outcome, jsonb, timestamptz) to authenticated;
+grant execute on function tests.club_investment_day_participation_at_v1(uuid, uuid, timestamptz) to authenticated;
+
 grant execute on function tests.statement_message(text) to authenticated;
 grant execute on function tests.world_mix_reports(text, text, text) to authenticated;
 
@@ -212,10 +403,6 @@ from public.create_member_contribution_commitment_v1(
   200000
 );
 
-create temporary table alice_day as
-select *
-from public.ensure_open_investment_day_v1((select club_id from alice_club));
-
 create temporary table alice_invite as
 select *
 from public.create_club_invitation((select club_id from alice_club));
@@ -232,18 +419,17 @@ from public.create_member_contribution_commitment_v1(
   200000
 );
 
+select tests.authenticate_as('00000000-0000-4000-8000-000000000081');
+
+create temporary table alice_day as
+select *
+from tests.open_investment_day_v1((select club_id from alice_club));
+
 create temporary table bob_day as
 select *
-from public.ensure_open_investment_day_v1((select club_id from alice_club));
+from tests.current_investment_day_v1((select club_id from alice_club));
 
 reset role;
-
-update public.club_memberships
-set joined_at = now() - interval '120 days'
-where id in (
-  (select membership_id from alice_club),
-  (select membership_id from bob_join)
-);
 
 insert into public.investment_cycles (
   club_id,
@@ -258,56 +444,24 @@ insert into public.investment_cycles (
   timezone,
   status,
   opened_at,
-  closed_at
+  closed_at,
+  roster_frozen_at
 )
 select
   cycle.club_id,
   cycle.investment_schedule_id,
   cycle.strategy_version_id,
   cycle.contribution_policy_version_id,
-  hist.occurrence_key,
-  hist.investment_day_at,
-  hist.investment_day_at - interval '1 day',
-  hist.investment_day_at,
-  hist.investment_day_at + interval '7 days',
+  '2026-06-05',
+  timestamptz '2026-06-05 10:00:00+00',
+  timestamptz '2026-06-02 10:00:00+00',
+  timestamptz '2026-06-05 10:00:00+00',
+  timestamptz '2026-06-12 10:00:00+00',
   cycle.timezone,
   'completed',
-  hist.investment_day_at,
-  hist.investment_day_at + interval '7 days'
-from public.investment_cycles as cycle
-cross join (
-  values
-    ('hist-1', now() - interval '90 days'),
-    ('hist-2', now() - interval '60 days'),
-    ('hist-3', now() - interval '30 days')
-) as hist(occurrence_key, investment_day_at)
-where cycle.id = (select cycle_id from alice_day);
-
-insert into public.investment_cycles (
-  club_id,
-  investment_schedule_id,
-  strategy_version_id,
-  contribution_policy_version_id,
-  occurrence_key,
-  investment_day_at,
-  configuration_deadline_at,
-  reporting_opens_at,
-  reporting_closes_at,
-  timezone,
-  status
-)
-select
-  cycle.club_id,
-  cycle.investment_schedule_id,
-  cycle.strategy_version_id,
-  cycle.contribution_policy_version_id,
-  'future-1',
-  now() + interval '40 days',
-  now() + interval '39 days',
-  now() + interval '40 days',
-  now() + interval '47 days',
-  cycle.timezone,
-  'upcoming'
+  timestamptz '2026-06-05 10:00:00+00',
+  timestamptz '2026-06-12 10:00:00+00',
+  timestamptz '2026-06-02 10:00:00+00'
 from public.investment_cycles as cycle
 where cycle.id = (select cycle_id from alice_day);
 
@@ -337,15 +491,25 @@ select
 from public.member_cycle_participations as participation
 join public.investment_cycles as cycle
   on cycle.club_id = participation.club_id
-where participation.investment_cycle_id = (select cycle_id from alice_day)
+ and cycle.occurrence_key = '2026-06-05'
+where participation.investment_cycle_id = (select cycle_id from alice_day);
+
+update public.member_cycle_participations as participation
+set
+  outcome = 'confirmed',
+  report_source = 'member_reported',
+  reported_at = cycle.investment_day_at + interval '1 hour'
+from public.investment_cycles as cycle
+where cycle.id = participation.investment_cycle_id
+  and cycle.club_id = (select club_id from alice_club)
   and (
     (
       participation.membership_id = (select membership_id from alice_club)
-      and cycle.occurrence_key in ('hist-1', 'hist-2', 'hist-3')
+      and cycle.occurrence_key in ('2026-07-05', '2026-08-05')
     )
     or (
       participation.membership_id = (select membership_id from bob_join)
-      and cycle.occurrence_key in ('hist-1', 'hist-2')
+      and cycle.occurrence_key = '2026-07-05'
     )
   );
 
@@ -355,19 +519,19 @@ select tests.authenticate_as('00000000-0000-4000-8000-000000000081');
 select extensions.is(
   (
     select count(*)
-    from public.club_investment_day_participation_v1(
+    from tests.club_investment_day_participation_at_v1(
       (select club_id from alice_club),
       (select cycle_id from alice_day)
     )
   ),
   2::bigint,
-  'Current roster includes only active club members'
+  'Current roster is the frozen participation snapshot'
 );
 
 select extensions.is(
   (
     select completed_count
-    from public.club_investment_day_participation_v1(
+    from tests.club_investment_day_participation_at_v1(
       (select club_id from alice_club),
       (select cycle_id from alice_day)
     )
@@ -380,7 +544,7 @@ select extensions.is(
 select extensions.is(
   (
     select current_streak
-    from public.club_investment_day_participation_v1(
+    from tests.club_investment_day_participation_at_v1(
       (select club_id from alice_club),
       (select cycle_id from alice_day)
     )
@@ -393,7 +557,7 @@ select extensions.is(
 select extensions.is(
   (
     select current_streak
-    from public.club_investment_day_participation_v1(
+    from tests.club_investment_day_participation_at_v1(
       (select club_id from alice_club),
       (select cycle_id from alice_day)
     )
@@ -406,7 +570,7 @@ select extensions.is(
 select extensions.is(
   (
     select completed
-    from public.club_investment_day_participation_v1(
+    from tests.club_investment_day_participation_at_v1(
       (select club_id from alice_club),
       (select cycle_id from alice_day)
     )
@@ -418,7 +582,7 @@ select extensions.is(
 
 create temporary table alice_confirm as
 select *
-from public.report_investment_day_v1(
+from tests.report_investment_day_at_v1(
   (select club_id from alice_club),
   (select cycle_id from alice_day),
   '85000000-0000-4000-8000-000000000001'::uuid,
@@ -430,7 +594,7 @@ from public.report_investment_day_v1(
 select extensions.is(
   (
     select completed
-    from public.club_investment_day_participation_v1(
+    from tests.club_investment_day_participation_at_v1(
       (select club_id from alice_club),
       (select cycle_id from alice_day)
     )
@@ -443,7 +607,7 @@ select extensions.is(
 select extensions.is(
   (
     select current_streak
-    from public.club_investment_day_participation_v1(
+    from tests.club_investment_day_participation_at_v1(
       (select club_id from alice_club),
       (select cycle_id from alice_day)
     )
@@ -456,7 +620,7 @@ select extensions.is(
 select extensions.is(
   (
     select completed_count
-    from public.club_investment_day_participation_v1(
+    from tests.club_investment_day_participation_at_v1(
       (select club_id from alice_club),
       (select cycle_id from alice_day)
     )
@@ -469,7 +633,7 @@ select extensions.is(
 select extensions.is(
   (
     select verification_level
-    from public.club_investment_day_participation_v1(
+    from tests.club_investment_day_participation_at_v1(
       (select club_id from alice_club),
       (select cycle_id from alice_day)
     )
@@ -481,7 +645,7 @@ select extensions.is(
 
 create temporary table alice_v2 as
 select *
-from public.report_investment_day_v1(
+from tests.report_investment_day_at_v1(
   (select club_id from alice_club),
   (select cycle_id from alice_day),
   '85000000-0000-4000-8000-000000000001'::uuid,
@@ -493,7 +657,7 @@ from public.report_investment_day_v1(
 select extensions.is(
   (
     select current_streak
-    from public.club_investment_day_participation_v1(
+    from tests.club_investment_day_participation_at_v1(
       (select club_id from alice_club),
       (select cycle_id from alice_day)
     )
@@ -506,7 +670,7 @@ select extensions.is(
 select extensions.is(
   (
     select completed_count
-    from public.club_investment_day_participation_v1(
+    from tests.club_investment_day_participation_at_v1(
       (select club_id from alice_club),
       (select cycle_id from alice_day)
     )
@@ -534,34 +698,43 @@ from public.create_member_contribution_commitment_v1(
 
 select extensions.is(
   (
-    select current_streak
-    from public.club_investment_day_participation_v1(
+    select count(*)
+    from tests.club_investment_day_participation_at_v1(
       (select club_id from alice_club),
       (select cycle_id from alice_day)
     )
     where membership_id = (select membership_id from cara_join)
   ),
-  0,
-  'A later joiner starts at streak 0 and is not penalized for earlier cycles'
+  0::bigint,
+  'A later joiner is not added to a frozen participation snapshot'
+);
+
+select extensions.is(
+  (
+    select viewer_state
+    from tests.current_investment_day_v1((select club_id from alice_club))
+  ),
+  'not_in_snapshot',
+  'A later joiner sees not_in_snapshot for the frozen current cycle'
 );
 
 select extensions.is(
   (
     select count(*)
-    from public.club_investment_day_participation_v1(
+    from tests.club_investment_day_participation_at_v1(
       (select club_id from alice_club),
       (select cycle_id from alice_day)
     )
   ),
-  3::bigint,
-  'Later joiner appears in the current eligible roster'
+  2::bigint,
+  'Late join does not change the frozen roster or all_completed denominator'
 );
 
 select tests.authenticate_as('00000000-0000-4000-8000-000000000082');
 
 create temporary table bob_confirm as
 select *
-from public.report_investment_day_v1(
+from tests.report_investment_day_at_v1(
   (select club_id from alice_club),
   (select cycle_id from alice_day),
   '85000000-0000-4000-8000-000000000001'::uuid,
@@ -573,7 +746,7 @@ from public.report_investment_day_v1(
 select extensions.is(
   (
     select current_streak
-    from public.club_investment_day_participation_v1(
+    from tests.club_investment_day_participation_at_v1(
       (select club_id from alice_club),
       (select cycle_id from alice_day)
     )
@@ -583,27 +756,10 @@ select extensions.is(
   'A new completion after a miss starts a streak of 1'
 );
 
-select tests.authenticate_as('00000000-0000-4000-8000-000000000083');
-
-create temporary table cara_day as
-select *
-from public.ensure_open_investment_day_v1((select club_id from alice_club));
-
-create temporary table cara_confirm as
-select *
-from public.report_investment_day_v1(
-  (select club_id from alice_club),
-  (select cycle_id from alice_day),
-  '85000000-0000-4000-8000-000000000001'::uuid,
-  'as_planned',
-  'confirmed',
-  '[]'::jsonb
-);
-
 select extensions.is(
   (
     select all_completed
-    from public.club_investment_day_participation_v1(
+    from tests.club_investment_day_participation_at_v1(
       (select club_id from alice_club),
       (select cycle_id from alice_day)
     )
@@ -616,14 +772,14 @@ select extensions.is(
 select extensions.is(
   (
     select completed_count
-    from public.club_investment_day_participation_v1(
+    from tests.club_investment_day_participation_at_v1(
       (select club_id from alice_club),
       (select cycle_id from alice_day)
     )
     limit 1
   ),
-  3,
-  'Completed count matches the eligible roster'
+  2,
+  'Completed count matches the frozen snapshot, not later joiners'
 );
 
 select tests.authenticate_as('00000000-0000-4000-8000-000000000084');
@@ -645,13 +801,13 @@ from public.create_member_contribution_commitment_v1(
 
 create temporary table dana_day as
 select *
-from public.ensure_open_investment_day_v1((select club_id from dana_club));
+from tests.open_investment_day_v1((select club_id from dana_club));
 
 select extensions.is(
   tests.statement_message(
     format(
       $statement$
-        select * from public.club_investment_day_participation_v1(%L::uuid, %L::uuid)
+        select * from tests.club_investment_day_participation_at_v1(%L::uuid, %L::uuid)
       $statement$,
       (select club_id from alice_club),
       (select cycle_id from alice_day)
@@ -667,7 +823,7 @@ select extensions.is(
   tests.statement_message(
     format(
       $statement$
-        select * from public.club_investment_day_participation_v1(%L::uuid, %L::uuid)
+        select * from tests.club_investment_day_participation_at_v1(%L::uuid, %L::uuid)
       $statement$,
       (select club_id from dana_club),
       (select cycle_id from dana_day)
@@ -683,7 +839,7 @@ select extensions.is(
   tests.statement_message(
     format(
       $statement$
-        select * from public.club_investment_day_participation_v1(%L::uuid, %L::uuid)
+        select * from tests.club_investment_day_participation_at_v1(%L::uuid, %L::uuid)
       $statement$,
       (select club_id from alice_club),
       (select cycle_id from alice_day)
@@ -708,7 +864,7 @@ select extensions.is(
 select extensions.is(
   (
     select count(*)
-    from public.club_investment_day_participation_v1(
+    from tests.club_investment_day_participation_at_v1(
       (select club_id from alice_club),
       (select cycle_id from alice_day)
     ) as participation

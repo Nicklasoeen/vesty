@@ -21,6 +21,8 @@ const PRODUCT_MESSAGES: Record<string, string> = {
   'vesty.client_report_id_invalid': 'Unable to save this Investment Day report',
   'vesty.contribution_commitment_required': 'Set your contribution to continue',
   'vesty.contribution_commitment_invalid': 'Enter how much you want to contribute',
+  'vesty.reporting_not_open': 'Reporting has not opened for this Investment Day yet',
+  'vesty.reporting_closed': 'The reporting window for this Investment Day has closed',
 };
 
 function logInvestIssue(context: string, error: { code?: string } | unknown): void {

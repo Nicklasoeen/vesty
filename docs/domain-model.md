@@ -466,8 +466,8 @@ A material schedule change creates a new schedule revision for future cycles rat
 
 - One cycle exists per club and schedule occurrence key.
 - `configuration_deadline_at` is earlier than `investment_day_at`.
-- The applicable strategy version and expected member participation are frozen no later than `configuration_deadline_at`.
-- Expected amounts are copied from the saving plans applicable at the deadline and never derived historically from current plans.
+- The applicable strategy version, contribution policy, eligible memberships, and expected member participation are frozen no later than `configuration_deadline_at`.
+- Expected amounts are copied from the contribution policy (Equal) or the member's private commitment dated at or before the deadline (Flexible). They are never derived later from the live membership list or from a later commitment.
 - Cancelling a cycle does not delete its record or any participation already recorded.
 
 **Does not own:** Actual broker transfers, trades, settlement, or a claim that all members invested.
@@ -974,9 +974,9 @@ A cycle is generated idempotently from one schedule occurrence. It freezes:
 - schedule revision
 - strategy version
 - eligible membership tenures
-- each applicable saving plan's expected amount and currency
+- each eligible member's expected amount and currency from the frozen contribution policy and, for Flexible, the commitment dated at or before the deadline
 
-The V1 configuration deadline is approximately three days before Investment Day. Exact offset may be product-configurable. Schedule, strategy, or saving-plan changes after the deadline apply to a later cycle.
+The V1 configuration deadline is approximately three days before Investment Day. Exact offset may be product-configurable. Schedule, strategy, contribution, or membership changes after the deadline apply to a later cycle. A delayed lifecycle job still creates the correct occurrence and never reopens an elapsed reporting window.
 
 ### Expected member participation
 
@@ -1100,7 +1100,7 @@ This section defines intended authority, not RLS implementation.
 - A completed report cannot be overwritten with a different payload. Versioned correction is remaining work.
 - Normal member-facing correction of a finished report is not available in this round.
 - The owner cannot report or confirm on another member's behalf.
-- Exact amounts and private notes remain visible only to the affected member, while coarse status/count aggregates may be visible to active club members.
+- Exact amounts and private notes remain visible only to the affected member. Coarse Investment Day status and counts for a cycle are visible to active club members and are computed from that cycle's frozen participations, not from the live membership list.
 
 ### Remove members
 

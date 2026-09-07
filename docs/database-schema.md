@@ -192,8 +192,10 @@ Money uses signed PostgreSQL `bigint` columns with positive-value checks. Alloca
 
 - `investment_cycles`
   - Primary key: `id`
+  - Unique `(club_id, occurrence_key)`
   - References exact schedule and strategy revisions in the same club
-  - Snapshots occurrence identity, timing, timezone, reporting window, and lifecycle
+  - Snapshots occurrence identity, timing, timezone, reporting window, lifecycle, and `roster_frozen_at`
+  - New keys are local `YYYY-MM-DD` in the schedule timezone; historical keys such as `v1-YYYY-MM` are not rewritten
 
 - `member_saving_plans`
   - Primary key: `id`
@@ -448,7 +450,7 @@ The following require trusted transaction functions, later authorization policy,
 
 ## Trusted write paths
 
-`supabase/migrations/20260904110626_add_club_create_join_v1.sql`, `supabase/migrations/20260905075952_add_instruments_transactions_v1.sql`, `supabase/migrations/20260905121758_curated_investment_packages_v1.sql`, `supabase/migrations/20260906150144_rename_club_v1.sql`, `supabase/migrations/20260906194634_contribution_policy_v1.sql`, `supabase/migrations/20260906215200_contribution_policy_product_v1.sql`, `supabase/migrations/20260906221000_contribution_policy_hardening_v1.sql`, and `supabase/migrations/20260906223000_contribution_policy_proposals_v1.sql` add public invoker wrappers over private `SECURITY DEFINER` functions:
+`supabase/migrations/20260904110626_add_club_create_join_v1.sql`, `supabase/migrations/20260905075952_add_instruments_transactions_v1.sql`, `supabase/migrations/20260905121758_curated_investment_packages_v1.sql`, `supabase/migrations/20260906150144_rename_club_v1.sql`, `supabase/migrations/20260906194634_contribution_policy_v1.sql`, `supabase/migrations/20260906215200_contribution_policy_product_v1.sql`, `supabase/migrations/20260906221000_contribution_policy_hardening_v1.sql`, `supabase/migrations/20260906223000_contribution_policy_proposals_v1.sql`, `supabase/migrations/20260907101905_investment_day_reporting_v1.sql`, and `supabase/migrations/20260907123709_investment_day_cycle_lifecycle_v1.sql` add public invoker wrappers over private `SECURITY DEFINER` functions:
 
 - `create_club` — legacy path. Authenticates via `auth.uid()`, resolves an allowlisted `p_package_id` to canonical allocations, then creates the club, owner membership, owner pointer, genesis StrategyVersion 1, a complete 10000-bps snapshot, and Flexible ContributionPolicyVersion 1. It does not invent a creator amount. New mobile clients use `create_club_v2`.
 - `create_club_v2` — same club/strategy creation plus an explicit Equal or Flexible genesis policy. Equal requires `p_equal_amount_minor` and forbids a creator private amount. Flexible requires `p_creator_flexible_amount_minor` and forbids a shared amount. The transaction is atomic.
@@ -464,8 +466,11 @@ The following require trusted transaction functions, later authorization policy,
 - `club_contribution_policy_v1` — active members; returns latest mode/currency and a shared equal amount only when the mode is equal
 - `my_contribution_commitment_v1` — caller only; latest private commitment, never another member's amount
 - `accept_club_invitation` — authenticates via `auth.uid()`, validates token/expiry/recipient, creates one active membership, and marks the invitation accepted without changing ownership
-- `ensure_open_investment_day_v1` — authenticates via `auth.uid()`, opens or reuses the caller's current TestFlight cycle/participation. A **new** cycle may select the latest ContributionPolicyVersion. An **existing** cycle always uses `investment_cycles.contribution_policy_version_id` and never re-resolves "latest". An existing participation is returned as stored and is never recalculated. Flexible members without a commitment receive `vesty.contribution_commitment_required`. Never writes transactions
-- `report_investment_day_v1` — authenticates via `auth.uid()`, writes one member report plus matching transactions and participation outcome atomically. `as_planned` attests the frozen plan. `with_changes` stores only explicit purchase amounts. Retry with the same `client_report_id` and fingerprint is idempotent. A different payload is `vesty.report_conflict`. Authenticated clients cannot execute the private implementation or the retired confirm v1/v2 functions.
+- `current_investment_day_v1` — authenticated read of the current or next Investment Day. Never creates cycles, freezes policy, or writes participations. Returns `viewer_state` (`missing`, `upcoming`, `open`, `closed`, `not_in_snapshot`, `setup_next`, `setup_required`, `unavailable`) and `reporting_allowed`. Flexible members without a frozen participation see `setup_next` or `setup_required` instead of an invented amount.
+- `advance_investment_cycles_v1` — trusted lifecycle. Authenticated clients have no EXECUTE; `service_role` does. Idempotently generates occurrences from the stored schedule (local noon, `day_of_month` / `last_day_of_month`, timezone, `configuration_lead_days`), freezes eligible participations at the configuration deadline, opens the reporting window, and completes elapsed cycles without reopening it. Identifies a period by club and occurrence key, never by “latest open row”.
+- `ensure_open_investment_day_v1` — retired from the authenticated API. EXECUTE is revoked from `anon` and `authenticated`. The function body remains for history; clients must not call it.
+- `report_investment_day_v1` — authenticates via `auth.uid()`, writes one member report plus matching transactions and participation outcome atomically. In the same locked operation it requires a frozen participation, `status = open`, and `reporting_opens_at <= now < reporting_closes_at`. Before open: `vesty.reporting_not_open`. At or after close: `vesty.reporting_closed`, even if status is still `open`. The public wrapper does not accept a client clock. `as_planned` attests the frozen plan. `with_changes` stores only explicit purchase amounts. Retry with the same `client_report_id` and fingerprint is idempotent. A different payload is `vesty.report_conflict`. Authenticated clients cannot execute the private implementation, the clock-parameter reporter, or the retired confirm v1/v2 functions.
+- `club_investment_day_participation_v1` — authenticated social read. Counts and roster come from frozen `member_cycle_participations`, including members who later left. It does not use the live active membership list and does not return amounts, quantities, prices, or private contribution choices.
 
 Implementations live in the unexposed `private` schema. Direct client writes to clubs, memberships, invitations, strategy, and transaction tables remain blocked.
 

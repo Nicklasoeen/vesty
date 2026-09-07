@@ -72,4 +72,28 @@ describe('presentInvestmentDayHeading', () => {
       'Your contribution',
     );
   });
+
+  it('labels setup_next as contribution, not current', () => {
+    assert.equal(
+      presentInvestmentDayHeading({
+        viewerState: 'setup_next',
+        cycleStatus: 'open',
+        investmentDayAt: '2026-09-06T08:00:00.000Z',
+        now: noon,
+      }),
+      'Your contribution',
+    );
+  });
+
+  it('labels closed reporting as Investment Day', () => {
+    assert.equal(
+      presentInvestmentDayHeading({
+        viewerState: 'closed',
+        cycleStatus: 'completed',
+        investmentDayAt: '2026-09-01T08:00:00.000Z',
+        now: noon,
+      }),
+      'Investment Day',
+    );
+  });
 });

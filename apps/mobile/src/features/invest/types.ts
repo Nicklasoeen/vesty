@@ -23,17 +23,42 @@ export interface InvestmentDayTransaction {
   executionUnitPriceCurrency: string | null;
 }
 
+export type InvestmentDayViewerState =
+  | 'missing'
+  | 'unavailable'
+  | 'upcoming'
+  | 'open'
+  | 'closed'
+  | 'not_in_snapshot'
+  | 'setup_next'
+  | 'setup_required';
+
+export const INVESTMENT_DAY_VIEWER_STATES: readonly InvestmentDayViewerState[] = [
+  'missing',
+  'unavailable',
+  'upcoming',
+  'open',
+  'closed',
+  'not_in_snapshot',
+  'setup_next',
+  'setup_required',
+];
+
 export interface InvestmentDayPlan {
   clubId: string;
   clubName: string;
   membershipId: string;
-  cycleId: string;
-  investmentDayAt: string;
-  cycleStatus: string;
-  participationId: string;
+  cycleId: string | null;
+  investmentDayAt: string | null;
+  cycleStatus: string | null;
+  viewerState: InvestmentDayViewerState;
+  reportingAllowed: boolean;
+  reportingOpensAt: string | null;
+  reportingClosesAt: string | null;
+  participationId: string | null;
   participationOutcome: string;
-  expectedAmountMinor: number;
-  currency: string;
+  expectedAmountMinor: number | null;
+  currency: string | null;
   allocations: InvestmentDayAllocation[];
   transactions: InvestmentDayTransaction[];
   isCompleted: boolean;

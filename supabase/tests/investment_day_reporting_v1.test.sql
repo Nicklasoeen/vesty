@@ -55,6 +55,197 @@ end;
 $function$;
 
 grant execute on function tests.authenticate_as(uuid) to authenticated;
+
+create function tests.open_investment_day_v1(
+  p_club_id uuid,
+  p_now timestamptz default '2026-09-05 10:00:00+00'::timestamptz
+)
+returns table (
+  club_id uuid,
+  club_name text,
+  membership_id uuid,
+  cycle_id uuid,
+  investment_day_at timestamptz,
+  reporting_opens_at timestamptz,
+  reporting_closes_at timestamptz,
+  cycle_status public.investment_cycle_status,
+  viewer_state text,
+  reporting_allowed boolean,
+  participation_id uuid,
+  participation_outcome public.participation_outcome,
+  expected_amount_minor bigint,
+  currency text,
+  allocations jsonb,
+  transactions jsonb
+)
+language plpgsql
+volatile
+security definer
+set search_path = ''
+set row_security = off
+as $function$
+begin
+  update public.club_memberships as membership
+  set joined_at = least(membership.joined_at, p_now - interval '120 days')
+  where membership.club_id = p_club_id
+    and membership.status = 'active';
+
+  update public.member_contribution_commitment_versions as commitment
+  set created_at = least(commitment.created_at, p_now - interval '90 days')
+  from public.club_memberships as membership
+  where membership.id = commitment.membership_id
+    and membership.club_id = p_club_id
+    and membership.status = 'active';
+
+  perform private.ensure_club_investment_schedule_v1(p_club_id);
+
+  update public.investment_schedules as schedule
+  set effective_from = least(schedule.effective_from, p_now - interval '120 days')
+  where schedule.club_id = p_club_id
+    and schedule.status in ('active', 'paused');
+
+  update public.strategy_versions as strategy
+  set
+    created_at = least(strategy.created_at, p_now - interval '90 days'),
+    approved_at = case
+      when strategy.approved_at is null then null
+      else least(strategy.approved_at, p_now - interval '90 days')
+    end,
+    effective_at = least(strategy.effective_at, p_now - interval '90 days')
+  where strategy.club_id = p_club_id;
+
+  update public.contribution_policy_versions as policy
+  set created_at = least(policy.created_at, p_now - interval '90 days')
+  where policy.club_id = p_club_id;
+
+  perform public.advance_investment_cycles_v1(p_now, p_club_id);
+
+  return query
+  select *
+  from private.current_investment_day_v1(p_club_id, p_now);
+end;
+$function$;
+
+create function tests.current_investment_day_v1(
+  p_club_id uuid,
+  p_now timestamptz default '2026-09-05 10:00:00+00'::timestamptz
+)
+returns table (
+  club_id uuid,
+  club_name text,
+  membership_id uuid,
+  cycle_id uuid,
+  investment_day_at timestamptz,
+  reporting_opens_at timestamptz,
+  reporting_closes_at timestamptz,
+  cycle_status public.investment_cycle_status,
+  viewer_state text,
+  reporting_allowed boolean,
+  participation_id uuid,
+  participation_outcome public.participation_outcome,
+  expected_amount_minor bigint,
+  currency text,
+  allocations jsonb,
+  transactions jsonb
+)
+language sql
+stable
+security definer
+set search_path = ''
+as $function$
+  select *
+  from private.current_investment_day_v1(p_club_id, p_now);
+$function$;
+
+create function tests.advance_investment_cycles_v1(
+  p_club_id uuid,
+  p_now timestamptz default '2026-09-05 10:00:00+00'::timestamptz
+)
+returns integer
+language sql
+volatile
+security definer
+set search_path = ''
+set row_security = off
+as $function$
+  select public.advance_investment_cycles_v1(p_now, p_club_id);
+$function$;
+
+create function tests.report_investment_day_at_v1(
+  p_club_id uuid,
+  p_cycle_id uuid,
+  p_client_report_id uuid,
+  p_report_mode public.investment_day_report_mode,
+  p_outcome public.participation_outcome,
+  p_purchase_lines jsonb,
+  p_now timestamptz default '2026-09-05 10:00:00+00'::timestamptz
+)
+returns table (
+  club_id uuid,
+  club_name text,
+  membership_id uuid,
+  cycle_id uuid,
+  investment_day_at timestamptz,
+  cycle_status public.investment_cycle_status,
+  participation_id uuid,
+  participation_outcome public.participation_outcome,
+  expected_amount_minor bigint,
+  currency text,
+  allocations jsonb,
+  transactions jsonb
+)
+language sql
+volatile
+security definer
+set search_path = ''
+as $function$
+  select *
+  from private.report_investment_day_at_v1(
+    p_club_id,
+    p_cycle_id,
+    p_client_report_id,
+    p_report_mode,
+    p_outcome,
+    p_purchase_lines,
+    p_now
+  );
+$function$;
+
+create function tests.club_investment_day_participation_at_v1(
+  p_club_id uuid,
+  p_cycle_id uuid,
+  p_now timestamptz default '2026-09-05 10:00:00+00'::timestamptz
+)
+returns table (
+  membership_id uuid,
+  profile_id uuid,
+  display_name text,
+  avatar_path text,
+  cycle_id uuid,
+  completed boolean,
+  completed_at timestamptz,
+  verification_level text,
+  current_streak integer,
+  member_count integer,
+  completed_count integer,
+  pending_count integer,
+  all_completed boolean
+)
+language sql
+stable
+security definer
+set search_path = ''
+as $function$
+  select *
+  from private.club_investment_day_participation_at_v1(p_club_id, p_cycle_id, p_now);
+$function$;
+
+grant execute on function tests.open_investment_day_v1(uuid, timestamptz) to authenticated;
+grant execute on function tests.current_investment_day_v1(uuid, timestamptz) to authenticated;
+grant execute on function tests.advance_investment_cycles_v1(uuid, timestamptz) to authenticated;
+grant execute on function tests.report_investment_day_at_v1(uuid, uuid, uuid, public.investment_day_report_mode, public.participation_outcome, jsonb, timestamptz) to authenticated;
+grant execute on function tests.club_investment_day_participation_at_v1(uuid, uuid, timestamptz) to authenticated;
+
 grant execute on function tests.statement_sqlstate(text) to authenticated;
 grant execute on function tests.statement_message(text) to authenticated;
 
@@ -151,6 +342,67 @@ select extensions.ok(
   'Authenticated cannot insert reports directly'
 );
 
+select extensions.ok(
+  has_function_privilege(
+    'authenticated',
+    'public.current_investment_day_v1(uuid)',
+    'execute'
+  ),
+  'Authenticated can execute the read-only current Investment Day'
+);
+
+select extensions.ok(
+  not has_function_privilege(
+    'authenticated',
+    'public.ensure_open_investment_day_v1(uuid)',
+    'execute'
+  ),
+  'Authenticated cannot execute the retired writing ensure-open'
+);
+
+select extensions.ok(
+  not has_function_privilege(
+    'authenticated',
+    'private.ensure_open_investment_day_v1(uuid)',
+    'execute'
+  ),
+  'Authenticated cannot execute private ensure-open'
+);
+
+select extensions.ok(
+  not has_function_privilege(
+    'authenticated',
+    'public.advance_investment_cycles_v1(timestamptz, uuid)',
+    'execute'
+  ),
+  'Authenticated cannot execute the trusted lifecycle mutation'
+);
+
+select extensions.ok(
+  not has_function_privilege(
+    'authenticated',
+    'private.report_investment_day_at_v1(uuid, uuid, uuid, public.investment_day_report_mode, public.participation_outcome, jsonb, timestamptz)',
+    'execute'
+  ),
+  'Authenticated cannot execute the clock-parameter reporter'
+);
+
+select extensions.ok(
+  not has_function_privilege(
+    'authenticated',
+    'private.current_investment_day_v1(uuid, timestamptz)',
+    'execute'
+  ),
+  'Authenticated cannot execute the clock-parameter current-day reader'
+);
+
+select extensions.ok(
+  pg_catalog.pg_get_function_identity_arguments(
+    'public.report_investment_day_v1(uuid, uuid, uuid, public.investment_day_report_mode, public.participation_outcome, jsonb)'::regprocedure
+  ) !~ 'timestamptz',
+  'Public reporter does not accept a client clock'
+);
+
 set local role authenticated;
 select tests.authenticate_as('00000000-0000-4000-8000-000000000091');
 
@@ -171,7 +423,7 @@ from public.create_member_contribution_commitment_v1(
 
 create temporary table alice_day as
 select *
-from public.ensure_open_investment_day_v1((select club_id from alice_club));
+from tests.open_investment_day_v1((select club_id from alice_club));
 
 select extensions.is(
   (select expected_amount_minor from alice_day),
@@ -181,7 +433,7 @@ select extensions.is(
 
 create temporary table alice_partial as
 select *
-from public.report_investment_day_v1(
+from tests.report_investment_day_at_v1(
   (select club_id from alice_club),
   (select cycle_id from alice_day),
   '91000000-0000-4000-8000-000000000001'::uuid,
@@ -241,7 +493,7 @@ select extensions.is(
 
 create temporary table alice_retry as
 select *
-from public.report_investment_day_v1(
+from tests.report_investment_day_at_v1(
   (select club_id from alice_club),
   (select cycle_id from alice_day),
   '91000000-0000-4000-8000-000000000001'::uuid,
@@ -274,7 +526,7 @@ select extensions.is(
   tests.statement_message(
     format(
       $statement$
-        select public.report_investment_day_v1(
+        select tests.report_investment_day_at_v1(
           %L::uuid,
           %L::uuid,
           '91000000-0000-4000-8000-000000000001'::uuid,
@@ -300,7 +552,7 @@ select extensions.is(
   tests.statement_message(
     format(
       $statement$
-        select public.report_investment_day_v1(
+        select tests.report_investment_day_at_v1(
           %L::uuid,
           %L::uuid,
           '91000000-0000-4000-8000-000000000099'::uuid,
@@ -443,11 +695,11 @@ from public.create_member_contribution_commitment_v1(
 
 create temporary table alice_planned_day as
 select *
-from public.ensure_open_investment_day_v1((select club_id from alice_planned_club));
+from tests.open_investment_day_v1((select club_id from alice_planned_club));
 
 create temporary table alice_planned as
 select *
-from public.report_investment_day_v1(
+from tests.report_investment_day_at_v1(
   (select club_id from alice_planned_club),
   (select cycle_id from alice_planned_day),
   '91000000-0000-4000-8000-000000000002'::uuid,
@@ -494,11 +746,11 @@ from public.create_member_contribution_commitment_v1(
 
 create temporary table alice_skip_day as
 select *
-from public.ensure_open_investment_day_v1((select club_id from alice_skip_club));
+from tests.open_investment_day_v1((select club_id from alice_skip_club));
 
 create temporary table alice_skipped as
 select *
-from public.report_investment_day_v1(
+from tests.report_investment_day_at_v1(
   (select club_id from alice_skip_club),
   (select cycle_id from alice_skip_day),
   '91000000-0000-4000-8000-000000000003'::uuid,
@@ -540,11 +792,11 @@ from public.create_member_contribution_commitment_v1(
 
 create temporary table alice_fail_day as
 select *
-from public.ensure_open_investment_day_v1((select club_id from alice_fail_club));
+from tests.open_investment_day_v1((select club_id from alice_fail_club));
 
 create temporary table alice_failed as
 select *
-from public.report_investment_day_v1(
+from tests.report_investment_day_at_v1(
   (select club_id from alice_fail_club),
   (select cycle_id from alice_fail_day),
   '91000000-0000-4000-8000-000000000004'::uuid,
@@ -580,11 +832,11 @@ from public.create_member_contribution_commitment_v1(
 
 create temporary table alice_omit_zero_day as
 select *
-from public.ensure_open_investment_day_v1((select club_id from alice_omit_zero_club));
+from tests.open_investment_day_v1((select club_id from alice_omit_zero_club));
 
 create temporary table alice_omit_zero as
 select *
-from public.report_investment_day_v1(
+from tests.report_investment_day_at_v1(
   (select club_id from alice_omit_zero_club),
   (select cycle_id from alice_omit_zero_day),
   '91000000-0000-4000-8000-000000000005'::uuid,
@@ -629,11 +881,11 @@ from public.create_member_contribution_commitment_v1(
 
 create temporary table alice_partial_qty_day as
 select *
-from public.ensure_open_investment_day_v1((select club_id from alice_partial_qty_club));
+from tests.open_investment_day_v1((select club_id from alice_partial_qty_club));
 
 create temporary table alice_partial_qty as
 select *
-from public.report_investment_day_v1(
+from tests.report_investment_day_at_v1(
   (select club_id from alice_partial_qty_club),
   (select cycle_id from alice_partial_qty_day),
   '91000000-0000-4000-8000-000000000006'::uuid,
@@ -716,7 +968,7 @@ from public.create_member_contribution_commitment_v1(
 
 create temporary table bob_day as
 select *
-from public.ensure_open_investment_day_v1((select club_id from alice_planned_club));
+from tests.open_investment_day_v1((select club_id from alice_planned_club));
 
 select extensions.is(
   (
@@ -802,7 +1054,7 @@ select extensions.is(
   tests.statement_message(
     format(
       $statement$
-        select public.report_investment_day_v1(
+        select tests.report_investment_day_at_v1(
           %L::uuid,
           %L::uuid,
           '93000000-0000-4000-8000-000000000001'::uuid,
@@ -851,7 +1103,7 @@ select extensions.is(
   tests.statement_message(
     format(
       $statement$
-        select public.report_investment_day_v1(
+        select tests.report_investment_day_at_v1(
           %L::uuid,
           %L::uuid,
           '92000000-0000-4000-8000-000000000002'::uuid,

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { isContributionSetupRequiredError } from '@/features/clubs/contributionPolicy';
 
 import { isReportConflictError } from './investErrors';
-import { ensureOpenInvestmentDay, reportInvestmentDay } from './api';
+import { fetchCurrentInvestmentDay, reportInvestmentDay } from './api';
 import { clientReportIdForCycle, type InvestmentDayReportRequest } from './investmentDayReport';
 import type { InvestmentDayPlan } from './types';
 
@@ -35,11 +35,11 @@ export function useInvestmentDay(clubId: string | null): {
     }
 
     try {
-      const next = await ensureOpenInvestmentDay(clubId);
+      const next = await fetchCurrentInvestmentDay(clubId);
       setPlan(next);
       setLoadedClubId(clubId);
       setError(null);
-      setSetupRequired(false);
+      setSetupRequired(next.viewerState === 'setup_required');
       return next;
     } catch (caught) {
       setPlan(null);
@@ -61,13 +61,13 @@ export function useInvestmentDay(clubId: string | null): {
     }
 
     let cancelled = false;
-    void ensureOpenInvestmentDay(clubId)
+    void fetchCurrentInvestmentDay(clubId)
       .then((next) => {
         if (!cancelled) {
           setPlan(next);
           setLoadedClubId(clubId);
           setError(null);
-          setSetupRequired(false);
+          setSetupRequired(next.viewerState === 'setup_required');
         }
       })
       .catch((caught: unknown) => {
@@ -92,7 +92,7 @@ export function useInvestmentDay(clubId: string | null): {
   const report = useCallback(async (
     input: Omit<InvestmentDayReportRequest, 'clubId' | 'cycleId' | 'clientReportId'>,
   ): Promise<InvestmentDayPlan> => {
-    if (!plan || !clubId) {
+    if (!plan || !clubId || !plan.cycleId) {
       throw new Error('Unable to save this Investment Day report');
     }
 
@@ -114,7 +114,7 @@ export function useInvestmentDay(clubId: string | null): {
       return next;
     } catch (caught) {
       if (!isReportConflictError(caught)) {
-        const reconciled = await ensureOpenInvestmentDay(plan.clubId).catch(() => null);
+        const reconciled = await fetchCurrentInvestmentDay(plan.clubId).catch(() => null);
         if (reconciled?.isCompleted && reconciled.cycleId === plan.cycleId) {
           setPlan(reconciled);
           setLoadedClubId(clubId);
