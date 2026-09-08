@@ -24,11 +24,16 @@ export function presentPlannedInvestmentSummary(targets: readonly InvestTargetRo
     .join('\n');
 }
 
-export function presentAsPlannedOption(expectedAmountMinor: number, targetCount: number): InvestmentDayReportOptionPresentation {
+export type InvestmentDayReportOrigin = 'monthly' | 'one_time';
+
+export function presentAsPlannedOption(
+  expectedAmountMinor: number,
+  targetCount: number,
+): InvestmentDayReportOptionPresentation {
   return {
     choice: 'as_planned',
-    title: 'Everything went as planned',
-    description: `Report ${formatNokFromMinor(expectedAmountMinor)} across ${targetCount} investments, then confirm.`,
+    title: 'Yes, as planned',
+    description: `I checked that the purchase completed. ${formatNokFromMinor(expectedAmountMinor)} across ${targetCount} investments.`,
   };
 }
 
@@ -36,22 +41,24 @@ export function presentWithChangesOption(): InvestmentDayReportOptionPresentatio
   return {
     choice: 'with_changes',
     title: 'Something was different',
-    description: 'Enter the amount you actually bought for each investment. Use 0 if you skipped one.',
+    description: 'Report the amount you actually bought.',
   };
 }
 
 export function presentPendingOption(): InvestmentDayReportOptionPresentation {
   return {
     choice: 'pending',
-    title: 'Order still pending',
+    title: 'Still pending',
     description: 'Nothing is saved. Come back when the order fills.',
   };
 }
 
-export function presentSkippedOption(): InvestmentDayReportOptionPresentation {
+export function presentSkippedOption(
+  origin: InvestmentDayReportOrigin = 'monthly',
+): InvestmentDayReportOptionPresentation {
   return {
     choice: 'skipped',
-    title: "I didn't invest this time",
+    title: origin === 'one_time' ? "I didn't invest this time" : "It didn't go through",
     description: 'This records a skipped Investment Day with no purchases.',
   };
 }
@@ -59,12 +66,13 @@ export function presentSkippedOption(): InvestmentDayReportOptionPresentation {
 export function presentReportChoices(
   expectedAmountMinor: number,
   targetCount: number,
+  origin: InvestmentDayReportOrigin = 'monthly',
 ): readonly InvestmentDayReportOptionPresentation[] {
   return [
     presentAsPlannedOption(expectedAmountMinor, targetCount),
     presentWithChangesOption(),
     presentPendingOption(),
-    presentSkippedOption(),
+    presentSkippedOption(origin),
   ];
 }
 

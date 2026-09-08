@@ -56,6 +56,54 @@ export function isReportConflictError(error: unknown): boolean {
   return error instanceof Error && error.message.includes('already reported with different details');
 }
 
+export function isMonthlySavingConflictError(error: unknown): boolean {
+  if (extractInvestErrorCode(error) === 'vesty.monthly_saving_setup_conflict') {
+    return true;
+  }
+  return error instanceof Error && error.message.includes('already saved with different details');
+}
+
+function investErrorName(error: unknown): string {
+  if (error && typeof error === 'object' && 'name' in error && typeof error.name === 'string') {
+    return error.name;
+  }
+  return '';
+}
+
+function investErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
+    return error.message;
+  }
+  return '';
+}
+
+export function isMonthlySavingTimeoutError(error: unknown): boolean {
+  if (isMonthlySavingConflictError(error)) {
+    return false;
+  }
+
+  const name = investErrorName(error);
+  if (name === 'AbortError' || name === 'TimeoutError') {
+    return true;
+  }
+
+  const message = investErrorMessage(error).toLowerCase();
+  if (!message || message === 'unable to save monthly saving confirmation') {
+    return false;
+  }
+
+  return (
+    message.includes('timeout')
+    || message.includes('timed out')
+    || message.includes('aborted')
+    || message.includes('failed to fetch')
+    || message.includes('network request failed')
+  );
+}
+
 export function mapInvestError(
   error: { message?: string; code?: string } | unknown,
   fallback: string,

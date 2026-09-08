@@ -5,18 +5,39 @@ import {
   VERIFIED_NORDNET_PRODUCT_PAGE_URL,
 } from './nordnetHandoffUrl.ts';
 import type {
+  InvestAttestationIssue,
+  InvestJourneyInput,
+  InvestJourneySurface,
+  InvestLocalBranch,
+  InvestReportStage,
+  OneTimeHandoffPhase,
+} from './presentInvestJourney.ts';
+import { presentInvestJourneySurface } from './presentInvestJourney.ts';
+import type {
   MonthlySavingPhase,
   MonthlySavingSetup,
   MonthlySavingView,
 } from './presentMonthlySavingSetup.ts';
+import type { InvestmentDayPlan } from './types.ts';
 
 export interface MonthlySavingGalleryScenario {
   id: string;
   label: string;
-  setup: MonthlySavingSetup;
+  setup: MonthlySavingSetup | null;
   phase: MonthlySavingPhase;
   view: MonthlySavingView;
+  introDismissed?: boolean;
+  localBranch?: InvestLocalBranch;
+  attested?: boolean;
+  attestationSaved?: boolean;
+  attestationIssue?: InvestAttestationIssue;
+  oneTimePhase?: OneTimeHandoffPhase;
+  setupError?: string | null;
+  setupLoading?: boolean;
+  plan?: InvestmentDayPlan | null;
+  reportStage?: InvestReportStage;
   largeText?: boolean;
+  viewport?: 375 | 402;
 }
 
 const DNB_GLOBAL = 'DNB Global Indeks A';
@@ -50,6 +71,40 @@ function setup(overrides: Partial<MonthlySavingSetup> = {}): MonthlySavingSetup 
   };
 }
 
+function currentSetup(overrides: Partial<MonthlySavingSetup> = {}): MonthlySavingSetup {
+  return setup({
+    status: 'current',
+    attestedAt: '2026-09-08T08:00:00.000Z',
+    attestedAmountMinor: AMOUNT,
+    attestedFundName: DNB_GLOBAL,
+    attestedScheduleDayOfMonth: 5,
+    ...overrides,
+  });
+}
+
+function plan(overrides: Partial<InvestmentDayPlan> = {}): InvestmentDayPlan {
+  return {
+    clubId: 'club',
+    clubName: 'Investorgroup',
+    membershipId: 'member',
+    cycleId: 'cycle',
+    investmentDayAt: '2026-10-05T10:00:00.000Z',
+    cycleStatus: 'upcoming',
+    viewerState: 'upcoming',
+    reportingAllowed: false,
+    reportingOpensAt: '2026-10-05T10:00:00.000Z',
+    reportingClosesAt: '2026-10-06T10:00:00.000Z',
+    participationId: null,
+    participationOutcome: 'expected',
+    expectedAmountMinor: AMOUNT,
+    currency: 'NOK',
+    allocations: [],
+    transactions: [],
+    isCompleted: false,
+    ...overrides,
+  };
+}
+
 function scenario(
   id: string,
   label: string,
@@ -66,17 +121,48 @@ function scenario(
 }
 
 export const MONTHLY_SAVING_GALLERY_SCENARIOS: readonly MonthlySavingGalleryScenario[] = [
-  scenario('not-set-up', 'Not set up'),
-  scenario('returned', 'Return from Nordnet', { phase: 'returned' }),
-  scenario('current', 'Current', {
-    setup: setup({
-      status: 'current',
-      attestedAt: '2026-09-08T08:00:00.000Z',
-      attestedAmountMinor: AMOUNT,
-      attestedFundName: DNB_GLOBAL,
-      attestedScheduleDayOfMonth: 5,
-    }),
+  scenario('intro', 'Intro'),
+  scenario('not-set-up', 'Not set up', { introDismissed: true, localBranch: 'choose' }),
+  scenario('choose', 'Choose rhythm', { introDismissed: true, localBranch: 'choose' }),
+  scenario('setup', 'Monthly setup', { introDismissed: true, localBranch: 'monthly' }),
+  scenario('returned', 'Return from Nordnet', { phase: 'returned', introDismissed: true, localBranch: 'monthly' }),
+  scenario('returned-checked', 'Return · checkbox', {
+    phase: 'returned',
+    attested: true,
+    introDismissed: true,
+    localBranch: 'monthly',
   }),
+  scenario('confirming', 'Attestation submitting', {
+    phase: 'confirming',
+    introDismissed: true,
+    localBranch: 'monthly',
+  }),
+  scenario('attestation-timeout', 'Attestation timeout', {
+    phase: 'returned',
+    attestationIssue: 'timeout',
+    attested: true,
+    introDismissed: true,
+    localBranch: 'monthly',
+  }),
+  scenario('attestation-error', 'Attestation error', {
+    phase: 'returned',
+    attestationIssue: 'error',
+    attested: true,
+    introDismissed: true,
+    localBranch: 'monthly',
+  }),
+  scenario('attestation-conflict', 'Attestation conflict', {
+    phase: 'returned',
+    attestationIssue: 'conflict',
+    attested: true,
+    introDismissed: true,
+    localBranch: 'monthly',
+  }),
+  scenario('attestation-saved', 'Attestation saved', {
+    setup: currentSetup(),
+    attestationSaved: true,
+  }),
+  scenario('current', 'Current', { setup: currentSetup(), plan: plan() }),
   scenario('needs-update-amount', 'Needs update · amount', {
     setup: setup({
       status: 'needs_update',
@@ -115,20 +201,69 @@ export const MONTHLY_SAVING_GALLERY_SCENARIOS: readonly MonthlySavingGalleryScen
       oneTimeAvailable: false,
     }),
   }),
-  scenario('loading', 'Loading', { phase: 'loading' }),
-  scenario('error', 'Error and retry', { phase: 'error' }),
-  scenario('ended', 'Ended setup', {
-    setup: setup({
-      status: 'not_set_up',
+  scenario('loading', 'Loading', { setup: null, setupLoading: true, phase: 'idle' }),
+  scenario('error', 'Error and retry', { setup: null, setupError: 'Unable to load monthly saving', phase: 'error' }),
+  scenario('opening', 'Opening Nordnet', { phase: 'loading', introDismissed: true, localBranch: 'monthly' }),
+  scenario('ended', 'Ended setup', { setup: setup({ status: 'not_set_up' }), introDismissed: true }),
+  scenario('one-time', 'One-time purchase', { view: 'one_time', localBranch: 'one_time' }),
+  scenario('one-time-outside-window', 'One-time · outside window', {
+    view: 'one_time',
+    oneTimePhase: 'returned',
+    plan: plan({ viewerState: 'upcoming', reportingAllowed: false }),
+  }),
+  scenario('one-time-inside-window', 'One-time · reporting open', {
+    view: 'one_time',
+    oneTimePhase: 'returned',
+    plan: plan({
+      viewerState: 'open',
+      cycleStatus: 'open',
+      reportingAllowed: true,
     }),
   }),
-  scenario('one-time', 'One-time purchase', { view: 'one_time' }),
+  scenario('investment-day-open', 'Investment Day open', {
+    setup: currentSetup(),
+    plan: plan({ viewerState: 'open', cycleStatus: 'open', reportingAllowed: true }),
+  }),
+  scenario('investment-day-report', 'Investment Day · amount', {
+    setup: currentSetup(),
+    plan: plan({ viewerState: 'open', cycleStatus: 'open', reportingAllowed: true }),
+    reportStage: 'choices',
+  }),
+  scenario('investment-day-upcoming', 'Investment Day upcoming', {
+    setup: currentSetup(),
+    plan: plan({ viewerState: 'upcoming' }),
+  }),
+  scenario('reporting-closed', 'Reporting closed', {
+    setup: currentSetup(),
+    plan: plan({ viewerState: 'closed', cycleStatus: 'closed' }),
+  }),
   scenario('long-fund-name', 'Long fund name', {
+    introDismissed: true,
+    localBranch: 'monthly',
     setup: setup({
       fundName: `${DNB_GLOBAL} — exceptionally long fund name for visual QA of wrapping on monthly saving`,
     }),
   }),
-  scenario('large-text', 'Large text', { largeText: true, phase: 'returned' }),
+  scenario('long-club-name', 'Long club name', {
+    setup: currentSetup(),
+    plan: plan({
+      clubName: 'The Friday Morning Global Index Habit Club with an extra long name',
+    }),
+  }),
+  scenario('large-text', 'Large text', {
+    largeText: true,
+    phase: 'returned',
+    introDismissed: true,
+    localBranch: 'monthly',
+  }),
+  scenario('iphone-17', 'iPhone 17 Pro width', {
+    viewport: 402,
+    introDismissed: true,
+    localBranch: 'choose',
+  }),
+  scenario('reduce-motion', 'Reduced motion', {
+    introDismissed: false,
+  }),
 ];
 
 export function getMonthlySavingGalleryScenario(id: string): MonthlySavingGalleryScenario {
@@ -144,6 +279,42 @@ export function galleryMonthlySavingUsesProductionCards(): true {
   return true;
 }
 
+export function galleryMonthlySavingUsesProductionJourney(): true {
+  return true;
+}
+
 export function galleryMonthlySavingAmountLabel(): string {
   return formatNokFromMinor(AMOUNT);
+}
+
+export function presentGalleryInvestJourneyInput(
+  scenario: MonthlySavingGalleryScenario,
+): InvestJourneyInput {
+  return {
+    hasClub: true,
+    clubsLoading: false,
+    setup: scenario.setup,
+    setupLoading: scenario.setupLoading === true,
+    setupError: scenario.setupError ?? null,
+    monthlyPhase: scenario.phase,
+    oneTimePhase: scenario.oneTimePhase ?? 'idle',
+    introDismissed: scenario.introDismissed === true,
+    localBranch: scenario.localBranch ?? (scenario.view === 'one_time' ? 'one_time' : null),
+    attested: scenario.attested === true,
+    attestationSaved: scenario.attestationSaved === true,
+    attestationIssue: scenario.attestationIssue ?? null,
+    openedMonthlyUrl: scenario.phase === 'returned' || Boolean(scenario.attestationIssue),
+    plan: scenario.plan ?? null,
+    planLoading: false,
+    planError: null,
+    planSetupRequired: scenario.setup?.status === 'setup_required',
+    reportStage: scenario.reportStage ?? 'idle',
+    reportCompleted: false,
+  };
+}
+
+export function presentGalleryInvestJourneySurface(
+  scenario: MonthlySavingGalleryScenario,
+): InvestJourneySurface {
+  return presentInvestJourneySurface(presentGalleryInvestJourneyInput(scenario));
 }

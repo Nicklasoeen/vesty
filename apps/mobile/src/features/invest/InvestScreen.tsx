@@ -1,26 +1,21 @@
-import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AccessibilityInfo, KeyboardAvoidingView, Platform, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { FlexibleContributionForm } from '@/features/clubs/FlexibleContributionForm';
 import { useClubContribution } from '@/features/clubs/useClubContribution';
 import { useClubs } from '@/features/clubs/useClubs';
-import { BrokerPickerSheet } from '@/features/profile/BrokerPickerSheet';
-import { useProfile } from '@/features/profile/useProfile';
 import { formatNokFromMinor } from '@/lib/currency';
-import { BOTTOM_NAVIGATION_HEIGHT, BottomNavigation } from '@/navigation/BottomNavigation';
+import { BOTTOM_NAVIGATION_HEIGHT, BottomNavigation, type BottomNavigationTabKey } from '@/navigation/BottomNavigation';
 import { useAppNavigation } from '@/navigation/useAppNavigation';
 import { useTheme } from '@/theme';
-import { AppText, Button, Screen } from '@/ui';
+import { AppText, Button } from '@/ui';
 
-import { asAmountProvenance } from './amountProvenance';
-import { InvestmentDayBrokerHandoffCard } from './InvestmentDayBrokerHandoffCard';
-import { InvestmentDayCycleStateView } from './InvestmentDayCycleStateView';
+import { InvestJourney } from './InvestJourney';
+import { InvestPrimaryBar } from './InvestJourneyChrome';
 import { InvestmentDayParticipationSection } from './InvestmentDayParticipation';
 import { InvestmentDayReportPanel } from './InvestmentDayReportPanel';
-import type { BrokerHandoffAvailability, BrokerHandoffPhase } from './presentInvestmentDayBrokerHandoff';
-import { useInvestmentDayBrokerHandoff } from './useInvestmentDayBrokerHandoff';
-import { InvestmentRow } from './InvestmentRow';
 import { rowsFromPlan } from './investRows';
 import {
   buildAsPlannedPurchaseLines,
@@ -41,65 +36,96 @@ import {
 } from './investmentDayReporting';
 import { isReportConflictError } from './investErrors';
 import {
+  presentInvestCanConfirm,
+  presentInvestDetailRows,
+  presentInvestJourneySurface,
+  type InvestLocalBranch,
+  type InvestReportStage,
+} from './presentInvestJourney';
+import { presentInvestReviewCopy } from './presentInvestJourneyCopy';
+import {
   presentCompletedAmountCaption,
-  presentCompletedHeadline,
-  presentPendingBanner,
+  type InvestmentDayReportOrigin,
   type InvestmentDayReportSubmitState,
 } from './presentInvestmentDayReport';
-import type { InvestmentDayPlan, InvestTargetRow } from './types';
 import { isReportableInvestmentDay } from './presentInvestmentDayCycle';
+import { asAmountProvenance } from './amountProvenance';
+import type { InvestTargetRow } from './types';
 import { useInvestmentDay } from './useInvestmentDay';
 import { useInvestmentDayParticipation } from './useInvestmentDayParticipation';
-
-function formatInvestmentDayShortLabel(iso: string | null): string {
-  if (!iso) {
-    return 'Date unavailable';
-  }
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return 'Today';
-  }
-  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' }).format(date);
-}
+import { useMonthlySavingSetup } from './useMonthlySavingSetup';
 
 /**
- * Invest answers: what do I need to do with my investments this cycle?
- * Completion comes from a member report, not from opening a broker.
+ * Invest answers: what is the next saving or Investment Day step?
+ * Broker opens never create a purchase. Reports stay member-attested.
  */
 export function InvestScreen() {
-  const { colorScheme, colors, spacing } = useTheme();
+  const { colorScheme, colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { activeTab, onSelectTab } = useAppNavigation('invest');
-  const { profile } = useProfile();
   const { selectedClub, isLoading: clubsLoading } = useClubs();
-  const preferredBroker = profile?.preferredBroker ?? null;
   const selectedClubId = selectedClub?.clubId ?? null;
+  const [reduceMotion, setReduceMotion] = useState(false);
+
+  useEffect(() => {
+    const apply = (enabled: boolean) => setReduceMotion(enabled);
+    void AccessibilityInfo.isReduceMotionEnabled().then(apply);
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', apply);
+    return () => subscription.remove();
+  }, []);
+
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={{ flex: 1, paddingBottom: BOTTOM_NAVIGATION_HEIGHT + insets.bottom }}>
+          <InvestSession
+            key={selectedClubId ?? 'none'}
+            selectedClub={selectedClub}
+            selectedClubId={selectedClubId}
+            clubsLoading={clubsLoading}
+            reduceMotion={reduceMotion}
+            onSelectTab={onSelectTab}
+          />
+        </View>
+      </KeyboardAvoidingView>
+      <BottomNavigation activeTab={activeTab} onSelectTab={onSelectTab} />
+    </View>
+  );
+}
+
+function InvestSession({
+  selectedClub,
+  selectedClubId,
+  clubsLoading,
+  reduceMotion,
+  onSelectTab,
+}: {
+  selectedClub: ReturnType<typeof useClubs>['selectedClub'];
+  selectedClubId: string | null;
+  clubsLoading: boolean;
+  reduceMotion: boolean;
+  onSelectTab: (tab: BottomNavigationTabKey) => void;
+}) {
+  const monthly = useMonthlySavingSetup(selectedClubId);
   const { plan, isLoading, error, setupRequired, isReporting, refresh, report } = useInvestmentDay(
     selectedClubId,
   );
   const contribution = useClubContribution(selectedClubId);
-  const participation = useInvestmentDayParticipation(
-    selectedClub?.clubId ?? null,
-    plan?.cycleId ?? null,
-  );
+  const participation = useInvestmentDayParticipation(selectedClubId, plan?.cycleId ?? null);
+  const [screenBranch, setScreenBranch] = useState<Exclude<InvestLocalBranch, 'one_time'>>(null);
+  const [attested, setAttested] = useState(false);
+  const [reportStage, setReportStage] = useState<InvestReportStage>('idle');
   const [pendingCycleId, setPendingCycleId] = useState<string | null>(null);
-  const [brokerPickerOpen, setBrokerPickerOpen] = useState(false);
   const [choice, setChoice] = useState<InvestmentDayReportChoice>('as_planned');
   const [submitState, setSubmitState] = useState<InvestmentDayReportSubmitState>('idle');
   const [reportError, setReportError] = useState<{ cycleId: string; message: string } | null>(null);
   const [amountFields, setAmountFields] = useState<Readonly<Record<string, ReportedAmountField>>>({});
   const [quantityFields, setQuantityFields] = useState<Readonly<Record<string, QuantityFieldState>>>({});
   const [priceFields, setPriceFields] = useState<Readonly<Record<string, QuantityFieldState>>>({});
-  const [reportStarted, setReportStarted] = useState<string | null>(null);
 
   const targets = useMemo(() => (plan ? rowsFromPlan(plan) : []), [plan]);
   const cycleId = plan?.cycleId ?? null;
-  const targetIds = targets.map((target) => target.id);
-  const handoff = useInvestmentDayBrokerHandoff({
-    clubId: selectedClubId,
-    cycleId,
-    preferredBroker,
-  });
 
   const fieldKey = useCallback(
     (id: string): string | null => (cycleId ? `${cycleId}:${id}` : null),
@@ -175,31 +201,28 @@ export function InvestScreen() {
     return next;
   }, [fieldKey, priceFields, targets]);
 
-  const reportedTotalMinor = sumReportedAmountMinor(amountStateByTarget, targetIds);
-  const optionalReady = showOptionalExecutionFields(targetIds);
+  const reportedTotalMinor = sumReportedAmountMinor(amountStateByTarget, targets.map((target) => target.id));
+  const optionalReady = showOptionalExecutionFields(targets.map((target) => target.id));
   const canSubmit = choice === 'pending' || choice === 'skipped'
-    || (choice === 'as_planned' && canSubmitAsPlanned(targetIds, quantityStateByTarget, priceStateByTarget))
+    || (choice === 'as_planned' && canSubmitAsPlanned(
+      targets.map((target) => target.id),
+      quantityStateByTarget,
+      priceStateByTarget,
+    ))
     || (choice === 'with_changes' && canSubmitWithChanges(
-      targetIds,
+      targets.map((target) => target.id),
       amountStateByTarget,
       quantityStateByTarget,
       priceStateByTarget,
     ));
 
-  const onStartReport = useCallback(() => {
-    if (!cycleId) {
-      return;
-    }
-    setReportStarted(cycleId);
-    setPendingCycleId((current) => (current === cycleId ? null : current));
-  }, [cycleId]);
-
   const onSubmitReport = useCallback(async () => {
-    if (isReporting || !cycleId) {
+    if (isReporting || !cycleId || !isReportableInvestmentDay(plan)) {
       return;
     }
     if (choice === 'pending') {
       setPendingCycleId(cycleId);
+      setReportStage('pending');
       setSubmitState('idle');
       setReportError(null);
       return;
@@ -212,10 +235,10 @@ export function InvestScreen() {
         reportMode: choice === 'skipped' ? 'with_changes' : choice,
         outcome: choice === 'skipped' ? 'skipped' : 'confirmed',
         purchaseLines: choice === 'as_planned'
-          ? buildAsPlannedPurchaseLines(targetIds, quantityStateByTarget, priceStateByTarget)
+          ? buildAsPlannedPurchaseLines(targets.map((target) => target.id), quantityStateByTarget, priceStateByTarget)
           : choice === 'with_changes'
             ? buildWithChangesPurchaseLines(
-              targetIds,
+              targets.map((target) => target.id),
               amountStateByTarget,
               quantityStateByTarget,
               priceStateByTarget,
@@ -223,6 +246,8 @@ export function InvestScreen() {
             : [],
       });
       setSubmitState('success');
+      setReportStage('idle');
+      monthly.clearOneTimeReturn();
       await participation.refresh();
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Unable to save this Investment Day report';
@@ -233,457 +258,381 @@ export function InvestScreen() {
       } else {
         setSubmitState('idle');
       }
-      setReportError({
-        cycleId,
-        message,
-      });
+      setReportError({ cycleId, message });
     }
   }, [
     amountStateByTarget,
     choice,
     cycleId,
     isReporting,
+    monthly,
     participation,
+    plan,
     priceStateByTarget,
     quantityStateByTarget,
     report,
-    targetIds,
+    targets,
   ]);
 
-  const showReport = Boolean(
-    isReportableInvestmentDay(plan) && !plan?.isCompleted && reportStarted === cycleId && pendingCycleId !== cycleId,
-  );
-  const showPending = Boolean(
-    isReportableInvestmentDay(plan) && !plan?.isCompleted && pendingCycleId === cycleId,
-  );
-  const showCycleState = Boolean(
-    plan
-    && !plan.isCompleted
-    && !isReportableInvestmentDay(plan)
-    && plan.viewerState !== 'open',
-  );
-  const phase = plan?.isCompleted ? 'completed' : showPending ? 'pending' : showReport ? 'report' : 'today';
+  const localBranch: InvestLocalBranch = monthly.view === 'one_time' || monthly.oneTimePhase !== 'idle'
+    ? 'one_time'
+    : screenBranch;
 
-  return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+  const journeyInput = {
+    hasClub: Boolean(selectedClub),
+    clubsLoading,
+    setup: monthly.setup,
+    setupLoading: monthly.isLoading,
+    setupError: monthly.error,
+    monthlyPhase: monthly.phase,
+    oneTimePhase: monthly.oneTimePhase,
+    introDismissed: monthly.introDismissed,
+    localBranch,
+    attested,
+    attestationSaved: monthly.attestationSaved,
+    attestationIssue: monthly.attestationIssue,
+    openedMonthlyUrl: monthly.openedMonthlyUrl,
+    plan,
+    planLoading: Boolean(selectedClub) && isLoading && !plan,
+    planError: error,
+    planSetupRequired: setupRequired,
+    reportStage: pendingCycleId && pendingCycleId === cycleId ? 'pending' as const : reportStage,
+    reportCompleted: Boolean(plan?.isCompleted) || submitState === 'success',
+  };
 
-      <Screen
-        contentContainerStyle={{
-          paddingHorizontal: spacing.lg,
-          paddingBottom: BOTTOM_NAVIGATION_HEIGHT + insets.bottom + spacing.xxl,
+  const surface = presentInvestJourneySurface(journeyInput);
+  const reportOrigin: InvestmentDayReportOrigin =
+    surface === 'one_time_returned_reportable' ? 'one_time' : 'monthly';
+
+  const goBack = () => {
+    if (surface === 'returned' || surface === 'opening_nordnet') {
+      monthly.notYet();
+      return;
+    }
+    if (surface === 'one_time' || surface === 'one_time_returned_outside_window' || surface === 'one_time_opening') {
+      monthly.showMonthly();
+      monthly.clearOneTimeReturn();
+      setScreenBranch(monthly.setup?.status === 'not_set_up' ? 'choose' : null);
+      return;
+    }
+    if (surface === 'setup' || surface === 'needs_update') {
+      setScreenBranch('choose');
+      return;
+    }
+    if (surface === 'choose') {
+      monthly.restoreIntro();
+      setScreenBranch(null);
+      return;
+    }
+    if (
+      surface === 'investment_day_report'
+      || surface === 'investment_day_review'
+      || surface === 'investment_day_pending'
+    ) {
+      setReportStage('idle');
+      setPendingCycleId(null);
+      monthly.clearOneTimeReturn();
+    }
+  };
+
+  const reportingPanel = (
+    surface === 'investment_day_open'
+    || surface === 'investment_day_report'
+    || surface === 'one_time_returned_reportable'
+  ) && isReportableInvestmentDay(plan) ? (
+    <InvestmentDayReportPanel
+      expectedAmountMinor={plan?.expectedAmountMinor ?? 0}
+      targets={targets}
+      choice={choice}
+      amountFields={amountStateByTarget}
+      quantityFields={quantityStateByTarget}
+      priceFields={priceStateByTarget}
+      showOptionalExecution={optionalReady}
+      reportedTotalMinor={reportedTotalMinor}
+      canSubmit={canSubmit && !isReporting}
+      submitState={isReporting ? 'loading' : submitState}
+      error={reportError?.cycleId === cycleId ? reportError.message : null}
+      origin={reportOrigin}
+      showHeading={false}
+      showSubmit={false}
+      onChoiceChange={(next) => {
+        setChoice(next);
+        setReportStage('choices');
+        if (next === 'pending') {
+          setPendingCycleId(cycleId);
+          setReportStage('pending');
+        }
+        if (submitState !== 'loading') {
+          setSubmitState('idle');
+        }
+      }}
+      onAmountChange={onAmountChange}
+      onQuantityChange={onQuantityChange}
+      onPriceChange={onExecutionPriceChange}
+      onSubmit={() => undefined}
+    />
+  ) : null;
+
+  const reviewCopy = presentInvestReviewCopy(choice);
+  const reportingAllowed = isReportableInvestmentDay(plan);
+  const reviewFooter = surface === 'investment_day_review' && reportingAllowed ? (
+    <View>
+      <InvestPrimaryBar
+        label={reviewCopy.primaryLabel}
+        onPress={() => {
+          void onSubmitReport();
         }}
-      >
-        <AppText variant="title" accessibilityRole="header" style={{ marginTop: spacing.md, marginBottom: spacing.lg }}>
-          Invest
-        </AppText>
-
-        {clubsLoading || (selectedClub && isLoading && !plan) ? (
-          <View style={{ marginTop: spacing.xxl, alignItems: 'center' }}>
-            <ActivityIndicator accessibilityLabel="Loading Investment Day" color={colors.accent} />
-          </View>
-        ) : !selectedClub ? (
-          <AppText variant="body" color="secondary">
-            Create or join a club to record an Investment Day.
-          </AppText>
-        ) : plan && showCycleState ? (
-          <InvestmentDayCycleStateView
-            viewerState={plan.viewerState}
-            clubName={plan.clubName}
-            investmentDayAt={plan.investmentDayAt}
-            reportingOpensAt={plan.reportingOpensAt}
-            reportingClosesAt={plan.reportingClosesAt}
-            reportingAllowed={plan.reportingAllowed}
-            onRetry={() => {
-              void refresh();
-            }}
-            onSaveContribution={
-              plan.viewerState === 'setup_required' || plan.viewerState === 'setup_next'
-                ? async (amountMinor) => {
-                    await contribution.saveFlexibleAmount(amountMinor);
-                    await refresh();
-                  }
-                : undefined
-            }
-          />
-        ) : selectedClub && setupRequired && !plan ? (
-          <InvestmentDayCycleStateView
-            viewerState="setup_required"
-            onRetry={() => {
-              void refresh();
-            }}
-            onSaveContribution={async (amountMinor) => {
-              await contribution.saveFlexibleAmount(amountMinor);
-              await refresh();
-            }}
-          />
-        ) : error && !plan ? (
-          <View>
-            <AppText variant="body" color="secondary">
-              {error}
-            </AppText>
-            <View style={{ marginTop: spacing.lg }}>
-              <Button
-                label="Try again"
-                variant="secondary"
-                onPress={() => {
-                  void refresh();
-                }}
-              />
-            </View>
-          </View>
-        ) : plan && isReportableInvestmentDay(plan) && phase === 'today' ? (
-          <TodayBody
-            participation={participation.participation}
-            plan={plan}
-            targets={targets}
-            handoffAvailability={handoff.availability}
-            handoffPhase={handoff.phase}
-            handoffFundName={handoff.listing?.fundName ?? null}
-            handoffIsin={handoff.listing?.isin ?? null}
-            onOpenHandoff={() => {
-              void handoff.open();
-            }}
-            onStartReport={onStartReport}
-            onChooseBroker={() => setBrokerPickerOpen(true)}
-          />
-        ) : plan && isReportableInvestmentDay(plan) && phase === 'pending' ? (
-          <PendingBody
-            plan={plan}
-            onReportNow={() => {
-              if (cycleId) {
-                setReportStarted(cycleId);
+        enabled={canSubmit && !isReporting}
+        busy={isReporting || submitState === 'loading'}
+      />
+      {submitState === 'timeout' || submitState === 'conflict' ? (
+        <View style={{ marginTop: 8 }}>
+          <Button
+            label={submitState === 'conflict' ? 'Back' : 'Retry saving report'}
+            variant="secondary"
+            block
+            onPress={() => {
+              if (submitState === 'conflict') {
+                setReportStage('choices');
+                return;
               }
-              setPendingCycleId(null);
-            }}
-          />
-        ) : plan && isReportableInvestmentDay(plan) && phase === 'report' ? (
-          <ReportBody
-            plan={plan}
-            participation={participation.participation}
-            targets={targets}
-            choice={choice}
-            amountFields={amountStateByTarget}
-            quantityFields={quantityStateByTarget}
-            priceFields={priceStateByTarget}
-            showOptionalExecution={optionalReady}
-            reportedTotalMinor={reportedTotalMinor}
-            canSubmit={canSubmit && !isReporting}
-            submitState={isReporting ? 'loading' : submitState}
-            error={reportError?.cycleId === cycleId ? reportError.message : null}
-            onChoiceChange={(next) => {
-              setChoice(next);
-              if (submitState !== 'loading') {
-                setSubmitState('idle');
-              }
-            }}
-            onAmountChange={onAmountChange}
-            onQuantityChange={onQuantityChange}
-            onPriceChange={onExecutionPriceChange}
-            onSubmit={() => {
               void onSubmitReport();
             }}
           />
-        ) : plan ? (
-          <CompletedBody
+        </View>
+      ) : (
+        <View style={{ marginTop: 8 }}>
+          <Button
+            label="Change details"
+            variant="secondary"
+            block
+            onPress={() => setReportStage('choices')}
+          />
+        </View>
+      )}
+    </View>
+  ) : surface === 'investment_day_open' || surface === 'investment_day_report' || surface === 'one_time_returned_reportable' ? (
+    <View>
+      {choice === 'pending' ? null : (
+        <InvestPrimaryBar
+          label={choice === 'skipped' ? 'Review skip' : 'Review report'}
+          onPress={() => setReportStage('review')}
+          enabled={canSubmit && reportingAllowed}
+        />
+      )}
+      {surface !== 'one_time_returned_reportable' ? (
+        <View style={{ marginTop: 8 }}>
+          <Button
+            label="Check in Nordnet"
+            variant="secondary"
+            block
+            onPress={() => {
+              void monthly.openMonthly('check');
+            }}
+          />
+        </View>
+      ) : null}
+    </View>
+  ) : null;
+
+  return (
+          <InvestJourney
+            surface={surface}
+            setup={monthly.setup}
             plan={plan}
-            participation={participation.participation}
-            targets={targets}
-            onViewActivity={() => onSelectTab('activity')}
+            clubName={selectedClub?.name ?? plan?.clubName ?? null}
+            error={monthly.error ?? error}
+            attested={attested}
+            canConfirm={presentInvestCanConfirm(journeyInput)}
+            details={presentInvestDetailRows(journeyInput)}
+            reduceMotion={reduceMotion}
+            reporting={reportingPanel}
+            contribution={
+              <FlexibleContributionForm
+                submitLabel="Set amount"
+                onSubmit={async (amountMinor) => {
+                  await contribution.saveFlexibleAmount(amountMinor);
+                  await monthly.refresh();
+                  await refresh();
+                }}
+              />
+            }
+            participation={
+              participation.participation ? (
+                <InvestmentDayParticipationSection
+                  completedCount={participation.participation.completedCount}
+                  totalCount={participation.participation.totalCount}
+                  allCompleted={participation.participation.allCompleted}
+                  members={participation.participation.members}
+                />
+              ) : null
+            }
+            review={
+              surface === 'investment_day_review' ? (
+                <ReviewSummary
+                  choice={choice}
+                  fundName={monthly.setup?.fundName ?? targets[0]?.label ?? null}
+                  plannedMinor={plan?.expectedAmountMinor ?? monthly.setup?.recommendedAmountMinor ?? 0}
+                  reportedMinor={choice === 'with_changes' ? reportedTotalMinor : plan?.expectedAmountMinor ?? 0}
+                  targets={targets}
+                />
+              ) : surface === 'investment_day_completed' ? (
+                <CompletedSummary
+                  outcome={plan?.participationOutcome ?? 'confirmed'}
+                  targets={targets}
+                  provenance={asAmountProvenance(plan?.transactions[0]?.amountProvenance)}
+                  reportedTotal={plan?.transactions.reduce((sum, item) => sum + item.amountMinor, 0) ?? 0}
+                  onViewActivity={() => onSelectTab('activity')}
+                />
+              ) : null
+            }
+            footer={reviewFooter}
+            openFailed={monthly.error === 'Unable to open Nordnet'}
+            onStartIntro={() => {
+              monthly.dismissIntro();
+              setScreenBranch('choose');
+            }}
+            onChooseMonthly={() => {
+              monthly.showMonthly();
+              setScreenBranch('monthly');
+            }}
+            onChooseOneTime={() => {
+              monthly.buyOnce();
+            }}
+            onOpenMonthly={() => {
+              void monthly.openMonthly('attest');
+            }}
+            onCheckNordnet={() => {
+              void monthly.openMonthly('check');
+            }}
+            onOpenOneTime={() => {
+              void monthly.openOneTime();
+            }}
+            onCopyAmount={() => {
+              void monthly.copyAmount();
+            }}
+            onConfirm={() => {
+              void monthly.confirm(attested);
+            }}
+            onNotYet={() => {
+              if (surface === 'investment_day_pending') {
+                setPendingCycleId(null);
+                setReportStage('choices');
+                return;
+              }
+              monthly.notYet();
+              setAttested(false);
+            }}
+            onBuyOnce={() => {
+              monthly.buyOnce();
+            }}
+            onRetry={() => {
+              monthly.retry();
+            }}
+            onRetryLoad={() => {
+              monthly.retryLoad();
+              void refresh();
+            }}
+            onDismissSaved={() => {
+              monthly.dismissSaved();
+              setAttested(false);
+              setScreenBranch(null);
+            }}
+            onBack={goBack}
+            onAttestedChange={setAttested}
+            onClearOneTimeReturn={() => {
+              monthly.clearOneTimeReturn();
+              monthly.showMonthly();
+              setScreenBranch(null);
+            }}
           />
-        ) : null}
-      </Screen>
-
-      <BottomNavigation activeTab={activeTab} onSelectTab={onSelectTab} />
-      <BrokerPickerSheet visible={brokerPickerOpen} onClose={() => setBrokerPickerOpen(false)} />
-    </View>
   );
 }
 
-function TodayBody({
-  plan,
-  targets,
-  participation,
-  handoffAvailability,
-  handoffPhase,
-  handoffFundName,
-  handoffIsin,
-  onOpenHandoff,
-  onStartReport,
-  onChooseBroker,
-}: {
-  plan: InvestmentDayPlan;
-  targets: InvestTargetRow[];
-  participation: ReturnType<typeof useInvestmentDayParticipation>['participation'];
-  handoffAvailability: BrokerHandoffAvailability;
-  handoffPhase: BrokerHandoffPhase;
-  handoffFundName: string | null;
-  handoffIsin: string | null;
-  onOpenHandoff: () => void;
-  onStartReport: () => void;
-  onChooseBroker: () => void;
-}) {
-  const { spacing } = useTheme();
-  const planFundName = targets.length === 1 ? (targets[0]?.label ?? null) : null;
-  const fundName = handoffFundName ?? planFundName;
-
-  return (
-    <View>
-      <AppText variant="sectionTitle">Investment Day</AppText>
-      <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
-        {plan.clubName}
-        {'  \u00B7  '}
-        {formatInvestmentDayShortLabel(plan.investmentDayAt)}
-      </AppText>
-
-      {participation ? (
-        <View style={{ marginTop: spacing.xl }}>
-          <InvestmentDayParticipationSection
-            completedCount={participation.completedCount}
-            totalCount={participation.totalCount}
-            allCompleted={participation.allCompleted}
-            members={participation.members}
-          />
-        </View>
-      ) : null}
-
-      <AppText variant="display" style={{ marginTop: spacing.lg }}>
-        {formatNokFromMinor(plan.expectedAmountMinor ?? 0)}
-      </AppText>
-      <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
-        planned for today
-      </AppText>
-
-      <AppText variant="sectionTitle" style={{ marginTop: spacing.xxl, marginBottom: spacing.sm }}>
-        Your investments
-      </AppText>
-
-      <Breakdown targets={targets} />
-
-      <View style={{ marginTop: spacing.xl }}>
-        <InvestmentDayBrokerHandoffCard
-          availability={handoffAvailability}
-          phase={handoffPhase}
-          fundName={fundName}
-          isin={handoffIsin}
-          plannedAmountLabel={formatNokFromMinor(plan.expectedAmountMinor ?? 0)}
-          onOpen={onOpenHandoff}
-          onOpenAgain={onOpenHandoff}
-          onRetry={onOpenHandoff}
-          onReport={onStartReport}
-          onChooseBroker={onChooseBroker}
-        />
-      </View>
-    </View>
-  );
-}
-
-function ReportBody({
-  plan,
-  participation,
-  targets,
+function ReviewSummary({
   choice,
-  amountFields,
-  quantityFields,
-  priceFields,
-  showOptionalExecution,
-  reportedTotalMinor,
-  canSubmit,
-  submitState,
-  error,
-  onChoiceChange,
-  onAmountChange,
-  onQuantityChange,
-  onPriceChange,
-  onSubmit,
+  fundName,
+  plannedMinor,
+  reportedMinor,
+  targets,
 }: {
-  plan: InvestmentDayPlan;
-  participation: ReturnType<typeof useInvestmentDayParticipation>['participation'];
-  targets: InvestTargetRow[];
   choice: InvestmentDayReportChoice;
-  amountFields: Readonly<Record<string, ReportedAmountField>>;
-  quantityFields: Readonly<Record<string, QuantityFieldState>>;
-  priceFields: Readonly<Record<string, QuantityFieldState>>;
-  showOptionalExecution: boolean;
-  reportedTotalMinor: number;
-  canSubmit: boolean;
-  submitState: InvestmentDayReportSubmitState;
-  error: string | null;
-  onChoiceChange: (choice: InvestmentDayReportChoice) => void;
-  onAmountChange: (id: string, value: string) => void;
-  onQuantityChange: (id: string, value: string) => void;
-  onPriceChange: (id: string, value: string) => void;
-  onSubmit: () => void;
+  fundName: string | null;
+  plannedMinor: number;
+  reportedMinor: number;
+  targets: InvestTargetRow[];
 }) {
-  const { spacing } = useTheme();
-
+  const copy = presentInvestReviewCopy(choice);
+  const amount = choice === 'skipped' ? 'No purchase' : formatNokFromMinor(reportedMinor);
   return (
     <View>
-      <AppText variant="sectionTitle">Back from your broker</AppText>
-      <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
-        {plan.clubName}
-        {'  \u00B7  '}
-        {formatInvestmentDayShortLabel(plan.investmentDayAt)}
+      <AppText variant="supporting">Purchased fund</AppText>
+      <AppText variant="title" style={{ marginTop: 4 }}>{fundName ?? 'Club fund'}</AppText>
+      <AppText variant="supporting" style={{ marginTop: 16 }}>
+        {choice === 'with_changes' ? 'Amount you report' : 'Amount you confirm'}
       </AppText>
-
-      {participation ? (
-        <View style={{ marginTop: spacing.xl }}>
-          <InvestmentDayParticipationSection
-            completedCount={participation.completedCount}
-            totalCount={participation.totalCount}
-            allCompleted={participation.allCompleted}
-            members={participation.members}
-          />
+      <AppText variant="title" style={{ marginTop: 4 }}>{amount}</AppText>
+      {choice === 'as_planned' ? (
+        <View style={{ marginTop: 12 }}>
+          {targets.map((target) => (
+            <AppText key={target.id} variant="meta">
+              {target.ticker ?? target.exposureLabel ?? target.label}
+              {'  ·  '}
+              {formatNokFromMinor(target.amountMinor)}
+            </AppText>
+          ))}
         </View>
       ) : null}
-
-      <View style={{ marginTop: spacing.xl }}>
-        <InvestmentDayReportPanel
-          expectedAmountMinor={plan.expectedAmountMinor ?? 0}
-          targets={targets}
-          choice={choice}
-          amountFields={amountFields}
-          quantityFields={quantityFields}
-          priceFields={priceFields}
-          showOptionalExecution={showOptionalExecution}
-          reportedTotalMinor={reportedTotalMinor}
-          canSubmit={canSubmit}
-          submitState={submitState}
-          error={error}
-          onChoiceChange={onChoiceChange}
-          onAmountChange={onAmountChange}
-          onQuantityChange={onQuantityChange}
-          onPriceChange={onPriceChange}
-          onSubmit={onSubmit}
-        />
-      </View>
+      <AppText variant="supporting" style={{ marginTop: 16 }}>
+        {copy.sourceLabel ?? 'Your confirmation · not broker-verified'}
+      </AppText>
+      {choice !== 'skipped' && reportedMinor !== plannedMinor ? (
+        <AppText variant="meta" style={{ marginTop: 8 }}>
+          Planned {formatNokFromMinor(plannedMinor)}
+        </AppText>
+      ) : null}
     </View>
   );
 }
 
-function PendingBody({
-  plan,
-  onReportNow,
-}: {
-  plan: InvestmentDayPlan;
-  onReportNow: () => void;
-}) {
-  const { spacing } = useTheme();
-  const banner = presentPendingBanner();
-
-  return (
-    <View>
-      <AppText variant="sectionTitle">{banner.title}</AppText>
-      <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
-        {plan.clubName}
-        {'  \u00B7  '}
-        {formatInvestmentDayShortLabel(plan.investmentDayAt)}
-      </AppText>
-      <AppText variant="body" style={{ marginTop: spacing.lg }}>
-        {banner.body}
-      </AppText>
-      <View style={{ marginTop: spacing.xl }}>
-        <Button
-          label="Report now"
-          variant="primary"
-          block
-          onPress={onReportNow}
-          accessibilityHint="Opens the Investment Day report. Nothing has been saved yet."
-        />
-      </View>
-    </View>
-  );
-}
-
-function CompletedBody({
-  plan,
-  participation,
+function CompletedSummary({
+  outcome,
   targets,
+  provenance,
+  reportedTotal,
   onViewActivity,
 }: {
-  plan: InvestmentDayPlan;
-  participation: ReturnType<typeof useInvestmentDayParticipation>['participation'];
+  outcome: string;
   targets: InvestTargetRow[];
+  provenance: ReturnType<typeof asAmountProvenance>;
+  reportedTotal: number;
   onViewActivity: () => void;
 }) {
-  const { spacing } = useTheme();
-  const reportedTotal = plan.transactions.reduce((sum, item) => sum + item.amountMinor, 0);
-  const provenance = asAmountProvenance(plan.transactions[0]?.amountProvenance);
   const purchased = targets.filter((target) => target.amountMinor > 0);
-
   return (
     <View>
-      <AppText variant="sectionTitle">{presentCompletedHeadline(plan.participationOutcome)}</AppText>
-      <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
-        {plan.clubName}
-        {'  \u00B7  '}
-        {formatInvestmentDayShortLabel(plan.investmentDayAt)}
-      </AppText>
-
-      {participation ? (
-        <View style={{ marginTop: spacing.xl }}>
-          <InvestmentDayParticipationSection
-            completedCount={participation.completedCount}
-            totalCount={participation.totalCount}
-            allCompleted={participation.allCompleted}
-            members={participation.members}
-          />
-        </View>
-      ) : null}
-
-      {plan.participationOutcome === 'confirmed' ? (
+      {outcome === 'confirmed' ? (
         <>
-          <AppText variant="display" style={{ marginTop: spacing.lg }}>
-            {formatNokFromMinor(reportedTotal)}
+          <AppText variant="display">{formatNokFromMinor(reportedTotal)}</AppText>
+          <AppText variant="body" color="secondary" style={{ marginTop: 8 }}>
+            {presentCompletedAmountCaption(outcome, provenance)}
           </AppText>
-          <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
-            {presentCompletedAmountCaption(plan.participationOutcome, provenance)}
-          </AppText>
-          <AppText variant="sectionTitle" style={{ marginTop: spacing.xxl, marginBottom: spacing.sm }}>
-            Your purchases
-          </AppText>
-          <View>
-            {purchased.length === 0 ? (
-              <AppText variant="body" color="secondary">No purchase rows were stored.</AppText>
-            ) : purchased.map((target) => (
-              <AppText key={target.id} variant="body" style={{ marginTop: 6 }}>
-                {target.ticker ?? target.exposureLabel ?? target.label}
-                {'  \u00B7  '}
-                {formatNokFromMinor(target.amountMinor)}
-                {target.quantity ? `  ·  ${target.quantity} units` : ''}
-              </AppText>
-            ))}
-          </View>
+          {purchased.map((target) => (
+            <AppText key={target.id} variant="body" style={{ marginTop: 6 }}>
+              {target.ticker ?? target.exposureLabel ?? target.label}
+              {'  ·  '}
+              {formatNokFromMinor(target.amountMinor)}
+            </AppText>
+          ))}
         </>
       ) : (
-        <AppText variant="body" color="secondary" style={{ marginTop: spacing.lg }}>
-          {presentCompletedAmountCaption(plan.participationOutcome, provenance)}
+        <AppText variant="body" color="secondary">
+          {presentCompletedAmountCaption(outcome, provenance)}
         </AppText>
       )}
-
-      <View style={{ marginTop: spacing.lg, marginBottom: spacing.lg }}>
+      <View style={{ marginTop: 16 }}>
         <Button label="View activity" variant="secondary" onPress={onViewActivity} />
       </View>
-    </View>
-  );
-}
-
-function Breakdown({ targets }: { targets: InvestTargetRow[] }) {
-  const { colors } = useTheme();
-
-  return (
-    <View>
-      {targets.map((target, index) => (
-        <InvestmentRow
-          key={target.id}
-          target={target}
-          color={colors.chart[index % colors.chart.length]}
-          brokerActionLabel="Open broker"
-          showBrokerAction={false}
-          showSeparator={index > 0}
-          onOpenBroker={() => undefined}
-        />
-      ))}
     </View>
   );
 }

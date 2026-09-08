@@ -9,6 +9,8 @@ import {
 } from './nordnetHandoffUrl.ts';
 import {
   canConfirmMonthlySavingSetup,
+  canRetryMonthlySavingAttestation,
+  canSubmitMonthlySavingAttestation,
   monthlySavingIsRecommended,
   oneTimePurchaseIsAlwaysOffered,
   openMonthlySavingSetupUrl,
@@ -16,7 +18,11 @@ import {
   parseMonthlySavingSetup,
   presentAppStateMonthlySavingReturn,
   presentCopyAmountValue,
+  presentMonthlySavingAttestationClientId,
+  presentMonthlySavingAttestationIssue,
   presentMonthlySavingCardModel,
+  presentMonthlySavingDetailRows,
+  presentMonthlySavingOpenIntent,
   presentMonthlySavingWorkbench,
   presentMonthlySavingWriteEffects,
   presentOneTimePurchaseCardModel,
@@ -173,6 +179,16 @@ describe('monthly saving return and confirmation', () => {
     assert.equal(returned.phase, 'returned');
     assert.equal(canConfirmMonthlySavingSetup({ phase: 'returned', openedMonthlyUrl: true }), true);
     assert.equal(canConfirmMonthlySavingSetup({ phase: 'returned', openedMonthlyUrl: false }), false);
+    assert.equal(
+      canSubmitMonthlySavingAttestation({ phase: 'returned', openedMonthlyUrl: true, attested: false }),
+      false,
+    );
+    assert.equal(
+      canSubmitMonthlySavingAttestation({ phase: 'returned', openedMonthlyUrl: true, attested: true }),
+      true,
+    );
+    assert.equal(presentMonthlySavingOpenIntent('check').awaitsAttestationReturn, false);
+    assert.equal(presentMonthlySavingOpenIntent('attest').awaitsAttestationReturn, true);
 
     const card = presentMonthlySavingCardModel({
       setup: readySetup(),
@@ -235,6 +251,29 @@ describe('needs_update presentation', () => {
     assert.equal(card.body.includes('12th of each month'), true);
     assert.equal(card.primary?.action, 'update_monthly');
   });
+
+  it('shows previous values only when attested fields already exist', () => {
+    const rows = presentMonthlySavingDetailRows(
+      readySetup({
+        status: 'needs_update',
+        recommendedAmountMinor: 350000,
+        attestedAmountMinor: 200000,
+        attestedFundName: 'DNB Global Indeks A',
+        attestedScheduleDayOfMonth: 5,
+        amountChanged: true,
+      }),
+      'update',
+    );
+    const amount = rows.find((row) => row.label.includes('amount'));
+    assert.equal(amount?.value.includes('3'), true);
+    assert.equal(amount?.previousValue, formatNokFromMinor(200000));
+
+    const withoutPrevious = presentMonthlySavingDetailRows(
+      readySetup({ status: 'needs_update', amountChanged: true, attestedAmountMinor: null }),
+      'update',
+    );
+    assert.equal(withoutPrevious.find((row) => row.label.includes('amount'))?.previousValue, null);
+  });
 });
 
 describe('privacy and one-time purchase', () => {
@@ -256,5 +295,80 @@ describe('privacy and one-time purchase', () => {
     assert.equal(oneTime.tertiary?.action, 'report');
     assert.equal(oneTime.writeEffects.writesAttestation, false);
     assert.equal(oneTime.disclaimer?.includes('never saves a monthly saving setup'), true);
+  });
+});
+
+describe('monthly saving attestation issue classification', () => {
+  it('keeps timeout, ordinary save error, conflict, and retry identity distinct', () => {
+    const abort = new Error('The operation was aborted');
+    abort.name = 'AbortError';
+    assert.equal(presentMonthlySavingAttestationIssue(abort), 'timeout');
+    assert.equal(
+      presentMonthlySavingAttestationIssue(new Error('The monthly saving confirmation request timed out')),
+      'timeout',
+    );
+    assert.equal(
+      presentMonthlySavingAttestationIssue({ message: 'TypeError: Network request failed' }),
+      'timeout',
+    );
+
+    assert.equal(
+      presentMonthlySavingAttestationIssue(new Error('Unable to save monthly saving confirmation')),
+      'error',
+    );
+    assert.equal(
+      presentMonthlySavingAttestationIssue(new Error('Unable to save this monthly saving confirmation')),
+      'error',
+    );
+    assert.equal(
+      presentMonthlySavingAttestationIssue(new Error('vesty.client_attestation_id_invalid')),
+      'error',
+    );
+
+    assert.equal(
+      presentMonthlySavingAttestationIssue(new Error('vesty.monthly_saving_setup_conflict')),
+      'conflict',
+    );
+    assert.equal(
+      presentMonthlySavingAttestationIssue(
+        new Error('This monthly saving confirmation was already saved with different details'),
+      ),
+      'conflict',
+    );
+
+    const existing = '11111111-1111-4111-8111-111111111111';
+    assert.equal(presentMonthlySavingAttestationClientId(existing, () => 'new-id'), existing);
+    assert.equal(presentMonthlySavingAttestationClientId(null, () => 'new-id'), 'new-id');
+
+    assert.equal(
+      canRetryMonthlySavingAttestation({
+        phase: 'returned',
+        openedMonthlyUrl: true,
+        attested: true,
+        attestationIssue: 'timeout',
+        clientAttestationId: existing,
+      }),
+      true,
+    );
+    assert.equal(
+      canRetryMonthlySavingAttestation({
+        phase: 'returned',
+        openedMonthlyUrl: true,
+        attested: true,
+        attestationIssue: 'error',
+        clientAttestationId: existing,
+      }),
+      true,
+    );
+    assert.equal(
+      canSubmitMonthlySavingAttestation({
+        phase: 'returned',
+        openedMonthlyUrl: true,
+        attested: true,
+        attestationIssue: 'conflict',
+        clientAttestationId: existing,
+      }),
+      false,
+    );
   });
 });

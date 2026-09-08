@@ -2,6 +2,10 @@ import { contributionKronerFromMinor } from '../clubs/contributionAmount.ts';
 import { formatNokFromMinor } from '../../lib/currency.ts';
 
 import {
+  isMonthlySavingConflictError,
+  isMonthlySavingTimeoutError,
+} from './investErrors.ts';
+import {
   isVerifiedNordnetMonthlySavingUrl,
   isVerifiedNordnetOneTimePurchaseUrl,
   nordnetUrlCarriesMemberAmount,
@@ -319,6 +323,155 @@ export function canConfirmMonthlySavingSetup(input: {
   openedMonthlyUrl: boolean;
 }): boolean {
   return input.phase === 'returned' && input.openedMonthlyUrl;
+}
+
+export type MonthlySavingAttestationIssueKind = 'timeout' | 'conflict' | 'error';
+
+export function presentMonthlySavingAttestationIssue(error: unknown): MonthlySavingAttestationIssueKind {
+  if (isMonthlySavingConflictError(error)) {
+    return 'conflict';
+  }
+  if (isMonthlySavingTimeoutError(error)) {
+    return 'timeout';
+  }
+  return 'error';
+}
+
+export function presentMonthlySavingAttestationClientId(
+  existing: string | null,
+  generate: () => string,
+): string {
+  return existing ?? generate();
+}
+
+export function canRetryMonthlySavingAttestation(input: {
+  phase: MonthlySavingPhase;
+  openedMonthlyUrl: boolean;
+  attested: boolean;
+  attestationIssue: MonthlySavingAttestationIssueKind | null;
+  clientAttestationId: string | null;
+}): boolean {
+  if (input.attested !== true || !input.openedMonthlyUrl || !input.clientAttestationId) {
+    return false;
+  }
+  if (input.attestationIssue !== 'timeout' && input.attestationIssue !== 'error') {
+    return false;
+  }
+  return input.phase === 'returned' || input.phase === 'error';
+}
+
+export function canSubmitMonthlySavingAttestation(input: {
+  phase: MonthlySavingPhase;
+  openedMonthlyUrl: boolean;
+  attested: boolean;
+  attestationIssue?: MonthlySavingAttestationIssueKind | null;
+  clientAttestationId?: string | null;
+}): boolean {
+  if (input.attested !== true || !input.openedMonthlyUrl) {
+    return false;
+  }
+  if (input.attestationIssue === 'conflict') {
+    return false;
+  }
+  if (canConfirmMonthlySavingSetup(input)) {
+    return true;
+  }
+  return canRetryMonthlySavingAttestation({
+    phase: input.phase,
+    openedMonthlyUrl: input.openedMonthlyUrl,
+    attested: input.attested,
+    attestationIssue: input.attestationIssue ?? null,
+    clientAttestationId: input.clientAttestationId ?? null,
+  });
+}
+
+export type MonthlySavingHandoffIntent = 'attest' | 'check';
+
+export function presentMonthlySavingOpenIntent(intent: MonthlySavingHandoffIntent): {
+  awaitsAttestationReturn: boolean;
+} {
+  return { awaitsAttestationReturn: intent === 'attest' };
+}
+
+export interface MonthlySavingDetailRow {
+  label: string;
+  value: string;
+  previousValue: string | null;
+}
+
+export function presentMonthlyAmountLabel(amountMinor: number | null): string | null {
+  return amountLabel(amountMinor);
+}
+
+export function presentMonthlySavingDetailRows(
+  setup: MonthlySavingSetup,
+  mode: 'setup' | 'update',
+): MonthlySavingDetailRow[] {
+  const amount = amountLabel(setup.recommendedAmountMinor);
+  const previousAmount = amountLabel(setup.attestedAmountMinor);
+  const schedule = formatScheduleDayOfMonth(setup.scheduleDayOfMonth);
+  const previousSchedule = formatScheduleDayOfMonth(setup.attestedScheduleDayOfMonth);
+  const nextDay = formatMonthlySavingDayLabel(setup.recommendedInvestmentDayAt);
+  const amountLabelText = setup.currency
+    ? mode === 'update'
+      ? `New monthly amount · ${setup.currency}`
+      : `Monthly amount · ${setup.currency}`
+    : mode === 'update'
+      ? 'New monthly amount'
+      : 'Monthly amount';
+  const rows: MonthlySavingDetailRow[] = [];
+
+  if (setup.fundName) {
+    rows.push({
+      label: 'Fund',
+      value: setup.fundName,
+      previousValue:
+        mode === 'update'
+        && setup.fundChanged
+        && setup.attestedFundName
+        && setup.attestedFundName !== setup.fundName
+          ? setup.attestedFundName
+          : null,
+    });
+  }
+
+  if (amount) {
+    rows.push({
+      label: amountLabelText,
+      value: amount,
+      previousValue:
+        mode === 'update'
+        && setup.amountChanged
+        && previousAmount
+        && previousAmount !== amount
+          ? previousAmount
+          : null,
+    });
+  }
+
+  if (schedule) {
+    rows.push({
+      label: mode === 'update' ? 'New preferred date' : 'Preferred monthly date',
+      value: schedule,
+      previousValue:
+        mode === 'update'
+        && setup.scheduleChanged
+        && previousSchedule
+        && previousSchedule !== schedule
+          ? previousSchedule
+          : null,
+    });
+  }
+
+  if (nextDay && mode === 'setup') {
+    rows.push({
+      label: 'Next Investment Day',
+      value: nextDay,
+      previousValue: null,
+    });
+  }
+
+  return rows;
 }
 
 export function presentAppStateMonthlySavingReturn(input: {

@@ -94,9 +94,13 @@ test('as_planned lines never include amount_minor even when quantity is present'
 test('report choices put planned attestation first and keep pending off the server', () => {
   const choices = presentReportChoices(200000, 3);
   assert.equal(choices[0]?.choice, 'as_planned');
+  assert.equal(choices[0]?.title, 'Yes, as planned');
   assert.match(choices[0]?.description ?? '', /2\s000 kr/);
   assert.equal(choices[2]?.choice, 'pending');
+  assert.equal(choices[2]?.title, 'Still pending');
   assert.match(choices[2]?.description ?? '', /Nothing is saved/i);
+  assert.equal(choices[3]?.title, "It didn't go through");
+  assert.equal(presentReportChoices(200000, 1, 'one_time')[3]?.title, "I didn't invest this time");
   assert.equal(presentCompletedHeadline('skipped'), 'You skipped this Investment Day');
   assert.equal(presentReportedVersusPlanned(140000, 200000), 'Reported 1\u00a0400 kr · Planned 2\u00a0000 kr');
 });

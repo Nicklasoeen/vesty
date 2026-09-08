@@ -24,7 +24,7 @@ export const MONTHLY_SAVING_GALLERY_MODE_OPTIONS: readonly {
 export function presentMonthlySavingGalleryModeCopy(mode: MonthlySavingGalleryMode) {
   return {
     heading: 'Development monthly saving test',
-    previewNote: 'Uses the production monthly saving cards with local fixtures only. No broker, auth, or link request is sent.',
+    previewNote: 'Uses the production Invest journey with local fixtures only. No broker, auth, or link request is sent.',
     realTestNote: 'Opens the verified Nordnet monthly savings page. No order is placed and no attestation is stored.',
     showRealTestNote: mode === 'real_nordnet_test',
   };

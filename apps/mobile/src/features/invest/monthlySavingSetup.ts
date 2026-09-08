@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase/client';
 import { mapInvestError } from './investErrors';
 import {
   parseMonthlySavingSetup,
+  presentMonthlySavingAttestationIssue,
   presentMonthlySavingWriteEffects,
   type MonthlySavingSetup,
 } from './presentMonthlySavingSetup';
@@ -30,6 +31,10 @@ export async function confirmMonthlySavingSetup(input: {
     p_client_attestation_id: input.clientAttestationId,
   });
   if (result.error) {
+    const issue = presentMonthlySavingAttestationIssue(result.error);
+    if (issue === 'timeout') {
+      throw new Error('The monthly saving confirmation request timed out');
+    }
     throwMapped(
       result.error,
       'Unable to save monthly saving confirmation',

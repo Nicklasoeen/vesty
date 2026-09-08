@@ -17,6 +17,7 @@ import {
   presentReportError,
   presentReportSubmitHint,
   presentReportSubmitLabel,
+  type InvestmentDayReportOrigin,
   type InvestmentDayReportSubmitState,
 } from './presentInvestmentDayReport';
 import type { InvestTargetRow } from './types';
@@ -33,6 +34,9 @@ export interface InvestmentDayReportPanelProps {
   canSubmit: boolean;
   submitState: InvestmentDayReportSubmitState;
   error: string | null;
+  origin?: InvestmentDayReportOrigin;
+  showSubmit?: boolean;
+  showHeading?: boolean;
   onChoiceChange: (choice: InvestmentDayReportChoice) => void;
   onAmountChange: (targetId: string, value: string) => void;
   onQuantityChange: (targetId: string, value: string) => void;
@@ -52,6 +56,9 @@ export function InvestmentDayReportPanel({
   canSubmit,
   submitState,
   error,
+  origin = 'monthly',
+  showSubmit = true,
+  showHeading = true,
   onChoiceChange,
   onAmountChange,
   onQuantityChange,
@@ -60,7 +67,7 @@ export function InvestmentDayReportPanel({
 }: InvestmentDayReportPanelProps) {
   const { spacing } = useTheme();
   const [optionalOpen, setOptionalOpen] = useState(false);
-  const options = presentReportChoices(expectedAmountMinor, targets.length);
+  const options = presentReportChoices(expectedAmountMinor, targets.length, origin);
   const submitLabel = presentReportSubmitLabel(choice, submitState);
   const visibleError = presentReportError(submitState, error);
   const loading = submitState === 'loading';
@@ -69,12 +76,16 @@ export function InvestmentDayReportPanel({
 
   return (
     <View>
-      <AppText variant="sectionTitle">How did it go?</AppText>
-      <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
-        Report what actually happened after your broker. Vesty does not see the order.
-      </AppText>
+      {showHeading ? (
+        <>
+          <AppText variant="sectionTitle">How did it go?</AppText>
+          <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
+            Report what actually happened after your broker. Vesty does not see the order.
+          </AppText>
+        </>
+      ) : null}
 
-      <View style={{ marginTop: spacing.lg, gap: spacing.sm }}>
+      <View style={{ marginTop: showHeading ? spacing.lg : 0, gap: spacing.sm }}>
         {options.map((option) => {
           const selected = option.choice === choice;
           return (
@@ -183,20 +194,24 @@ export function InvestmentDayReportPanel({
         </AppText>
       ) : null}
 
-      <View style={{ marginTop: spacing.xl }}>
-        <Button
-          label={submitLabel}
-          variant="primary"
-          block
-          disabled={!canSubmit || loading}
-          busy={loading}
-          onPress={onSubmit}
-          accessibilityHint={presentReportSubmitHint(choice)}
-        />
-      </View>
-      <AppText variant="meta" color="secondary" style={{ marginTop: spacing.sm }}>
-        {presentReportSubmitHint(choice)}
-      </AppText>
+      {showSubmit ? (
+        <>
+          <View style={{ marginTop: spacing.xl }}>
+            <Button
+              label={submitLabel}
+              variant="primary"
+              block
+              disabled={!canSubmit || loading}
+              busy={loading}
+              onPress={onSubmit}
+              accessibilityHint={presentReportSubmitHint(choice)}
+            />
+          </View>
+          <AppText variant="meta" color="secondary" style={{ marginTop: spacing.sm }}>
+            {presentReportSubmitHint(choice)}
+          </AppText>
+        </>
+      ) : null}
     </View>
   );
 }

@@ -1,14 +1,19 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
 
+import { FlexibleContributionForm } from '@/features/clubs/FlexibleContributionForm';
 import { useTheme } from '@/theme';
 import { AppText, Screen, Surface } from '@/ui';
 
-import { MonthlySavingSetupCard } from './MonthlySavingSetupCard';
-import { OneTimePurchaseCard } from './OneTimePurchaseCard';
+import { InvestJourney } from './InvestJourney';
+import { InvestmentDayReportPanel } from './InvestmentDayReportPanel';
+import type { InvestmentDayReportChoice, ReportedAmountField } from './investmentDayReport';
+import { parseReportedPurchaseKronerInput } from './investmentDayReport';
 import {
   getMonthlySavingGalleryScenario,
   MONTHLY_SAVING_GALLERY_SCENARIOS,
+  presentGalleryInvestJourneyInput,
 } from './monthlySavingGalleryFixtures';
 import {
   galleryRealMonthlySavingSetup,
@@ -16,6 +21,11 @@ import {
   presentMonthlySavingGalleryModeCopy,
   type MonthlySavingGalleryMode,
 } from './monthlySavingGalleryRealLink';
+import {
+  presentInvestCanConfirm,
+  presentInvestDetailRows,
+  presentInvestJourneySurface,
+} from './presentInvestJourney';
 import { useGalleryRealMonthlySaving } from './useGalleryRealMonthlySaving';
 
 /**
@@ -29,18 +39,14 @@ export function MonthlySavingGalleryScreen() {
   const copy = presentMonthlySavingGalleryModeCopy(mode);
 
   return (
-    <Screen
-      contentContainerStyle={{
-        paddingHorizontal: spacing.lg,
-        paddingBottom: spacing.xxl,
-      }}
-    >
+    <Screen scroll={false}>
+      <View style={{ flex: 1, paddingHorizontal: spacing.lg }}>
       <Surface
         bordered
         style={{
           padding: spacing.md,
           marginTop: spacing.sm,
-          marginBottom: spacing.lg,
+          marginBottom: spacing.sm,
           backgroundColor: colors.surfaceSecondary,
         }}
       >
@@ -50,7 +56,7 @@ export function MonthlySavingGalleryScreen() {
             flexDirection: 'row',
             flexWrap: 'wrap',
             gap: spacing.xs,
-            paddingTop: spacing.md,
+            paddingTop: spacing.sm,
           }}
         >
           {MONTHLY_SAVING_GALLERY_MODE_OPTIONS.map((item) => {
@@ -75,30 +81,74 @@ export function MonthlySavingGalleryScreen() {
             );
           })}
         </View>
-        <AppText variant="supporting" style={{ marginTop: spacing.md }}>
+        <AppText variant="supporting" style={{ marginTop: spacing.sm }}>
           {copy.showRealTestNote ? copy.realTestNote : copy.previewNote}
         </AppText>
       </Surface>
 
-      {mode === 'ui_preview' ? <GalleryUiPreview /> : <GalleryRealNordnetTest />}
+      <View style={{ flex: 1, minHeight: 0 }}>
+        {mode === 'ui_preview' ? <GalleryUiPreview /> : <GalleryRealNordnetTest />}
+      </View>
+      </View>
     </Screen>
   );
 }
 
 function GalleryUiPreview() {
   const { colors, spacing } = useTheme();
-  const [scenarioId, setScenarioId] = useState(MONTHLY_SAVING_GALLERY_SCENARIOS[0]!.id);
+  const params = useLocalSearchParams<{ scenario?: string | string[] }>();
+  const requested = typeof params.scenario === 'string'
+    ? params.scenario
+    : Array.isArray(params.scenario)
+      ? params.scenario[0]
+      : undefined;
+  const initialId = MONTHLY_SAVING_GALLERY_SCENARIOS.find((item) => item.id === requested)?.id
+    ?? MONTHLY_SAVING_GALLERY_SCENARIOS[0]!.id;
+  const [scenarioId, setScenarioId] = useState(initialId);
+  const [appliedQuery, setAppliedQuery] = useState(requested);
   const [localAction, setLocalAction] = useState(0);
+  const [attested, setAttested] = useState(false);
+  if (requested && requested !== appliedQuery) {
+    setAppliedQuery(requested);
+    setScenarioId(initialId);
+    setLocalAction(0);
+    setAttested(false);
+  }
   const scenario = getMonthlySavingGalleryScenario(scenarioId);
   const noteLocalAction = () => setLocalAction((count) => count + 1);
+  const journeyInput = {
+    ...presentGalleryInvestJourneyInput(scenario),
+    attested: scenario.attested === true || attested,
+  };
+  const surface = presentInvestJourneySurface(journeyInput);
+  const handlers = {
+    onStartIntro: noteLocalAction,
+    onChooseMonthly: noteLocalAction,
+    onChooseOneTime: noteLocalAction,
+    onOpenMonthly: noteLocalAction,
+    onCheckNordnet: noteLocalAction,
+    onOpenOneTime: noteLocalAction,
+    onCopyAmount: noteLocalAction,
+    onConfirm: noteLocalAction,
+    onNotYet: noteLocalAction,
+    onBuyOnce: noteLocalAction,
+    onRetry: noteLocalAction,
+    onRetryLoad: noteLocalAction,
+    onDismissSaved: noteLocalAction,
+    onAttestedChange: (value: boolean) => {
+      setAttested(value);
+      noteLocalAction();
+    },
+    onClearOneTimeReturn: noteLocalAction,
+  };
 
   return (
-    <View>
+    <View style={{ flex: 1, minHeight: 0 }}>
       <Surface
         bordered
         style={{
-          padding: spacing.md,
-          marginBottom: spacing.lg,
+          padding: spacing.sm,
+          marginBottom: spacing.sm,
           backgroundColor: colors.surfaceSecondary,
         }}
       >
@@ -106,7 +156,7 @@ function GalleryUiPreview() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: spacing.xs, paddingTop: spacing.md }}
+          contentContainerStyle={{ gap: spacing.xs, paddingTop: spacing.sm }}
         >
           {MONTHLY_SAVING_GALLERY_SCENARIOS.map((item) => {
             const active = item.id === scenario.id;
@@ -118,6 +168,7 @@ function GalleryUiPreview() {
                 onPress={() => {
                   setScenarioId(item.id);
                   setLocalAction(0);
+                  setAttested(false);
                 }}
                 style={{
                   paddingHorizontal: spacing.sm,
@@ -134,7 +185,7 @@ function GalleryUiPreview() {
           })}
         </ScrollView>
         {localAction > 0 ? (
-          <AppText variant="meta" color="positive" style={{ marginTop: spacing.sm }}>
+          <AppText variant="meta" color="positive" style={{ marginTop: spacing.xs }}>
             {`Local action received (${localAction}). No server or link call.`}
           </AppText>
         ) : null}
@@ -142,36 +193,56 @@ function GalleryUiPreview() {
 
       <View
         style={{
-          maxWidth: scenario.largeText ? 288 : 375,
+          flex: 1,
+          minHeight: 0,
+          maxWidth: scenario.largeText ? 288 : scenario.viewport ?? 375,
           alignSelf: 'center',
           width: '100%',
-          transform: scenario.largeText ? [{ scale: 1.3 }] : undefined,
-          transformOrigin: scenario.largeText ? 'top center' : undefined,
-          marginTop: scenario.largeText ? spacing.xl : undefined,
-          marginBottom: scenario.largeText ? spacing.xxl : undefined,
+          overflow: 'hidden',
+          borderWidth: 1,
+          borderColor: colors.border,
+          borderRadius: 28,
+          ...(scenario.largeText ? { transform: [{ scale: 1.15 }] } : {}),
         }}
       >
-        {scenario.view === 'one_time' ? (
-          <OneTimePurchaseCard
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <InvestJourney
+            surface={surface}
             setup={scenario.setup}
-            onOpen={noteLocalAction}
-            onCopyAmount={noteLocalAction}
-            onReport={noteLocalAction}
+            plan={scenario.plan ?? null}
+            clubName={scenario.plan?.clubName ?? 'Investorgroup'}
+            error={scenario.setupError ?? null}
+            attested={journeyInput.attested}
+            canConfirm={presentInvestCanConfirm(journeyInput)}
+            details={presentInvestDetailRows(journeyInput)}
+            reduceMotion={scenario.id === 'reduce-motion'}
+            compact
+            embedded
+            contribution={surface === 'setup_required' ? (
+              <FlexibleContributionForm
+                submitLabel="Set amount"
+                onSubmit={async () => {
+                  noteLocalAction();
+                }}
+              />
+            ) : null}
+            reporting={
+              surface === 'investment_day_report' || surface === 'investment_day_open'
+                ? (
+                  <GalleryReportPreview
+                    key={scenario.id}
+                    onLocalAction={noteLocalAction}
+                    showAmount={scenario.id === 'investment-day-report'}
+                  />
+                )
+                : null
+            }
+            {...handlers}
           />
-        ) : (
-          <MonthlySavingSetupCard
-            setup={scenario.setup}
-            phase={scenario.phase}
-            onSetupMonthly={noteLocalAction}
-            onUpdateMonthly={noteLocalAction}
-            onCheckNordnet={noteLocalAction}
-            onBuyOnce={noteLocalAction}
-            onConfirmSetup={noteLocalAction}
-            onNotYet={noteLocalAction}
-            onRetry={noteLocalAction}
-            onReport={noteLocalAction}
-          />
-        )}
+        </KeyboardAvoidingView>
       </View>
     </View>
   );
@@ -182,29 +253,62 @@ function GalleryRealNordnetTest() {
   const setup = galleryRealMonthlySavingSetup();
   const handoff = useGalleryRealMonthlySaving();
   const [localAction, setLocalAction] = useState(0);
+  const [attested, setAttested] = useState(false);
   const noteLocalAction = () => setLocalAction((count) => count + 1);
+  const journeyInput = presentGalleryInvestJourneyInput({
+    id: 'real',
+    label: 'Real',
+    setup,
+    phase: handoff.phase,
+    view: 'monthly',
+    introDismissed: true,
+    localBranch: 'monthly',
+    attested,
+  });
+  const surface = presentInvestJourneySurface({
+    ...journeyInput,
+    openedMonthlyUrl: handoff.phase === 'returned',
+    attested,
+  });
 
   return (
-    <View style={{ maxWidth: 375, alignSelf: 'center', width: '100%' }}>
-      <MonthlySavingSetupCard
+    <View style={{ flex: 1, maxWidth: 375, alignSelf: 'center', width: '100%' }}>
+      <InvestJourney
+        surface={surface}
         setup={setup}
-        phase={handoff.phase}
-        onSetupMonthly={() => {
-          void handoff.open();
-        }}
-        onUpdateMonthly={() => {
+        plan={null}
+        clubName="Investorgroup"
+        error={null}
+        attested={attested}
+        canConfirm={presentInvestCanConfirm({
+          ...journeyInput,
+          attested,
+          openedMonthlyUrl: handoff.phase === 'returned',
+        })}
+        details={presentInvestDetailRows(journeyInput)}
+        compact
+        embedded
+        onStartIntro={noteLocalAction}
+        onChooseMonthly={noteLocalAction}
+        onChooseOneTime={noteLocalAction}
+        onOpenMonthly={() => {
           void handoff.open();
         }}
         onCheckNordnet={() => {
           void handoff.open();
         }}
-        onBuyOnce={noteLocalAction}
-        onConfirmSetup={noteLocalAction}
+        onOpenOneTime={noteLocalAction}
+        onCopyAmount={noteLocalAction}
+        onConfirm={noteLocalAction}
         onNotYet={noteLocalAction}
+        onBuyOnce={noteLocalAction}
         onRetry={() => {
           void handoff.open();
         }}
-        onReport={noteLocalAction}
+        onRetryLoad={noteLocalAction}
+        onDismissSaved={noteLocalAction}
+        onAttestedChange={setAttested}
+        onClearOneTimeReturn={noteLocalAction}
       />
       {localAction > 0 ? (
         <AppText variant="meta" color="positive" style={{ marginTop: spacing.sm }}>
@@ -212,5 +316,60 @@ function GalleryRealNordnetTest() {
         </AppText>
       ) : null}
     </View>
+  );
+}
+
+function GalleryReportPreview({
+  onLocalAction,
+  showAmount,
+}: {
+  onLocalAction: () => void;
+  showAmount: boolean;
+}) {
+  const [choice, setChoice] = useState<InvestmentDayReportChoice>(showAmount ? 'with_changes' : 'as_planned');
+  const [amount, setAmount] = useState<ReportedAmountField>(parseReportedPurchaseKronerInput('1400'));
+  const target = {
+    id: 'dnb-global',
+    label: 'DNB Global Indeks A',
+    exposureLabel: null,
+    ticker: null,
+    allocationBps: 10000,
+    amountMinor: 200000,
+    quantity: null,
+    executionUnitPrice: null,
+  };
+
+  return (
+    <InvestmentDayReportPanel
+      expectedAmountMinor={200000}
+      targets={[target]}
+      choice={choice}
+      amountFields={{ [target.id]: amount }}
+      quantityFields={{}}
+      priceFields={{}}
+      showOptionalExecution={false}
+      reportedTotalMinor={choice === 'with_changes' ? amount.amountMinor ?? 0 : 200000}
+      canSubmit
+      submitState="idle"
+      error={null}
+      origin="monthly"
+      showHeading={false}
+      showSubmit={false}
+      onChoiceChange={(next) => {
+        setChoice(next);
+        onLocalAction();
+      }}
+      onAmountChange={(_targetId, value) => {
+        setAmount(parseReportedPurchaseKronerInput(value));
+        onLocalAction();
+      }}
+      onQuantityChange={() => {
+        onLocalAction();
+      }}
+      onPriceChange={() => {
+        onLocalAction();
+      }}
+      onSubmit={onLocalAction}
+    />
   );
 }
