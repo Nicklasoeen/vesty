@@ -26,6 +26,7 @@ The schema is created by:
 - `supabase/migrations/20260906223200_contribution_policy_proposals_create_base_v1.sql`
 - `supabase/migrations/20260907192616_single_fund_club_v1.sql`
 - `supabase/migrations/20260907203455_single_fund_club_rectification_v1.sql`
+- `supabase/migrations/20260908072728_investment_day_broker_handoff_v1.sql`
 
 It uses the Supabase-managed `auth.users` table only as the authentication identity boundary. It does not duplicate credentials, sessions, or authentication state.
 
@@ -471,7 +472,7 @@ The following require trusted transaction functions, later authorization policy,
 
 ## Trusted write paths
 
-`supabase/migrations/20260904110626_add_club_create_join_v1.sql`, `supabase/migrations/20260905075952_add_instruments_transactions_v1.sql`, `supabase/migrations/20260905121758_curated_investment_packages_v1.sql`, `supabase/migrations/20260906150144_rename_club_v1.sql`, `supabase/migrations/20260906194634_contribution_policy_v1.sql`, `supabase/migrations/20260906215200_contribution_policy_product_v1.sql`, `supabase/migrations/20260906221000_contribution_policy_hardening_v1.sql`, `supabase/migrations/20260906223000_contribution_policy_proposals_v1.sql`, `supabase/migrations/20260907101905_investment_day_reporting_v1.sql`, `supabase/migrations/20260907123709_investment_day_cycle_lifecycle_v1.sql`, `supabase/migrations/20260907192616_single_fund_club_v1.sql`, and `supabase/migrations/20260907203455_single_fund_club_rectification_v1.sql` add public wrappers over private `SECURITY DEFINER` functions:
+`supabase/migrations/20260904110626_add_club_create_join_v1.sql`, `supabase/migrations/20260905075952_add_instruments_transactions_v1.sql`, `supabase/migrations/20260905121758_curated_investment_packages_v1.sql`, `supabase/migrations/20260906150144_rename_club_v1.sql`, `supabase/migrations/20260906194634_contribution_policy_v1.sql`, `supabase/migrations/20260906215200_contribution_policy_product_v1.sql`, `supabase/migrations/20260906221000_contribution_policy_hardening_v1.sql`, `supabase/migrations/20260906223000_contribution_policy_proposals_v1.sql`, `supabase/migrations/20260907101905_investment_day_reporting_v1.sql`, `supabase/migrations/20260907123709_investment_day_cycle_lifecycle_v1.sql`, `supabase/migrations/20260907192616_single_fund_club_v1.sql`, `supabase/migrations/20260907203455_single_fund_club_rectification_v1.sql`, and `supabase/migrations/20260908072728_investment_day_broker_handoff_v1.sql` add public wrappers over private `SECURITY DEFINER` functions:
 
 - `create_club` — legacy path. Authenticates via `auth.uid()`, resolves an allowlisted `p_package_id` to canonical allocations, then creates the club, owner membership, owner pointer, genesis StrategyVersion 1, a complete 10000-bps snapshot, and Flexible ContributionPolicyVersion 1. It does not invent a creator amount. Clubs created here are `legacy_package`.
 - `create_club_v2` — same club/strategy creation plus an explicit Equal or Flexible genesis policy. Equal requires `p_equal_amount_minor` and forbids a creator private amount. Flexible requires `p_creator_flexible_amount_minor` and forbids a shared amount. The transaction is atomic. Meaning unchanged. Clubs created here are `legacy_package`.
@@ -490,6 +491,7 @@ The following require trusted transaction functions, later authorization policy,
 - `my_contribution_commitment_v1` — caller only; latest private commitment, never another member's amount
 - `accept_club_invitation` — authenticates via `auth.uid()`, validates token/expiry/recipient, creates one active membership, and marks the invitation accepted without changing ownership
 - `current_investment_day_v1` — authenticated read of the current or next Investment Day. Never creates cycles, freezes policy, or writes participations. Returns `viewer_state` (`missing`, `upcoming`, `open`, `closed`, `not_in_snapshot`, `setup_next`, `setup_required`, `unavailable`) and `reporting_allowed`. Flexible members without a frozen participation see `setup_next` or `setup_required` instead of an invented amount.
+- `investment_day_broker_handoff_v1` — authenticated read of a verified Nordnet product page for the caller's frozen Investment Day. Requires active membership and a frozen participation. Returns `status`, `broker`, `fund_name`, `isin`, `product_url`, and `checked_on` only. Nordnet URLs must be HTTPS with host exactly `www.nordnet.no` and no userinfo. Unsupported brokers, unverified listings, and missing pages return `unavailable` without a URL. The function never returns member amounts, other members, or catalog ids, and it never writes participation, reports, or purchases. Authenticated clients cannot execute the private implementation or the Nordnet URL helper.
 - `advance_investment_cycles_v1` — trusted lifecycle. Authenticated clients have no EXECUTE; `service_role` does. Idempotently generates occurrences from the stored schedule (local noon, `day_of_month` / `last_day_of_month`, timezone, `configuration_lead_days`), skips months whose configuration deadline has already passed without a historically valid strategy, freezes eligible participations at the configuration deadline, opens the reporting window, and completes elapsed cycles without reopening it. Identifies a period by club and occurrence key, never by “latest open row”. `create_club_v3` calls this trusted path with the server clock after writing the default schedule.
 
 ## PostgREST deploy order
@@ -497,8 +499,8 @@ The following require trusted transaction functions, later authorization policy,
 After a migration that adds or replaces RPC signatures:
 
 1. Apply the migration.
-2. Confirm or reload the PostgREST schema cache (`NOTIFY pgrst, 'reload schema'` is included in `20260907203455_single_fund_club_rectification_v1.sql`).
-3. Verify `single_fund_catalog_v1` and `create_club_v3`.
+2. Confirm or reload the PostgREST schema cache (`NOTIFY pgrst, 'reload schema'` is included in `20260908072728_investment_day_broker_handoff_v1.sql`).
+3. Verify `single_fund_catalog_v1`, `create_club_v3`, and `investment_day_broker_handoff_v1`.
 4. Ship the client.
 
 The client still shows a retryable error if an RPC is temporarily unavailable (`PGRST202` or a transport failure).

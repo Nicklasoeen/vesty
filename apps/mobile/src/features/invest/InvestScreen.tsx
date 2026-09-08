@@ -6,7 +6,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useClubContribution } from '@/features/clubs/useClubContribution';
 import { useClubs } from '@/features/clubs/useClubs';
 import { BrokerPickerSheet } from '@/features/profile/BrokerPickerSheet';
-import { openBrokerActionLabel, type PreferredBroker } from '@/features/profile/brokers';
 import { useProfile } from '@/features/profile/useProfile';
 import { formatNokFromMinor } from '@/lib/currency';
 import { BOTTOM_NAVIGATION_HEIGHT, BottomNavigation } from '@/navigation/BottomNavigation';
@@ -15,9 +14,12 @@ import { useTheme } from '@/theme';
 import { AppText, Button, Screen } from '@/ui';
 
 import { asAmountProvenance } from './amountProvenance';
+import { InvestmentDayBrokerHandoffCard } from './InvestmentDayBrokerHandoffCard';
 import { InvestmentDayCycleStateView } from './InvestmentDayCycleStateView';
 import { InvestmentDayParticipationSection } from './InvestmentDayParticipation';
 import { InvestmentDayReportPanel } from './InvestmentDayReportPanel';
+import type { BrokerHandoffAvailability, BrokerHandoffPhase } from './presentInvestmentDayBrokerHandoff';
+import { useInvestmentDayBrokerHandoff } from './useInvestmentDayBrokerHandoff';
 import { InvestmentRow } from './InvestmentRow';
 import { rowsFromPlan } from './investRows';
 import {
@@ -80,7 +82,6 @@ export function InvestScreen() {
     selectedClub?.clubId ?? null,
     plan?.cycleId ?? null,
   );
-  const [brokerOpened, setBrokerOpened] = useState<string | null>(null);
   const [pendingCycleId, setPendingCycleId] = useState<string | null>(null);
   const [brokerPickerOpen, setBrokerPickerOpen] = useState(false);
   const [choice, setChoice] = useState<InvestmentDayReportChoice>('as_planned');
@@ -94,6 +95,11 @@ export function InvestScreen() {
   const targets = useMemo(() => (plan ? rowsFromPlan(plan) : []), [plan]);
   const cycleId = plan?.cycleId ?? null;
   const targetIds = targets.map((target) => target.id);
+  const handoff = useInvestmentDayBrokerHandoff({
+    clubId: selectedClubId,
+    cycleId,
+    preferredBroker,
+  });
 
   const fieldKey = useCallback(
     (id: string): string | null => (cycleId ? `${cycleId}:${id}` : null),
@@ -179,14 +185,6 @@ export function InvestScreen() {
       quantityStateByTarget,
       priceStateByTarget,
     ));
-
-  const onOpenBroker = useCallback(() => {
-    if (!cycleId) {
-      return;
-    }
-    setBrokerOpened(cycleId);
-    setPendingCycleId((current) => (current === cycleId ? null : current));
-  }, [cycleId]);
 
   const onStartReport = useCallback(() => {
     if (!cycleId) {
@@ -339,9 +337,13 @@ export function InvestScreen() {
             participation={participation.participation}
             plan={plan}
             targets={targets}
-            preferredBroker={preferredBroker}
-            brokerOpened={brokerOpened === cycleId}
-            onOpenBroker={onOpenBroker}
+            handoffAvailability={handoff.availability}
+            handoffPhase={handoff.phase}
+            handoffFundName={handoff.listing?.fundName ?? null}
+            handoffIsin={handoff.listing?.isin ?? null}
+            onOpenHandoff={() => {
+              void handoff.open();
+            }}
             onStartReport={onStartReport}
             onChooseBroker={() => setBrokerPickerOpen(true)}
           />
@@ -402,23 +404,28 @@ function TodayBody({
   plan,
   targets,
   participation,
-  preferredBroker,
-  brokerOpened,
-  onOpenBroker,
+  handoffAvailability,
+  handoffPhase,
+  handoffFundName,
+  handoffIsin,
+  onOpenHandoff,
   onStartReport,
   onChooseBroker,
 }: {
   plan: InvestmentDayPlan;
   targets: InvestTargetRow[];
   participation: ReturnType<typeof useInvestmentDayParticipation>['participation'];
-  preferredBroker: PreferredBroker | null;
-  brokerOpened: boolean;
-  onOpenBroker: () => void;
+  handoffAvailability: BrokerHandoffAvailability;
+  handoffPhase: BrokerHandoffPhase;
+  handoffFundName: string | null;
+  handoffIsin: string | null;
+  onOpenHandoff: () => void;
   onStartReport: () => void;
   onChooseBroker: () => void;
 }) {
   const { spacing } = useTheme();
-  const hasBroker = preferredBroker !== null;
+  const planFundName = targets.length === 1 ? (targets[0]?.label ?? null) : null;
+  const fundName = handoffFundName ?? planFundName;
 
   return (
     <View>
@@ -453,55 +460,20 @@ function TodayBody({
 
       <Breakdown targets={targets} />
 
-      {hasBroker ? (
-        <View style={{ marginTop: spacing.xl }}>
-          <Button
-            label={openBrokerActionLabel(preferredBroker)}
-            variant={brokerOpened ? 'secondary' : 'primary'}
-            block
-            onPress={onOpenBroker}
-            accessibilityHint="Opens your broker. This does not save your Investment Day."
-          />
-          {brokerOpened ? (
-            <AppText variant="meta" color="secondary" style={{ marginTop: spacing.sm }}>
-              Come back here when the order is placed, then report what actually happened.
-            </AppText>
-          ) : null}
-          <View style={{ marginTop: spacing.md }}>
-            <Button
-              label={brokerOpened ? "I'm back — report what happened" : 'Report this Investment Day'}
-              variant={brokerOpened ? 'primary' : 'secondary'}
-              block
-              onPress={onStartReport}
-              accessibilityHint="Opens the report. Opening a broker never saves purchases."
-            />
-          </View>
-        </View>
-      ) : (
-        <View style={{ marginTop: spacing.xl }}>
-          <AppText variant="bodyStrong">Choose a broker to continue</AppText>
-          <AppText variant="body" color="secondary" style={{ marginTop: spacing.xs }}>
-            Select your broker before you open it from Vesty. You can still report a skip without a broker.
-          </AppText>
-          <View style={{ marginTop: spacing.md }}>
-            <Button
-              label="Choose broker"
-              variant="secondary"
-              onPress={onChooseBroker}
-              accessibilityHint="Opens broker selection. Investment Day stays readable."
-            />
-          </View>
-          <View style={{ marginTop: spacing.md }}>
-            <Button
-              label="Report this Investment Day"
-              variant="secondary"
-              block
-              onPress={onStartReport}
-              accessibilityHint="Opens the report without saving anything yet."
-            />
-          </View>
-        </View>
-      )}
+      <View style={{ marginTop: spacing.xl }}>
+        <InvestmentDayBrokerHandoffCard
+          availability={handoffAvailability}
+          phase={handoffPhase}
+          fundName={fundName}
+          isin={handoffIsin}
+          plannedAmountLabel={formatNokFromMinor(plan.expectedAmountMinor ?? 0)}
+          onOpen={onOpenHandoff}
+          onOpenAgain={onOpenHandoff}
+          onRetry={onOpenHandoff}
+          onReport={onStartReport}
+          onChooseBroker={onChooseBroker}
+        />
+      </View>
     </View>
   );
 }

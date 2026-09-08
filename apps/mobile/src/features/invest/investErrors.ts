@@ -20,6 +20,7 @@ const PRODUCT_MESSAGES: Record<string, string> = {
   'vesty.outcome_invalid': 'Unable to save this Investment Day report',
   'vesty.client_report_id_invalid': 'Unable to save this Investment Day report',
   'vesty.contribution_commitment_required': 'Set your contribution to continue',
+  'vesty.not_in_snapshot': 'You are not part of this Investment Day',
   'vesty.contribution_commitment_invalid': 'Enter how much you want to contribute',
   'vesty.reporting_not_open': 'Reporting has not opened for this Investment Day yet',
   'vesty.reporting_closed': 'The reporting window for this Investment Day has closed',
