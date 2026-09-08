@@ -27,6 +27,7 @@ The schema is created by:
 - `supabase/migrations/20260907192616_single_fund_club_v1.sql`
 - `supabase/migrations/20260907203455_single_fund_club_rectification_v1.sql`
 - `supabase/migrations/20260908072728_investment_day_broker_handoff_v1.sql`
+- `supabase/migrations/20260908084058_monthly_saving_setup_v1.sql`
 
 It uses the Supabase-managed `auth.users` table only as the authentication identity boundary. It does not duplicate credentials, sessions, or authentication state.
 
@@ -74,6 +75,8 @@ Lifecycle and closed-choice values use tightly scoped PostgreSQL enums:
 - `investment_transaction_type`: `buy` (`sell` is reserved for a later migration)
 - `investment_transaction_source`: `manual`, `broker_sync`
 - `investment_transaction_verification`: `member_reported`, `broker_verified`
+- `investment_amount_provenance`: `member_attested_plan`, `member_reported_actual`, `legacy_plan_assumed`, `broker_verified`
+- `monthly_saving_setup_attestation_status`: `active`, `ended`, `replaced`
 - `market_data_provider`: `yahoo_unofficial`, `twelve_data`, `marketstack`
 - `market_price_type`: `nav`, `close`, `delayed`
 
@@ -241,6 +244,16 @@ Money uses signed PostgreSQL `bigint` columns with positive-value checks. Alloca
   - Retry with the same client id and fingerprint is idempotent; a different payload is `vesty.report_conflict`
   - Clients have SELECT on their own active membership rows only; writes go through `report_investment_day_v1`
   - Versioned correction is remaining work
+
+- `member_monthly_saving_setup_attestations`
+  - Primary key: `id`
+  - Unique `(membership_id, client_attestation_id)` and at most one `active` row per membership
+  - Stores a caller-owned `member_attested` confirmation that a Nordnet monthly saving agreement was set up
+  - Snapshots club, membership, broker `nordnet`, investment target, attested amount and currency, current strategy / contribution policy / schedule identity, and a context fingerprint over fund, amount, currency, and schedule
+  - Status is `active`, `ended`, or `replaced`. Ending keeps the row. It is never `broker_verified`
+  - Fund, amount, and schedule are derived by trusted RPCs. Clients cannot choose an arbitrary target or amount
+  - Readable only by the owning active membership. Direct insert, update, and delete are revoked. Writes go through `confirm_monthly_saving_setup_v1` and `end_monthly_saving_setup_v1`
+  - Confirming or ending never writes a purchase, participation, or Investment Day report
 
 - `member_investment_transactions`
   - Primary key: `id`
@@ -472,7 +485,7 @@ The following require trusted transaction functions, later authorization policy,
 
 ## Trusted write paths
 
-`supabase/migrations/20260904110626_add_club_create_join_v1.sql`, `supabase/migrations/20260905075952_add_instruments_transactions_v1.sql`, `supabase/migrations/20260905121758_curated_investment_packages_v1.sql`, `supabase/migrations/20260906150144_rename_club_v1.sql`, `supabase/migrations/20260906194634_contribution_policy_v1.sql`, `supabase/migrations/20260906215200_contribution_policy_product_v1.sql`, `supabase/migrations/20260906221000_contribution_policy_hardening_v1.sql`, `supabase/migrations/20260906223000_contribution_policy_proposals_v1.sql`, `supabase/migrations/20260907101905_investment_day_reporting_v1.sql`, `supabase/migrations/20260907123709_investment_day_cycle_lifecycle_v1.sql`, `supabase/migrations/20260907192616_single_fund_club_v1.sql`, `supabase/migrations/20260907203455_single_fund_club_rectification_v1.sql`, and `supabase/migrations/20260908072728_investment_day_broker_handoff_v1.sql` add public wrappers over private `SECURITY DEFINER` functions:
+`supabase/migrations/20260904110626_add_club_create_join_v1.sql`, `supabase/migrations/20260905075952_add_instruments_transactions_v1.sql`, `supabase/migrations/20260905121758_curated_investment_packages_v1.sql`, `supabase/migrations/20260906150144_rename_club_v1.sql`, `supabase/migrations/20260906194634_contribution_policy_v1.sql`, `supabase/migrations/20260906215200_contribution_policy_product_v1.sql`, `supabase/migrations/20260906221000_contribution_policy_hardening_v1.sql`, `supabase/migrations/20260906223000_contribution_policy_proposals_v1.sql`, `supabase/migrations/20260907101905_investment_day_reporting_v1.sql`, `supabase/migrations/20260907123709_investment_day_cycle_lifecycle_v1.sql`, `supabase/migrations/20260907192616_single_fund_club_v1.sql`, `supabase/migrations/20260907203455_single_fund_club_rectification_v1.sql`, `supabase/migrations/20260908072728_investment_day_broker_handoff_v1.sql`, and `supabase/migrations/20260908084058_monthly_saving_setup_v1.sql` add public wrappers over private `SECURITY DEFINER` functions:
 
 - `create_club` — legacy path. Authenticates via `auth.uid()`, resolves an allowlisted `p_package_id` to canonical allocations, then creates the club, owner membership, owner pointer, genesis StrategyVersion 1, a complete 10000-bps snapshot, and Flexible ContributionPolicyVersion 1. It does not invent a creator amount. Clubs created here are `legacy_package`.
 - `create_club_v2` — same club/strategy creation plus an explicit Equal or Flexible genesis policy. Equal requires `p_equal_amount_minor` and forbids a creator private amount. Flexible requires `p_creator_flexible_amount_minor` and forbids a shared amount. The transaction is atomic. Meaning unchanged. Clubs created here are `legacy_package`.
@@ -492,6 +505,9 @@ The following require trusted transaction functions, later authorization policy,
 - `accept_club_invitation` — authenticates via `auth.uid()`, validates token/expiry/recipient, creates one active membership, and marks the invitation accepted without changing ownership
 - `current_investment_day_v1` — authenticated read of the current or next Investment Day. Never creates cycles, freezes policy, or writes participations. Returns `viewer_state` (`missing`, `upcoming`, `open`, `closed`, `not_in_snapshot`, `setup_next`, `setup_required`, `unavailable`) and `reporting_allowed`. Flexible members without a frozen participation see `setup_next` or `setup_required` instead of an invented amount.
 - `investment_day_broker_handoff_v1` — authenticated read of a verified Nordnet product page for the caller's frozen Investment Day. Requires active membership and a frozen participation. Returns `status`, `broker`, `fund_name`, `isin`, `product_url`, and `checked_on` only. Nordnet URLs must be HTTPS with host exactly `www.nordnet.no` and no userinfo. Unsupported brokers, unverified listings, and missing pages return `unavailable` without a URL. The function never returns member amounts, other members, or catalog ids, and it never writes participation, reports, or purchases. Authenticated clients cannot execute the private implementation or the Nordnet URL helper.
+- `monthly_saving_setup_v1` — authenticated read of the caller's monthly saving setup and the current recommended Nordnet context. Available immediately after club create or join; it does not require a frozen cycle. Status is `not_set_up`, `current`, `needs_update`, `setup_required`, or `unavailable`. Fund, amount, currency, and schedule are derived from current strategy, contribution policy, private Flexible amount when relevant, and the current Investment Day schedule. Returns the caller's own attested snapshot when present. Provenance is `member_attested`. Never writes.
+- `confirm_monthly_saving_setup_v1` — caller-only confirmation that they set up a Nordnet monthly saving agreement. Accepts only `club_id` and `client_attestation_id`. Idempotent when the derived context still matches. A changed derived payload with the same client id is `vesty.monthly_saving_setup_conflict`. Never writes a purchase, participation, or Investment Day report.
+- `end_monthly_saving_setup_v1` — caller-only end of the active attestation. Historical attestation rows and Investment Day data are kept.
 - `advance_investment_cycles_v1` — trusted lifecycle. Authenticated clients have no EXECUTE; `service_role` does. Idempotently generates occurrences from the stored schedule (local noon, `day_of_month` / `last_day_of_month`, timezone, `configuration_lead_days`), skips months whose configuration deadline has already passed without a historically valid strategy, freezes eligible participations at the configuration deadline, opens the reporting window, and completes elapsed cycles without reopening it. Identifies a period by club and occurrence key, never by “latest open row”. `create_club_v3` calls this trusted path with the server clock after writing the default schedule.
 
 ## PostgREST deploy order
@@ -499,8 +515,8 @@ The following require trusted transaction functions, later authorization policy,
 After a migration that adds or replaces RPC signatures:
 
 1. Apply the migration.
-2. Confirm or reload the PostgREST schema cache (`NOTIFY pgrst, 'reload schema'` is included in `20260908072728_investment_day_broker_handoff_v1.sql`).
-3. Verify `single_fund_catalog_v1`, `create_club_v3`, and `investment_day_broker_handoff_v1`.
+2. Confirm or reload the PostgREST schema cache (`NOTIFY pgrst, 'reload schema'` is included in `20260908084058_monthly_saving_setup_v1.sql`).
+3. Verify `single_fund_catalog_v1`, `create_club_v3`, `investment_day_broker_handoff_v1`, and `monthly_saving_setup_v1`.
 4. Ship the client.
 
 The client still shows a retryable error if an RPC is temporarily unavailable (`PGRST202` or a transport failure).

@@ -24,6 +24,10 @@ const PRODUCT_MESSAGES: Record<string, string> = {
   'vesty.contribution_commitment_invalid': 'Enter how much you want to contribute',
   'vesty.reporting_not_open': 'Reporting has not opened for this Investment Day yet',
   'vesty.reporting_closed': 'The reporting window for this Investment Day has closed',
+  'vesty.monthly_saving_setup_required': 'Set your contribution before monthly saving',
+  'vesty.monthly_saving_setup_unavailable': 'Monthly saving is not available for this club yet',
+  'vesty.monthly_saving_setup_conflict': 'This monthly saving confirmation was already saved with different details',
+  'vesty.client_attestation_id_invalid': 'Unable to save this monthly saving confirmation',
 };
 
 function logInvestIssue(context: string, error: { code?: string } | unknown): void {

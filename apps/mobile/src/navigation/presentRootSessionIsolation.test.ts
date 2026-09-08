@@ -10,6 +10,7 @@ describe('root session isolation', () => {
   it('keeps authenticated providers off the development gallery', () => {
     assert.equal(isDevGalleryPath('/dev/group-modes-gallery'), true);
     assert.equal(isDevGalleryPath('/dev/investment-day-handoff'), true);
+    assert.equal(isDevGalleryPath('/dev/monthly-saving'), true);
     assert.equal(
       shouldMountAuthenticatedAppProviders({
         isDev: true,
